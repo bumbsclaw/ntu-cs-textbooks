@@ -1,0 +1,60 @@
+\documentclass[11pt,a4paper,oneside]{book}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,shapes,shapes.geometric,decorations.pathreplacing,fit,backgrounds,trees}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!60!black,citecolor=green!50!black,urlcolor=blue!60!black}
+\usepackage{enumitem}
+\usepackage{geometry}
+\geometry{a4paper, top=1.3cm, bottom=1.3cm, left=1.2cm, right=1.2cm, includeheadfoot}
+\usepackage{setspace}
+\setstretch{1.20}
+\setlength{\parskip}{0.70em}
+\setlength{\parindent}{1.0em}
+\setlength{\abovedisplayskip}{10pt plus 2pt minus 2pt}
+\setlength{\belowdisplayskip}{10pt plus 2pt minus 2pt}
+\setlength{\abovedisplayshortskip}{7pt plus 2pt}
+\setlength{\belowdisplayshortskip}{7pt plus 2pt}
+\setlist{topsep=0.55em, partopsep=0.25em, itemsep=0.45em, parsep=0.25em}
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}{Lemma}[chapter]
+\newtheorem{corollary}{Corollary}[chapter]
+\newtheorem{example}{Example}[chapter]
+\newtheorem{exercise}{Exercise}[chapter]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[chapter]
+
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,numbers=left,numberstyle=\tiny\color{gray},keywordstyle=\color{blue!70!black},commentstyle=\color{green!50!black},stringstyle=\color{orange!70!black},showstringspaces=false,tabsize=2, xleftmargin=1.0em, xrightmargin=0.5em, aboveskip=0.6em, belowskip=0.6em}
+
+\title{SC1004 Linear Algebra for Computing\\NTU BSc Computer Science --- Comprehensive Textbook (0--100)}
+\author{NTU CS Curriculum Textbook Series\\College of Computing and Data Science}
+\date{2026-08-23 --- Generated for bumbsclaw/ntu-cs-textbooks}
+
+\begin{document}
+\frontmatter
+\maketitle
+\tableofcontents
+\mainmatter
+\include{chapters/ch01-vectors}
+\include{chapters/ch02-matrices}
+\include{chapters/ch03-systems}
+\include{chapters/ch04-vectorspaces}
+\include{chapters/ch05-independence}
+\include{chapters/ch06-orthogonality}
+\include{chapters/ch07-determinants}
+\include{chapters/ch08-eigen}
+\backmatter
+\end{document}

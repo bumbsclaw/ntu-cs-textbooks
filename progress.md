@@ -23,9 +23,9 @@
 | SC1007 | Data Structures & Algorithms | 3 | Core | DONE | DONE 8/8 (1650L, 24 TikZ color) 02:38 SGT | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) | DONE | DONE 37p 541KB |
 | SC2005 | Operating Systems | 3 | Core | DONE | DONE 8/8 (1629L, 24 TikZ color) 02:25 SGT | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) | DONE | DONE 36p 610KB |
 | SC2006 | Software Engineering | 3 | Core | DONE | DONE 8/8 (1616L, 26 TikZ color) 02:30 SGT | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) | DONE | DONE 48p 654KB |
-| SC1004 | Linear Algebra for Computing | 4 | Core | pending | DONE 8/8 drafted (43p) — QA queued | pending | pending | pending |
-| SC1005 | Digital Logic | 3 | Core | pending | DONE 8/8 drafted (37p) — QA queued | pending | pending | pending |
-| SC1006 | Computer Organisation & Architecture | 3 | Core* | pending | DONE 8/8 drafted (30p) — QA queued | pending | pending | pending |
+| SC1004 | Linear Algebra for Computing | 4 | Core | DONE | DONE 8/8 (1637L, 23 TikZ color) 43p 683KB | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) | DONE | DONE 43p 683KB 0 ! |
+| SC1005 | Digital Logic | 3 | Core | DONE | DONE 8/8 (1619L, 48 TikZ) 37p 609KB | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) — 5.1pt max | DONE | DONE 37p 609KB 0 ! |
+| SC1006 | Computer Organisation & Architecture | 3 | Core* | DONE | DONE 8/8 drafted (1770L but 49% padding, real 54-65L) 30p 539KB | CONDITIONAL PASS visual PASS depth FAIL ch05-08 — thickening queued | IN_PROGRESS | DONE 30p (needs thickening) |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
@@ -33,6 +33,7 @@
 - 2026-08-23 01:28 SGT: Phase 1 QA DONE v1 — Reviewer A PASS conditional + Reviewer B PASS WITH MINOR FIXES. Fixes auto-patched: ch04 Master ref + strip lemma, ch06 duplicate label + matrix-chain arithmetic. main.pdf 46p 843KB 0 pgf errors.
 - 2026-08-23 01:44 SGT: Phase 1 v2 DONE — 6 verbatim→lstlisting (ch05/06), 11 TikZ colorized across 6 chapters, formula Overfull>15pt 3→0 + hyperref 30+→0. Visual QA deleg_621390a0 PASS both slices.
 - 2026-08-23 03:07 SGT: SC2001 v3 DONE — re-QA PASS (deleg_20b1d946) both slices, 8 intuition blocks consolidated, 2070L 53p 0 !
+- 2026-08-23 03:22 SGT: QA deleg_578cc33b PASS SC1004(23 TikZ) + PASS SC1005(48 TikZ) | CONDITIONAL SC1006(visual PASS, depth FAIL 49% padding ch05-08 thin — thickening queued)
 - 2026-08-23 02:48 SGT: Phase 2 DONE — SC1007/05/06 QA deleg_85968bd2 PASS all 3 (24-26 TikZ, 0 verbatim, 0 !). SC2001 v3 8 patches consolidated (294/233/260/249/260/257/251/257L, 53p 982KB 0 !) pending re-QA. Phase 3 queued: remaining Programme Core + MPEs + BDE. AGENTS.md + memory updated per Bowen: color where useful + syntax-highlighted code + QA must compile-check diagrams+formulas.
 
 ## Resume Instructions
