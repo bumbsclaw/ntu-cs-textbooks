@@ -1,0 +1,200 @@
+% SC2001 — Chapter 7: Graph Traversal, Shortest Paths, and String Matching
+% No \documentclass — this file is \input/\include'd by main.tex.
+\chapter{Graph Traversal, Shortest Paths, and String Matching}
+\label{ch:graph-string}
+
+\begin{quote}
+\emph{``Graphs and strings are not different worlds.''} BFS discovers distance
+as surely as KMP discovers pattern: both exploit structure to avoid redundant work.
+\end{quote}
+
+\noindent\textbf{Prerequisites:} Chapter~1 (invariants), Chapter~2 (asymptotics, heaps), and basic graph notation $G=(V,E)$ directed or undirected, $|V|=n$, $|E|=m$.
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item trace BFS/DFS, explain queue/stack roles and analyse $O(n+m)$ time;
+    \item implement Dijkstra with a binary heap and prove correctness via its set invariant;
+    \item run Bellman--Ford, detect negative cycles, and derive Floyd--Warshall as DP over $k$;
+    \item compute the KMP prefix function $\pi$, simulate its automaton, and analyse Rabin--Karp rolling hash.
+\end{enumerate}
+
+% ============================================================
+\section{Graph Traversal: BFS and DFS}
+\label{sec:bfs-dfs}
+
+Let $G=(V,E)$ be unweighted for traversal; weights return in \S\ref{sec:shortest}.
+We assume adjacency-list representation; adjacency matrix would cost $\Theta(n^2)$ per scan.
+
+\subsection{BFS: Queue and Layering}
+\textsc{BFS}$(G,s)$ explores in waves of increasing distance from source $s$.
+It uses a FIFO \emph{queue} $Q$: $s$ is enqueued, then repeatedly dequeued, and each undiscovered neighbour is enqueued.
+
+\begin{quote}\ttfamily\small
+\textsc{BFS}$(G,s)$\\
+1\ dist$[s]\gets0$; parent$[s]\gets\textsc{nil}$; $Q\gets[s]$; visited$\gets\{s\}$\\
+2\ \textbf{while} $Q\neq\emptyset$ \textbf{do}\\
+3\ \ \ $u\gets\textsc{Dequeue}(Q)$\\
+4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do}\\
+5\ \ \ \ \ \ \textbf{if} $v\notin$ visited \textbf{then} visited$\cup\{v\}$; dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
+\end{quote}
+
+The \emph{layering} property: $Q$ always contains vertices of at most two consecutive distances $d,d+1$ from $s$, all $d$ before $d+1$. Hence dist$[v]$ is the shortest-path distance $\delta(s,v)$ in an unweighted graph (proved by induction on $d$). Parent pointers form a \emph{BFS tree} rooted at $s$; every non-tree edge connects vertices whose layers differ by at most one.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[every node/.style={circle,draw,thick,minimum size=7mm,font=\small},xscale=1.15,yscale=0.95]
+\node (s) at (0,2) {$s$};
+\node (a) at (-1.6,0.6) {$a$}; \node (b) at (1.6,0.6) {$b$};
+\node (c) at (-2.4,-0.9) {$c$}; \node (d) at (0,-0.9) {$d$}; \node (e) at (2.4,-0.9) {$e$};
+\draw[thick,->] (s)--(a); \draw[thick,->] (s)--(b);
+\draw[thick,->] (a)--(c); \draw[thick,->] (a)--(d); \draw[thick,->] (b)--(d); \draw[thick,->] (b)--(e);
+\draw[thick,dashed,->] (c) to[bend left=18] (d); \draw[thick,dashed,->] (d) to[bend left=18] (e);
+\node[draw=none,font=\scriptsize] at (0,2.65) {layer 0};
+\node[draw=none,font=\scriptsize] at (0,0.05) {layer 1 \quad layer 2 below};
+\node[draw=none,font=\tiny,align=center] at (0,-1.7) {solid = BFS tree (parent); dashed = non-tree edges};
+\end{tikzpicture}
+\caption{BFS layering from $s$. Queue order visits layer~0, then layer~1 ($a,b$), then layer~2 ($c,d,e$). Each vertex is enqueued once; every edge examined once (twice if undirected): $O(n+m)$ time and $O(n)$ extra space.}
+\label{fig:bfs-tree}
+\end{figure}
+
+\begin{example}[BFS distances on Fig.~\ref{fig:bfs-tree}]
+Queue evolution: $[s]\to[a,b]\to[b,c,d]\to[c,d,e]\to[d,e]\to[e]\to[]$. Thus dist$[s]=0$, dist$[a]=\text{dist}[b]=1$, dist$[c]=\text{dist}[d]=\text{dist}[e]=2$; parent pointers give shortest-path tree $s\to a\to c$, $s\to\{a,b\}\to d$, $s\to b\to e$. Any $s\to e$ path needs at least $2$ edges, and BFS finds one.
+\end{example}
+
+Analysis: each vertex enters $Q$ once and each adjacency list is scanned once, giving $O(n+m)$ time if $G$ is stored as adjacency lists. BFS also tests bipartiteness (2-colour by layer parity; an edge within a layer $\Rightarrow$ odd cycle) and finds connected components by restarting from any unvisited vertex. Multi-source BFS (enqueue all sources at distance~0) solves ``nearest source'' or ``shortest in unweighted grid'' problems in the same bound.
+
+\subsection{DFS: Stack and Structure}
+\textsc{DFS} replaces the queue by a LIFO \emph{stack} (or recursion): go deep before going wide. Iterative version pushes $s$ onto a stack; at each step pop $u$ and push its undiscovered neighbours.
+
+\begin{quote}\ttfamily\small
+\textsc{DFS-Visit}$(u)$: mark $u$ discovered; \textbf{for} each $(u,v)\in E$ \textbf{if} $v$ undiscovered \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
+\end{quote}
+
+With discovery/finish times $d[u],f[u]$, DFS classifies edges (undirected: tree/back; directed: tree/back/forward/cross) and yields the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or disjoint. This structure powers two classic applications: cycle detection (back edge $\Leftrightarrow$ cycle in directed graph) and topological sort (order vertices by decreasing $f[u]$ for a DAG). Kosaraju's two-pass DFS finds strongly connected components. Like BFS, DFS scans each vertex and edge once: $O(n+m)$ time, $O(n)$ stack/colour array.
+
+\textit{Queue vs.\ stack intuition:} BFS's queue enforces breadth (fairness across branches); DFS's stack enforces depth (commitment to one branch). Swapping the container is the only algorithmic difference, yet the resulting visit orders and edge classifications diverge sharply.
+
+% ============================================================
+\section{Shortest Paths}
+\label{sec:shortest}
+Edge weights $w:E\to\mathbb{R}$. Let $\delta(s,v)$ denote the true shortest-path weight ($-\infty$ if a negative cycle is reachable from $s$ on some $s\to v$ path, $\infty$ if $v$ is unreachable). All algorithms below use \textsc{Relax}$(u,v)$: if dist$[v]>\text{dist}[u]+w(u,v)$ then update dist$[v]$ and parent$[v]\gets u$.
+
+\subsection{Dijkstra: Greedy with a Heap}
+\textit{Assumption:} $w(e)\ge 0$ for all $e$. Dijkstra grows a set $S$ of settled vertices whose final distances are known, repeatedly extracting the unsettled vertex with minimum tentative distance.
+
+\begin{quote}\ttfamily\small
+\textsc{Dijkstra}$(G,w,s)$\\
+1\ dist$[s]\gets0$; dist$[v\neq s]\gets\infty$; $S\gets\emptyset$; min-heap $Q$ on dist\\
+2\ \textbf{while} $Q\neq\emptyset$ \textbf{do}\\
+3\ \ \ $u\gets\textsc{ExtractMin}(Q)$; $S\gets S\cup\{u\}$\\
+4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do} \textsc{Relax}$(u,v)$: \textbf{if} dist$[v]>$dist$[u]+w(u,v)$ \textbf{then} dist$[v]\gets$dist$[u]+w(u,v)$; \textsc{DecreaseKey}$(Q,v)$
+\end{quote}
+
+Heap implementation: binary heap gives $O((n+m)\log n)$; Fibonacci heap improves to $O(m+n\log n)$. Early exit when a target $t$ is extracted --- its distance is already final. Relaxation is the only place dist decreases, mirroring the BFS layering but weighted.
+
+\textit{Correctness --- invariant:} At the start of each iteration with $S$ already settled,
+\begin{center}
+(I)\quad $\forall\,x\in S:\ \text{dist}[x]=\delta(s,x)$ \quad and \quad $\forall\,y\notin S:\ \text{dist}[y]=\min_{P:\,s\to y\text{ with inner vertices in }S} w(P)$.
+\end{center}
+\emph{Initialisation:} $S=\emptyset$, (I) holds vacuously (dist$[s]=0$). \emph{Maintenance:} Let $u\notin S$ have minimum dist among $V\setminus S$. Any $s\to u$ path must leave $S$ at some edge $(x,y)$ with $x\in S$, $y\notin S$; its weight is $\ge \text{dist}[y]\ge\text{dist}[u]$ because all weights are non-negative, so no unseen path beats dist$[u]$. Extracting $u$ preserves (I) after relaxing its edges. \emph{Termination:} $S=V$ gives dist$[v]=\delta(s,v)$ for all $v$. If $w$ has a negative edge the inequality fails and Dijkstra may err --- a standard counterexample is $s\xrightarrow{2}b\xrightarrow{-2}a$ where $a$ is settled too early.
+
+\subsection{Bellman--Ford: Relaxation and Negative Cycles}
+No non-negativity needed. Relax every edge $n-1$ times, in any order:
+
+\begin{quote}\ttfamily\small
+\textbf{for} $i\gets1$ \textbf{to} $n-1$ \textbf{do} \textbf{for} each $(u,v)\in E$ \textbf{do} \textsc{Relax}$(u,v)$
+\end{quote}
+
+After $k$ rounds, dist$[v]$ equals the shortest weight among $s\to v$ paths using $\le k$ edges (induction on $k$: the $k$-edge optimum extends a $(k-1)$-edge optimum by one relaxation). Since any shortest simple path uses at most $n-1$ edges, after $n-1$ rounds dist$=\delta$ iff no negative cycle is reachable. One extra round detects one: if any relaxation succeeds, a negative cycle exists and $\delta=-\infty$ on its reachable vertices; tracing parent pointers retrieves it.
+
+\begin{example}[Bellman--Ford detects a negative cycle]
+Vertices $\{s,a,b\}$ with $s\xrightarrow{1}a,\ a\xrightarrow{1}b,\ b\xrightarrow{-3}a$. After $n-1=2$ rounds dist$[a]=1$, dist$[b]=2$. Round~3 relaxes $b\to a$: dist$[a]>2+(-3)=-1$, so dist$[a]$ drops --- negative cycle $a\to b\to a$ of weight $-2$ detected.
+\end{example}
+
+Time $O(nm)$, space $O(n)$ --- slower than Dijkstra but fully general.
+
+\subsection{Floyd--Warshall: DP over Intermediate Vertices}
+For all-pairs shortest paths, let $d^{(k)}[i,j]$ be the shortest $i\to j$ weight whose \emph{inner} vertices lie in $\{1,\dots,k\}$ (endpoints unrestricted). Then
+\[
+d^{(0)}[i,j]=\begin{cases}0&i=j\\w(i,j)&(i,j)\in E\\\infty&\text{else}\end{cases},\qquad
+d^{(k)}[i,j]=\min\bigl(d^{(k-1)}[i,j],\ d^{(k-1)}[i,k]+d^{(k-1)}[k,j]\bigr).
+\]
+Iterating $k=1\ldots n$ in place (a single $n\times n$ matrix suffices since $d^{(k)}[i,k]=d^{(k-1)}[i,k]$ and $d^{(k)}[k,j]=d^{(k-1)}[k,j]$) yields $\delta(i,j)=d^{(n)}[i,j]$. Time $\Theta(n^3)$, space $\Theta(n^2)$. Negative-cycle check: $\exists\,i:\ d^{(n)}[i,i]<0$. Despite cubic cost, Floyd is concise, cache-friendly, and reconstructs paths via a successor matrix $\text{nxt}[i,j]$ updated alongside $d$.
+\begin{remark}[Choosing among shortest-path algorithms]
+Non-negative weights and single source: Dijkstra. Negative weights or cycle detection needed: Bellman--Ford. Dense all-pairs or transitive closure: Floyd--Warshall. On sparse graphs, running Dijkstra from each source with a heap can beat Floyd at $O(n(m\log n))$.
+\end{remark}
+
+% ============================================================
+\section{String Matching}
+\label{sec:string}
+Text $T[1\ldots n]$, pattern $P[1\ldots m]$, alphabet $\Sigma$ ($n\ge m$). Report all shifts $s$ with $T[s+1\ldots s+m]=P$. We compare three strategies that trade comparison cost for preprocessing.
+
+\subsection{Na\"ive $\Theta((n-m+1)m)$ Scan}
+Slide $P$ over each alignment $s=0\ldots n-m$ and compare $P[1\ldots m]$ against $T[s+1\ldots s+m]$ character by character, breaking on first mismatch. Worst case $\Theta((n-m+1)m)$ --- e.g., $T=a^n$, $P=a^{m-1}b$ forces $m$ comparisons at each of $n-m+1$ positions. No preprocessing, $O(1)$ extra space. The next two algorithms avoid re-scanning characters already matched.
+
+\subsection{KMP: Prefix Function and Automaton}
+Let $\pi[q]=\max\{k<q: P[1\ldots k]\text{ is suffix of }P[1\ldots q]\}$ for $1\le q\le m$ ($\pi[1]=0$); equivalently $\pi[q]$ is the longest proper border of the prefix $P[1\ldots q]$. Computed in $O(m)$ by amortised fallback:
+
+\begin{quote}\ttfamily\small
+$\pi[1]\gets0;\ k\gets0$; \textbf{for} $q\gets2$ \textbf{to} $m$ \textbf{do} \textbf{while} $k>0\land P[q]\neq P[k+1]$ \textbf{do} $k\gets\pi[k]$; \textbf{if} $P[q]=P[k+1]$ \textbf{then} $k\gets k+1$; $\pi[q]\gets k$
+\end{quote}
+
+Matching scans $T$ once, maintaining $q$ = length of longest prefix of $P$ that is a suffix of $T[1\ldots i]$; on mismatch fall back $q\gets\pi[q]$. Total $O(n+m)$ time, $O(m)$ extra space; each character of $T$ is examined at most twice.
+
+The automaton view: state $q$ means ``first $q$ characters of $P$ just matched.'' Transition $\delta(q,c)$ is the longest prefix of $P$ that is a suffix of $P[1\ldots q]c$; missing edges follow $\pi$-links (failure function).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[->,>=Stealth,shorten >=1pt,auto,node distance=1.9cm,semithick]
+\tikzstyle{state}=[circle,draw,thick,minimum size=7mm,font=\small]
+\node[state,initial,initial text={}] (0) {$0$};
+\node[state] (1) [right of=0] {$1$};
+\node[state] (2) [right of=1] {$2$};
+\node[state] (3) [right of=2] {$3$};
+\node[state,accepting] (4) [right of=3] {$4$};
+\path (0) edge[bend left=10] node[font=\scriptsize,above] {a} (1)
+      (1) edge[bend left=10] node[font=\scriptsize,above] {b} (2)
+      (2) edge[bend left=10] node[font=\scriptsize,above] {a} (3)
+      (3) edge[bend left=10] node[font=\scriptsize,above] {b} (4)
+      (1) edge[loop above] node[font=\scriptsize] {a} (1)
+      (2) edge[bend left=30] node[font=\scriptsize,below] {a} (1)
+      (3) edge[bend left=30] node[font=\scriptsize,below] {b} (2)
+      (4) edge[bend left=38] node[font=\scriptsize,below] {b} (2)
+      (4) edge[bend left=20] node[font=\scriptsize,above] {a} (3);
+\end{tikzpicture}
+\caption{KMP automaton for $P=\mathtt{abab}$ ($m=4$). Solid spine spells $P$; failure links (merged into $\delta$) redirect on mismatch via $\pi$: $\pi=[0,0,1,2]$. Scanning $T$ never moves backwards, giving $O(n+m)$ time.}
+\label{fig:kmp-automaton}
+\end{figure}
+
+\subsection{Rabin--Karp: Rolling Hash}
+Treat strings as base-$b$ numbers modulo a prime $q$. Let $h(s)=T[s+1\ldots s+m]\bmod q$ and $p=P\bmod q$. With precomputed $b^{m-1}\bmod q$,
+\[
+h(s+1)=\bigl(b\cdot(h(s)-T[s+1]\cdot b^{m-1})+T[s+m+1]\bigr)\bmod q,
+\]
+so each shift is $O(1)$ after $O(m)$ preprocessing. If $h(s)\neq p$ there is no match; if equal, verify by direct comparison (handles spurious hits from collisions). Expected $O(n+m)$ with good $q$ and $O(nm)$ worst case when every window collides.
+
+\begin{example}[Rolling hash by hand]
+Let $b=10$, $q=13$ (small for illustration), $T=\mathtt{31415}$, $m=2$. Then $h(0)=\mathtt{31}\bmod13=5$, $h(1)=(10\cdot(5-3\cdot10)+\mathtt{4})\bmod13=1$ which equals $\mathtt{14}\bmod13=1$; $p=\mathtt{15}\bmod13=2$, so neither window matches $P=\mathtt{15}$. With real $b=256$, $q\approx10^9+7$ and Horner evaluation, the same recurrence applies to strings over bytes.
+\end{example}
+
+Double hashing or a large $q\gg n$ makes collisions negligible in expectation.
+Rabin--Karp extends naturally to 2-D pattern search and multi-pattern search
+with one text scan. In practice it shines when many patterns are sought in one
+long text, e.g., plagiarism detection over a corpus.
+
+% ============================================================
+\section{Chapter Notes}
+BFS (Moore, 1959) and DFS (Tarjan, 1972) in modern form underpin all graph algorithms. Dijkstra (1959) with binary heaps is the practical default; Bellman--Ford (1958) and Floyd--Warshall (1962) handle negative weights. KMP (Knuth--Morris--Pratt, 1977) and Rabin--Karp (1987) remain textbook representatives of automaton vs.\ hashing. CLRS Chs.~20--24, 32 covers all topics in depth.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch07-exercises}
+\begin{enumerate}[label=E7.\arabic*, leftmargin=*, itemsep=0.8em]
+    \item \textbf{BFS layering vs.\ DFS depth.} Run BFS and DFS (alphabetical adjacency) from $s$ on the graph of Fig.~\ref{fig:bfs-tree} with extra edge $e\to a$. List discovery order, dist$[\cdot]$ from BFS, and DFS finish times $f[\cdot]$. Give a graph where DFS from $s$ never discovers a vertex that BFS does. Can that happen if the graph is undirected and connected? Justify.
+
+    \item \textbf{Dijkstra proof in action.} (a) Execute Dijkstra with a binary heap from $s$ on: $s\!\xrightarrow{4}\!a,\ s\!\xrightarrow{2}\!b,\ b\!\xrightarrow{1}\!a,\ a\!\xrightarrow{3}\!t,\ b\!\xrightarrow{5}\!t$. Show heap contents per extraction and invariant~(I). (b) Add edge $b\xrightarrow{-3}a$ and show extraction order violates (I) and yields a wrong distance. (c) Would Bellman--Ford recover the correct distances and how many rounds suffice?
+
+    \item \textbf{KMP prefix function.} (a) Compute $\pi$ for $P=\mathtt{aabaaab}$ step by step. (b) Draw the KMP automaton states $0\ldots7$ and label failure ($\pi$) links. (c) Trace KMP on $T=\mathtt{aabaabaaab}$ and count character comparisons versus na\"ive scan. Prove $O(n+m)$ is tight by giving a family attaining $\Theta(n+m)$ comparisons.
+
+    \item \textbf{Rolling hash design.} Let $b=256$, $q=101$. (a) Compute the Rabin--Karp hash of $P=\mathtt{abc}$ and the rolling update to the next window in $T=\mathtt{abcd}$. (b) Exhibit $P\neq Q$ over $\{a,b\}$ colliding modulo $101$, and explain why a second modulus $q_2$ reduces collision probability to $\approx 1/(q\,q_2)$. (c) Argue expected time is $O(n+m)$ when $q\ge m^2$ and verification is $O(m)$, assuming uniform hashing.
+\end{enumerate}
+% End of Chapter 7

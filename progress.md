@@ -11,7 +11,7 @@
 |-------|--------|-------|
 | 0 - Curriculum deep research and outline | DONE | outline committed 44c9533; verified 135 AU (17+16+47+35+20) |
 | 0a - Adversarial review of outline | DONE (FAIL→FIXED) | 2026-08-23 01:05 SGT — verdict FAIL BLOCKING (SC2000 title, Core double-count, College Core 27→16 bucket, MPE 35/36 invariant). Review: docs/curriculum-outline-review.md. Trivial fixes patched in outline (SC2000→Prob&Stats, SC1003 deduped from Core, HW0288/SC2203/SC2008 prereq nuances, MPE Highest Distinction, bucket footnotes). Non-blocking TODOs (SC4023 verification, graph detail) logged in review §Recommended Fixes. |
-| 1 - Exemplar fleet (SC2001) | IN_PROGRESS | fleet deleg_bd18a029 partial 01:15 SGT — ch1-foundations DONE (685b806); ch2-ch8 hit opencode-go 500/503 transient (max_tokens~3000 + retry per memory). Retry fleet deleg_e5f2 queued 01:16 SGT chunked (1 chapter per subagent, max_tokens 3000) on muse-spark-1.2-contribution |
+| 1 - Exemplar fleet (SC2001) | IN_PROGRESS | fleet deleg_adace572+deleg_bc8aad5d+deleg_dd84bab0 DONE 01:22 SGT — 8/8 chapters (1859 lines, 16 TikZ) ch01 375 ch02 217 ch03 210 ch04 201 ch05 220 ch06 233 ch07 200 ch08 203; main.pdf 46p 824KB compiles 0 pgf errors (automata patched). QA fleet deleg_68d71dca IN_PROGRESS (ch01-04 + ch05-08 reviewers) |
 | 2 - Batch expansion (3 cores) | PENDING | SC1007, SC2005, SC2006 etc |
 | 3 - Final QA fleet | PENDING | |
 | 4 - LaTeX PDF render | PENDING | latexmk + push |
@@ -19,7 +19,7 @@
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
 |------|-------|----|------|---------|-------|-------------|----|-----|
-| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (ab1d8cd) | PARTIAL ch1 DONE (685b806), ch2-ch8 retrying | pending | pending | pending |
+| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (ab1d8cd) | DONE 8/8 (1859 lines, 16 TikZ) 01:22 SGT | IN_PROGRESS (deleg_68d71dca ch01-04+ch05-08) | pending | DONE 46p main.pdf |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.

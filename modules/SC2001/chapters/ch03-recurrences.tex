@@ -1,0 +1,210 @@
+\chapter{Recurrences}\label{ch:recurrences}
+Recurrences describe the running time of recursive algorithms.
+Solving them---turning a recursive definition into a closed asymptotic
+bound---is the central analytic step in divide-and-conquer analysis.
+This chapter develops three complementary tools, highlights their limits,
+and applies them to MergeSort and Karatsuba multiplication.
+
+\section{From Algorithms to Recurrences}
+
+A typical divide-and-conquer algorithm on input size $n$ divides into $a$ subproblems of size $n/b$, then spends $f(n)$ time dividing and combining. Its worst-case time satisfies
+\begin{equation}\label{eq:general}
+T(n)=a\,T(n/b)+f(n),\qquad T(1)=\Theta(1),
+\end{equation}
+with $a\ge 1$, $b>1$ constants and $f$ asymptotically positive. We assume $n$ is an exact power of $b$; floors and ceilings change bounds by at most a constant factor and are handled by standard domain-transformation arguments.
+
+\textit{Running examples.} MergeSort: $T(n)=2T(n/2)+\Theta(n)$. Karatsuba integer multiplication (Section~\ref{sec:karatsuba}): $T(n)=3T(n/2)+\Theta(n)$, where $n$ counts digits or bits. Binary search: $T(n)=T(n/2)+\Theta(1)$. Strassen matrix multiplication: $T(n)=7T(n/2)+\Theta(n^{2})$.
+
+Our goal is a $\Theta$-bound for $T(n)$. We present methods in order of increasing automation---and decreasing generality.
+
+\begin{remark}[Floors, ceilings, and base cases]
+Replacing $T(n/b)$ by $T(\lfloor n/b\rfloor)$ or $T(\lceil n/b\rceil)$
+does not change the asymptotic answer for the recurrences in this
+chapter: one shows $T'(n)\le T(n)\le T''(n)$ for suitable exact-power
+variants $T',T''$ that differ by at most a constant factor.
+Base cases $T(1)=\Theta(1)$ vs.\ $T(n)=O(1)$ for $n\le n_{0}$ are
+similarly interchangeable up to constants; only the inductive step
+matters for asymptotics.
+\end{remark}
+
+\section{The Substitution Method}
+
+Guess a bound, then verify by induction. The method is fully general but requires insight to produce the right guess; recursion trees (next section) are the usual source of guesses.
+
+\begin{example}[MergeSort upper bound]
+Claim $T(n)=2T(n/2)+n$ with $T(1)=1$ satisfies $T(n)=O(n\log n)$. Guess $T(n)\le cn\log n$ for $c>0$ and $n\ge 2$. Assume it holds for $n/2$:
+\[T(n)\le 2c\frac{n}{2}\log\frac{n}{2}+n = cn\log n-cn+n\le cn\log n\]
+provided $c\ge 1$. Choosing $c$ large enough to handle base cases completes the induction. A symmetric argument gives $T(n)\ge c'n\log n$, so $T(n)=\Theta(n\log n)$.
+\end{example}
+
+\begin{example}[Strengthening the hypothesis]
+To prove $T(n)=T(\lfloor n/2\rfloor)+T(\lceil n/2\rceil)+1$ is $O(n)$, the naive guess $T(n)\le cn$ fails because $T(n)\le c\lfloor n/2\rfloor+c\lceil n/2\rceil+1=cn+1$. Strengthen to $T(n)\le cn-b$ for constants $c,b>0$:
+\[T(n)\le c\lfloor n/2\rfloor-b+c\lceil n/2\rceil-b+1 = cn-2b+1\le cn-b\]
+once $b\ge 1$. Subtracting a low-order term to absorb the additive constant is a standard trick.
+\end{example}
+
+\textit{When to use it:} substitution is the only method that proves matching upper and lower bounds with full rigour, including floors. \textit{Pitfalls:} the guess must be asymptotically tight; inductive algebra with floors needs careful bounding ($n/2-1<\lfloor n/2\rfloor\le n/2$).
+
+\paragraph{Change of variables.} Some recurrences do not fit \eqref{eq:general}
+directly. For $T(n)=2T(\sqrt{n})+\log n$, set $m=\log n$ and
+$S(m)=T(2^{m})$ to obtain $S(m)=2S(m/2)+m$, i.e.\ MergeSort in $m$,
+so $S(m)=\Theta(m\log m)$ and $T(n)=\Theta(\log n\cdot\log\log n)$.
+The same idea handles $T(n)=T(n/2)+\Theta(\log n)$-type recurrences
+after a substitution $n=2^{k}$.
+
+\section{The Recursion-Tree Method}
+
+Expand the recurrence into a tree, sum level by level, then verify the resulting guess by substitution. The tree is a discovery tool; the substitution step remains the proof.
+
+For \eqref{eq:general}, level $0$ has cost $f(n)$, level $1$ has $a$ nodes each costing $f(n/b)$, and level $i$ has $a^{i}$ nodes each costing $f(n/b^{i})$. If the tree has depth $L=\log_{b}n$,
+\begin{equation}\label{eq:treesum}
+T(n)=\sum_{i=0}^{L-1} a^{i}f(n/b^{i})+\Theta(n^{\log_{b}a}),
+\end{equation}
+where the last term is the total leaf cost ($a^{L}=n^{\log_{b}a}$ leaves each costing $\Theta(1)$). Bounding this sum is the entire problem. Figure~\ref{fig:rectree} illustrates the expansion.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  level distance=14mm, sibling distance=34mm,
+  every node/.style={font=\footnotesize},
+  rnode/.style={draw,rounded corners,fill=blue!6,inner sep=2pt,minimum width=22mm,align=center},
+  leaf/.style={draw,circle,fill=green!8,inner sep=1.5pt}
+]
+\node[rnode] (root) {$f(n)$\\[-1pt]{\scriptsize $n$}}
+  child {node[rnode] {$f(n/b)$}
+    child {node[leaf] {$\cdots$} edge from parent[draw=none]}
+    child {node[leaf] {$\cdots$} edge from parent[draw=none]}
+  }
+  child {node[rnode] {$f(n/b)$}
+    child {node[leaf] {$\cdots$} edge from parent[draw=none]}
+    child {node[leaf] {$\cdots$} edge from parent[draw=none]}
+  };
+\node[anchor=west,font=\scriptsize] at (3.6,0) {level $0$: $a^{0}f(n)$};
+\node[anchor=west,font=\scriptsize] at (3.6,-1.4) {level $1$: $a^{1}f(n/b)$};
+\node[anchor=west,font=\scriptsize] at (3.6,-2.8) {level $i$: $a^{i}f(n/b^{i})$};
+\node[anchor=west,font=\scriptsize] at (3.6,-4.0) {leaves: $\Theta(a^{L})=\Theta(n^{\log_{b}a})$};
+\draw[decorate,decoration={brace,amplitude=3pt},thin] (3.3,0.4) -- (3.3,-4.2);
+\end{tikzpicture}
+\caption{Recursion tree for $T(n)=aT(n/b)+f(n)$. Total cost is the sum over levels plus leaves; $L=\log_{b}n$.}
+\label{fig:rectree}
+\end{figure}
+
+\begin{example}[MergeSort via tree]
+$T(n)=2T(n/2)+cn$. Level $i$ has $2^{i}$ nodes of cost $cn/2^{i}=cn$, so each level costs $cn$. With $\log_{2}n$ levels, $T(n)=cn\log_{2}n+\Theta(n)=\Theta(n\log n)$.
+\end{example}
+
+\begin{example}[Karatsuba preview]
+$T(n)=3T(n/2)+cn$. Level $i$ costs $3^{i}\cdot c(n/2^{i})=cn(3/2)^{i}$---a geometric series with ratio $3/2>1$, dominated by its last term:
+\[\sum_{i=0}^{L-1}cn(3/2)^{i}=cn\frac{(3/2)^{L}-1}{3/2-1}=\Theta(n\cdot n^{\log_{2}3-1})=\Theta(n^{\log_{2}3}).\]
+The Master theorem automates this calculation.
+\end{example}
+
+\begin{remark}
+Trees also handle recurrences outside the Master form, e.g.\ $T(n)=T(n/3)+T(2n/3)+\Theta(n)$, where the longest root-to-leaf path has length $\log_{3/2}n$ and a careful level-by-level bound still yields $\Theta(n\log n)$---a case the Akra--Bazzi method settles directly. In general, bound the sum \eqref{eq:treesum} by comparing it to a geometric series: if $a^{i}f(n/b^{i})$ grows (resp.\ shrinks) by a constant factor each level, the sum is dominated by the last (resp.\ first) term.
+\end{remark}
+
+\paragraph{Recurrence with non-constant work.} Consider $T(n)=2T(n/2)+n\log n$. Level $i$ has $2^{i}$ nodes each of cost $(n/2^{i})\log(n/2^{i})$, so level cost is $n(\log n-i)$. Summing gives $n\sum_{i=0}^{L-1}(\log n-i)=\Theta(n\log^{2}n)$, which matches Master Case~2 with $k=1$.
+
+\section{The Master Theorem}\label{sec:master}
+
+The Master theorem classifies \eqref{eq:general} when $f$ is polynomially comparable to $n^{\log_{b}a}$, the leaf-driven rate. It replaces tree summation with a case check.
+
+\begin{theorem}[Master theorem]\label{thm:master}
+Let $a\ge 1$, $b>1$, $f$ asymptotically positive, and $T(n)=aT(n/b)+f(n)$. Let $c_{\star}=\log_{b}a$.
+\begin{enumerate}[label=Case~\arabic*:,leftmargin=*]
+\item If $f(n)=O(n^{c_{\star}-\varepsilon})$ for some $\varepsilon>0$, then $T(n)=\Theta(n^{c_{\star}})$.
+\item If $f(n)=\Theta(n^{c_{\star}}\log^{k}n)$ for some $k\ge 0$, then $T(n)=\Theta(n^{c_{\star}}\log^{k+1}n)$. In particular $f(n)=\Theta(n^{c_{\star}})$ gives $\Theta(n^{c_{\star}}\log n)$.
+\item If $f(n)=\Omega(n^{c_{\star}+\varepsilon})$ for some $\varepsilon>0$ and the \emph{regularity} condition $af(n/b)\le cf(n)$ holds for some $c<1$ and large $n$, then $T(n)=\Theta(f(n))$.
+\end{enumerate}
+\end{theorem}
+
+Figure~\ref{fig:mastergeom} gives the geometric intuition: the three cases correspond to whether per-level costs $a^{i}f(n/b^{i})$ in \eqref{eq:treesum} shrink, stay constant, or grow geometrically as $i$ increases.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=0.92,font=\footnotesize]
+\draw[->] (0,0) -- (7.2,0) node[right] {$i$ (level)};
+\draw[->] (0,0) -- (0,3.2) node[above] {cost at level $i$};
+\draw[thick,blue!70!black] (0,2.6) -- (6,0.4) node[anchor=north west,black] {Case 1: decreasing --- leaves dominate};
+\draw[thick,orange!70!black] (0,1.5) -- (6,1.5) node[anchor=south west,black] {Case 2: balanced --- all levels equal};
+\draw[thick,red!70!black] (0,0.4) -- (6,2.6) node[anchor=south west,black] {Case 3: increasing --- root dominates};
+\draw[dashed,gray] (0,1.5) -- (6,1.5);
+\node[anchor=north,font=\scriptsize,gray] at (3,-0.1) {$0\qquad\cdots\qquad \log_{b}n$};
+\end{tikzpicture}
+\caption{Master theorem geometry: per-level cost $a^{i}f(n/b^{i})$ across tree levels. The dominant contribution determines the case.}
+\label{fig:mastergeom}
+\end{figure}
+
+\paragraph{Proof sketch.} Write $g(n)=f(n)/n^{c_{\star}}$ so that $a^{i}f(n/b^{i})=n^{c_{\star}}g(n/b^{i})$. Then \eqref{eq:treesum} becomes $T(n)=n^{c_{\star}}\sum_{i=0}^{L-1}g(n/b^{i})+\Theta(n^{c_{\star}})$.
+In Case~1, $g(n)=O(n^{-\varepsilon})$ and the sum is a convergent geometric series bounded by a constant, so $T(n)=\Theta(n^{c_{\star}})$.
+In Case~2, $g(n)=\Theta(\log^{k}n)$ and $g(n/b^{i})=\Theta((\log n-i\log b)^{k})$, whose sum over $L=\Theta(\log n)$ terms contributes $\Theta(\log^{k+1}n)$.
+In Case~3, regularity gives $a^{i}f(n/b^{i})\le c^{i}f(n)$, so level costs decay geometrically toward the leaves and $\sum a^{i}f(n/b^{i})=\Theta(f(n))$. Floors and ceilings add only lower-order terms.
+
+\paragraph{Why the regularity condition is needed.} Without it Case~3 is false: there exist (contrived) $f$ with $f(n)=\Omega(n^{c_{\star}+\varepsilon})$ but $T(n)\neq\Theta(f(n))$ because $f$ dips sharply at infinitely many $n/b^{i}$, breaking the geometric decay. For polynomials and most natural functions the condition is automatic---check $af(n/b)/f(n)=a/b^{k}<1$ when $f(n)=n^{k}$ with $k>c_{\star}$.
+
+\paragraph{Regularity explained.} The condition $af(n/b)\le cf(n)$ for $c<1$ says work shrinks by a constant factor each level going up the tree, guaranteeing root domination. It holds for all polynomials $f(n)=n^{k}$ with $k>c_{\star}$ and for $f(n)=n^{c_{\star}+\varepsilon}/\log n$, but can fail for contrived oscillating $f$ such as $f(n)=n^{c_{\star}}(2+\sin n)$, where no single $c<1$ works for all large $n$.
+
+\paragraph{Gaps.} The theorem does \emph{not} cover every $f$. The polynomial gap $\varepsilon>0$ is essential:
+$f(n)=n^{c_{\star}}\log\log n$ and $f(n)=n^{c_{\star}}/\log n$ fall strictly between Cases~1 and~2---no $\varepsilon$ separates them from $n^{c_{\star}}$. Likewise $f(n)=n^{c_{\star}}\sin n$ violates regularity. These require the tree method or Akra--Bazzi. The extended Case~2 above ($\log^{k}n$ factor) is the most common gap students encounter; it is included in Theorem~\ref{thm:master} but not in all textbook statements.
+
+\paragraph{How to apply it in practice.} (1) Compute $c_{\star}=\log_{b}a$. (2) Compare $f(n)$ to $n^{c_{\star}}$: is it polynomially smaller, Theta-equivalent (up to $\log^{k}n$), or polynomially larger with regularity? (3) If none holds, the Master theorem is silent---use a tree or Akra--Bazzi. Common mistake: claiming Case~3 without checking regularity, or ignoring the $\varepsilon$ requirement and misclassifying $n^{c_{\star}}\log n$ as Case~1 or~3.
+
+\subsection{Worked Applications}
+
+\paragraph{MergeSort.} $a=2$, $b=2$, $c_{\star}=1$, $f(n)=\Theta(n)=\Theta(n^{c_{\star}})$: Case~2 gives $T(n)=\Theta(n\log n)$.
+
+\paragraph{Karatsuba.}\label{sec:karatsuba} Write $n$-digit numbers as $X=a\cdot10^{m}+b$, $Y=c\cdot10^{m}+d$ with $m=n/2$. Naively $XY$ needs four half-products; Karatsuba uses $ac$, $bd$, and $(a-b)(c-d)$ to recover $ad+bc$ with three products: $T(n)=3T(n/2)+\Theta(n)$. Here $c_{\star}=\log_{2}3\approx1.585$ and $f(n)=O(n^{c_{\star}-0.58})$: Case~1 gives $T(n)=\Theta(n^{\log_{2}3})$, strictly beating the naive $\Theta(n^{2})$.
+
+\paragraph{Strassen.} $T(n)=7T(n/2)+\Theta(n^{2})$: $c_{\star}=\log_{2}7\approx2.807>2$, Case~1 gives $\Theta(n^{\log_{2}7})$.
+
+\paragraph{Binary search.} $T(n)=T(n/2)+\Theta(1)$: $c_{\star}=0$, $f(n)=\Theta(1)=\Theta(n^{c_{\star}})$, Case~2 gives $\Theta(\log n)$.
+
+\paragraph{Quick check.} $T(n)=9T(n/3)+\Theta(n^{2})$: $c_{\star}=2$, $f(n)=\Theta(n^{c_{\star}})$ so Case~2 gives $\Theta(n^{2}\log n)$. Changing to $f(n)=n^{3}$ switches to Case~3 ($\Theta(n^{3})$), while $f(n)=n$ switches to Case~1 ($\Theta(n^{2})$). The exponent of $f$ relative to $c_{\star}$ is decisive.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Relation of $f(n)$ to $n^{c_{\star}}$ & Case & $T(n)$ & Intuition \\
+\midrule
+$f(n)=O(n^{c_{\star}-\varepsilon})$ & 1 & $\Theta(n^{c_{\star}})$ & Leaves dominate \\
+$f(n)=\Theta(n^{c_{\star}}\log^{k}n)$ & 2 & $\Theta(n^{c_{\star}}\log^{k+1}n)$ & Balanced levels \\
+$f(n)=\Omega(n^{c_{\star}+\varepsilon})$, regular & 3 & $\Theta(f(n))$ & Root dominates \\
+Gaps: $n^{c_{\star}}/\!\log n$, $n^{c_{\star}}\log\log n$ & --- & --- & Use tree / Akra--Bazzi \\
+\bottomrule
+\end{tabular}
+\caption{Master theorem at a glance ($c_{\star}=\log_{b}a$). The table is a memory aid, not a replacement for checking $\varepsilon$ and regularity.}
+\label{tab:master}
+\end{table}
+
+\section{Beyond Equal Subproblems: Akra--Bazzi}
+
+When subproblem sizes differ or $f$ is not polynomially separated, the Master theorem does not apply. The Akra--Bazzi theorem handles
+\[T(n)=\sum_{i=1}^{k}a_{i}T(b_{i}n+h_{i}(n))+f(n),\quad 0<b_{i}<1,\ a_{i}>0,\]
+with perturbations $h_{i}(n)=O(n/\log^{2}n)$. Let $p$ be the unique solution of $\sum_{i=1}^{k}a_{i}b_{i}^{p}=1$. Then
+\[T(n)=\Theta\!\left(n^{p}\Bigl(1+\int_{1}^{n}\frac{f(u)}{u^{p+1}}\,du\Bigr)\right).\]
+For the Master form $aT(n/b)+f(n)$ this recovers all three cases. For $T(n)=T(n/3)+T(2n/3)+\Theta(n)$ we get $p=1$ and $\int_{1}^{n}u^{-1}du=\log n$, so $T(n)=\Theta(n\log n)$. Another check: $T(n)=2T(n/4)+\Theta(\sqrt{n})$ has $2(1/4)^{p}=1\Rightarrow p=1/2$, and $\int_{1}^{n}u^{1/2}/u^{3/2}du=\log n$, so $T(n)=\Theta(\sqrt{n}\log n)$, matching Master Case~2. We state the result without proof; the integral replaces the polynomial-gap check.
+
+\begin{remark}[Using Akra--Bazzi in SC2001]
+In this course you may quote Akra--Bazzi (and the Master theorem) without reproving it, but you must verify its hypotheses: $a_{i}>0$, $0<b_{i}<1$, the perturbation $h_{i}(n)=O(n/\log^{2}n)$, and $f$ polynomially bounded. For $T(n)=T(n/2)+T(n/4)+\Theta(n)$ the equation $(1/2)^{p}+(1/4)^{p}=1$ gives $p\approx0.694$; the integral is $\Theta(n)$-dominated, yielding $T(n)=\Theta(n)$. This refines the tree estimate and illustrates why the Master theorem alone is insufficient when subproblem sizes differ.
+\end{remark}
+
+\section{Chapter Notes and Exercises}
+
+Substitution builds proof discipline; trees build intuition; the Master theorem automates the common case. Table~\ref{tab:master} summarises the cases. When subproblems are unequal, floors are messy, or $f$ oscillates, fall back to trees or Akra--Bazzi. A useful habit: conjecture with a tree, confirm the dominant case with the Master theorem when it applies, and verify the final bound by substitution. Exercises below test each method and the gaps between them.
+
+\begin{exercise}[Substitution practice]
+Solve $T(n)=4T(n/2)+n$ with $T(1)=1$. Guess $T(n)=O(n^{2})$ and prove it by substitution. Then prove a matching $\Omega(n^{2})$ bound to conclude $T(n)=\Theta(n^{2})$. Which Master case does this correspond to?
+\end{exercise}
+
+\begin{exercise}[Recursion tree]
+Use a recursion tree to conjecture tight bounds for (a) $T(n)=2T(n/2)+n^{2}$ and (b) $T(n)=T(n/2)+T(n/4)+\Theta(n)$. Verify one of them by substitution. For which, if any, does the Master theorem apply directly?
+\end{exercise}
+
+\begin{exercise}[Master theorem gaps]
+For each recurrence state which Master case applies (or why none does) and give the resulting bound when applicable: (a) $T(n)=2T(n/2)+n\log n$, (b) $T(n)=2T(n/2)+n/\log n$, (c) $T(n)=4T(n/2)+n^{2}\log n$, (d) $T(n)=2T(n/2)+\Theta(n^{1.5})$.
+\end{exercise}
+
+\begin{exercise}[Karatsuba vs.\ naive]
+Karatsuba achieves $T_{K}(n)=3T_{K}(n/2)+\Theta(n)$ while naive divide-and-conquer needs $T_{N}(n)=4T_{N}(n/2)+\Theta(n)$. Compute both bounds and find the smallest $n$ (as a power of $2$) where $n^{\log_{2}3}<n^{2}/10$ under leading constants $1$, to quantify the asymptotic crossover.
+\end{exercise}

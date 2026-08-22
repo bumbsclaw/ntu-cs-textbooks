@@ -1,0 +1,201 @@
+% SC2001 — Chapter 4: Divide and Conquer
+% No \documentclass — included by main.tex
+\chapter{Divide and Conquer}
+\label{ch:divide-conquer}
+
+\begin{quote}
+\emph{``Divide et impera.''} --- The oldest strategy in warfare is also one of the most powerful in algorithm design: break a hard problem into smaller copies of itself, solve them recursively, and combine.
+\end{quote}
+
+\noindent\textbf{Prerequisites:} Recurrences and asymptotics (Ch.~2), induction and correctness (Ch.~1), basic probability (linearity of expectation, indicator variables).
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item state the D\&C paradigm and write recurrences for D\&C algorithms;
+    \item prove correctness and $\Theta(n\log n)$ complexity of MergeSort;
+    \item analyse deterministic QuickSort's worst case and randomised QuickSort's expected $O(n\log n)$ via indicator variables;
+    \item prove the strip sparsity lemma for the closest-pair problem;
+    \item derive Strassen's 7-multiplication recurrence and its $O(n^{\log_2 7})$ bound.
+\end{enumerate}
+
+% ============================================================
+\section{The Divide-and-Conquer Paradigm}
+\label{sec:dc-paradigm}
+
+A D\&C algorithm for input size $n$ does three steps:
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Divide} the instance into $a\ge 1$ subinstances each of size $\lceil n/b\rceil$ or $\lfloor n/b\rfloor$ ($b>1$).
+    \item \textbf{Conquer} by solving subinstances recursively (base case $n\le n_0$ solved directly).
+    \item \textbf{Combine} sub-solutions into a solution for the original instance at cost $f(n)$.
+\end{enumerate}
+Hence
+\begin{equation}
+T(n)=a\,T(n/b)+f(n),\qquad T(1)=\Theta(1). \label{eq:dc-rec}
+\end{equation}
+The Master Theorem (Ch.~3, Thm.~\ref{thm:master}) classifies \eqref{eq:dc-rec}: if $f(n)=O(n^{\log_b a-\epsilon})$ then $T(n)=\Theta(n^{\log_b a})$; if $f(n)=\Theta(n^{\log_b a})$ then $T(n)=\Theta(n^{\log_b a}\log n)$; if $f(n)=\Omega(n^{\log_b a+\epsilon})$ and regular then $T(n)=\Theta(f(n))$.
+
+D\&C succeeds when the combine step is cheap relative to the progress made by shrinking subproblems. The next sections are canonical examples.
+
+% ============================================================
+\section{MergeSort}
+\label{sec:mergesort}
+
+\texttt{MergeSort}$(A[p..r])$: if $p<r$, let $q=\lfloor(p+r)/2\rfloor$, recursively sort $A[p..q]$ and $A[q+1..r]$, then \texttt{Merge} the two sorted halves in $\Theta(n)$ time using an auxiliary array.
+
+\begin{theorem}[Correctness of MergeSort]
+\texttt{MergeSort} returns a permutation of the input sorted in nondecreasing order.
+\end{theorem}
+\begin{proof}
+Induction on $n=r-p+1$. Base $n=1$ trivially sorted. Assume holds for all sizes $<n$. Both halves are sorted by the induction hypothesis. \texttt{Merge} repeatedly takes the smaller leading element of the two sorted halves, so the output is sorted and contains exactly the elements of $A[p..r]$. By induction the claim holds for $n$.
+\end{proof}
+
+\texttt{Merge} scans each element once, so $f(n)=\Theta(n)$. Thus
+\[
+T(n)=2T(n/2)+\Theta(n),\quad T(1)=\Theta(1).
+\]
+Here $a=2$, $b=2$, $\log_b a=1$, $f(n)=\Theta(n)=\Theta(n^{\log_b a})$, so Master case~2 gives
+\[
+T(n)=\Theta(n\log n).
+\]
+This is asymptotically optimal for comparison sorting (lower bound in Ch.~8). Unlike QuickSort, MergeSort guarantees $\Theta(n\log n)$ worst-case but needs $\Theta(n)$ extra space.
+
+% ============================================================
+\section{QuickSort}
+\label{sec:quicksort}
+
+\texttt{Partition}$(A,p,r)$ picks pivot $x=A[r]$, maintains index $i$ with $A[p..i]\le x$ and $A[i+1..j-1]>x$, scanning $j$ from $p$ to $r-1$ and swapping when $A[j]\le x$. Finally swap $A[i+1]$ with $A[r]$; return $q=i+1$. Cost is $\Theta(n)$.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
+  \draw[thick] (0,0) rectangle (10,1);
+  \draw (2.5,0) -- (2.5,1); \draw (6,0) -- (6,1); \draw (8.5,0) -- (8.5,1);
+  \node at (1.25,0.5) {$\le x$}; \node at (4.25,0.5) {$>x$};
+  \node at (7.25,0.5) {unscanned}; \node at (9.25,0.5) {$x$};
+  \node[below] at (1.25,0) {$p$}; \node[below] at (2.5,0) {$i$};
+  \node[below] at (6,0) {$j$}; \node[below] at (8.5,0) {$r$};
+  \draw[->,thick] (2.5,-0.3) -- (2.5,-0.05); \draw[->,thick] (6,-0.3) -- (6,-0.05);
+  \node[font=\footnotesize] at (5,-0.7) {invariant: $A[p..i]\le x < A[i+1..j-1]$};
+\end{tikzpicture}
+\caption{Lomuto partition invariant. Elements left of $i$ are $\le$ pivot; between $i+1$ and $j-1$ are $> $ pivot.}
+\label{fig:qs-partition}
+\end{figure}
+
+\texttt{QuickSort}$(A,p,r)$: if $p<r$, $q\leftarrow$\texttt{Partition}$(A,p,r)$, recurse on $A[p..q-1]$ and $A[q+1..r]$.
+
+\paragraph{Deterministic worst case.} If the pivot is always the smallest or largest element (e.g., sorted input with $A[r]$ as pivot), partitions are $0$ and $n-1$:
+\[
+T(n)=T(n-1)+\Theta(n)=\Theta\!\left(\sum_{k=1}^{n}k\right)=\Theta(n^2).
+\]
+Balanced partitions ($n/4$--$3n/4$) still give $T(n)\le 2T(3n/4)+\Theta(n)=\Theta(n\log n)$, but the adversary can force $\Theta(n^2)$.
+
+\paragraph{Randomised QuickSort.} Choose pivot uniformly at random from $A[p..r]$ (or randomly permute first). Let $z_1<\cdots<z_n$ be sorted values and $X_{ij}=1$ if $z_i$ and $z_j$ are compared (i.e., one is chosen as pivot while both lie in the same recursive call), else $0$. Total comparisons $X=\sum_{i<j}X_{ij}$.
+
+For $i<j$, $z_i$ and $z_j$ are compared iff among $Z_{ij}=\{z_i,\dots,z_j\}$ the first element chosen as pivot is $z_i$ or $z_j$. All $|Z_{ij}|=j-i+1$ elements are equally likely to be chosen first, so
+\[
+\Pr[X_{ij}=1]=\frac{2}{j-i+1},\qquad \mathbb{E}[X_{ij}]=\frac{2}{j-i+1}.
+\]
+By linearity of expectation,
+\[
+\mathbb{E}[X]=\sum_{i=1}^{n}\sum_{j=i+1}^{n}\frac{2}{j-i+1}
+  =\sum_{i=1}^{n}\sum_{k=1}^{n-i}\frac{2}{k+1}
+  < 2\sum_{i=1}^{n} H_n = O(n\log n),
+\]
+more precisely $\mathbb{E}[X]=2(n+1)H_n-4n\sim 2n\ln n$. Each comparison is $O(1)$ work, so
+\[
+\mathbb{E}[T(n)]=O(n\log n).
+\]
+Randomisation thus removes the adversary's power: \emph{every} input has expected $O(n\log n)$ time.
+
+% ============================================================
+\section{Closest Pair of Points}
+\label{sec:closest-pair}
+
+Given $P=\{p_1,\dots,p_n\}\subset\mathbb{R}^2$, find $\min_{i\ne j}\|p_i-p_j\|_2$. Brute force is $\Theta(n^2)$. The D\&C algorithm sorts by $x$, splits by median $x=m$ into $P_L,P_R$, recursively finds $\delta_L,\delta_R$, sets $\delta=\min(\delta_L,\delta_R)$, then checks pairs straddling the dividing line within the vertical strip $|x-m|<\delta$.
+
+Naively the strip could contain $\Theta(n)$ points. The key is sparsity:
+
+\begin{lemma}[Strip sparsity]
+Let points in the strip be sorted by $y$. Any $\delta\times 2\delta$ rectangle in the strip contains at most $8$ points of $P$ (hence at most $7$ successors need be checked; a tighter packing gives $6$).
+\end{lemma}
+\begin{proof}
+Partition the rectangle into $8$ squares of side $\delta/2$ ($2$ columns $\times$ $4$ rows). The diagonal is $\delta/\sqrt2<\delta$. If two points lay in the same square their distance would be $<\delta$, contradicting that inter-point distances within $P_L$ and $P_R$ are $\ge\delta$. So at most one point per square.
+\end{proof}
+
+Consequently, for each point in the strip sorted by $y$, only the next $7$ points need be checked. The strip scan is $O(n)$ after $O(n\log n)$ presorting (or $O(n)$ with presorted arrays passed down). Recurrence:
+\[
+T(n)=2T(n/2)+O(n)\;\Longrightarrow\;T(n)=O(n\log n).
+\]
+This beats $\Theta(n^2)$ and is optimal in the algebraic decision-tree model. In practice the $y$-sorted order is maintained by presorting once ($O(n\log n)$) and passing the $y$-order through recursion, so no per-level sort is needed.
+
+\begin{remark}
+The closest-pair recurrence is identical in form to MergeSort's; the difficulty is entirely in the combine step. The sparsity lemma is what keeps $f(n)=O(n)$.
+\end{remark}
+
+% ============================================================
+\section{Strassen's Matrix Multiplication}
+\label{sec:strassen}
+
+Naive $n\times n$ multiplication costs $\Theta(n^3)$. Partition
+\[
+A=\begin{pmatrix}A_{11}&A_{12}\\A_{21}&A_{22}\end{pmatrix},\;
+B=\begin{pmatrix}B_{11}&B_{12}\\B_{21}&B_{22}\end{pmatrix},\;
+C=AB=\begin{pmatrix}C_{11}&C_{12}\\C_{21}&C_{22}\end{pmatrix},
+\]
+each block $n/2\times n/2$. Standard block multiplication needs $8$ half-size products. Strassen (1969) uses $7$:
+
+\begin{align*}
+M_1&=(A_{11}+A_{22})(B_{11}+B_{22}) & M_5&=(A_{11}+A_{12})B_{22}\\
+M_2&=(A_{21}+A_{22})B_{11}           & M_6&=(A_{21}-A_{11})(B_{11}+B_{12})\\
+M_3&=A_{11}(B_{12}-B_{22})           & M_7&=(A_{12}-A_{22})(B_{21}+B_{22})\\
+M_4&=A_{22}(B_{21}-B_{11}) && 
+\end{align*}
+Then $C_{11}=M_1+M_4-M_5+M_7$, $C_{12}=M_3+M_5$, $C_{21}=M_2+M_4$, $C_{22}=M_1-M_2+M_3+M_6$. Each $M_k$ is one $n/2\times n/2$ product; the $18$ additions cost $\Theta(n^2)$.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.85, every node/.style={font=\footnotesize}]
+  \draw[thick] (0,0) rectangle (2,2); \draw (1,0)--(1,2); \draw (0,1)--(2,1);
+  \node at (0.5,1.5) {$A_{11}$}; \node at (1.5,1.5) {$A_{12}$};
+  \node at (0.5,0.5) {$A_{21}$}; \node at (1.5,0.5) {$A_{22}$};
+  \node at (1,-0.3) {$A$};
+  \draw[thick] (3,0) rectangle (5,2); \draw (4,0)--(4,2); \draw (3,1)--(5,1);
+  \node at (3.5,1.5) {$B_{11}$}; \node at (4.5,1.5) {$B_{12}$};
+  \node at (3.5,0.5) {$B_{21}$}; \node at (4.5,0.5) {$B_{22}$};
+  \node at (4,-0.3) {$B$};
+  \draw[->,thick] (5.3,1) -- (6.2,1) node[midway,above] {$7\times$};
+  \node[draw,rounded corners,align=center] at (8,1) {$M_1\dots M_7$\\$n/2\times n/2$ products\\$+\;18$ additions $\Theta(n^2)$};
+  \draw[->,thick] (9.5,1) -- (10.3,1);
+  \draw[thick] (10.5,0) rectangle (12.5,2); \draw (11.5,0)--(11.5,2); \draw (10.5,1)--(12.5,1);
+  \node at (11,1.5) {$C_{11}$}; \node at (12,1.5) {$C_{12}$};
+  \node at (11,0.5) {$C_{21}$}; \node at (12,0.5) {$C_{22}$};
+  \node at (11.5,-0.3) {$C=AB$};
+\end{tikzpicture}
+\caption{Strassen: one $n\times n$ product reduced to seven $n/2\times n/2$ products plus $O(n^2)$ additions.}
+\label{fig:strassen}
+\end{figure}
+
+Recurrence:
+\[
+T(n)=7\,T(n/2)+\Theta(n^2),\quad T(1)=\Theta(1).
+\]
+Here $\log_b a=\log_2 7\approx 2.807$ and $f(n)=O(n^{2})=O(n^{\log_2 7-\epsilon})$, so Master case~1 gives
+\[
+T(n)=\Theta(n^{\log_2 7})=O(n^{2.81}),
+\]
+asymptotically faster than $\Theta(n^3)$. Applied recursively (padding to power of two if needed), it is practical for large $n$ despite larger constants.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch04-exercises}
+
+\begin{enumerate}[label=\textbf{4.\arabic*}]
+    \item \textbf{MergeSort invariants.} Write the loop invariant for \texttt{Merge}$(L,R)$ that merges two sorted arrays of total length $n$. Prove initialization, maintenance, and termination, and show the number of comparisons is at most $n-1$.
+
+    \item \textbf{QuickSort indicators.} Let $X_{ij}$ be as in \S\ref{sec:quicksort}. (a) Justify $\Pr[X_{ij}=1]=2/(j-i+1)$ by symmetry among $Z_{ij}$. (b) Compute $\mathbb{E}[X]$ exactly as $2(n+1)H_n-4n$ and deduce $\mathbb{E}[X]\le 2n\ln n+O(n)$. What happens if pivots are chosen deterministically as $A[r]$ on a random permutation input?
+
+    \item \textbf{Closest-pair tightness.} (a) Prove the strip lemma with $8$ squares of side $\delta/2$ implies at most $7$ successors need be checked. (b) Give a configuration of $8$ points achieving $6$ points in a $\delta\times2\delta$ rectangle with all pairwise distances $\ge\delta$, showing the constant $7$ cannot be reduced to $3$ without a finer argument.
+
+    \item \textbf{Strassen in practice.} (a) Verify algebraically that the seven $M_k$ yield the correct $C_{ij}$. (b) Show that for $n=2^k$ the exact operation count satisfies $T(n)=7^k+6\cdot\sum_{i=0}^{k-1}7^i4^{k-1-i}$ and confirm $T(n)=\Theta(n^{\log_2 7})$. At what $n_0$ would you switch to naive multiplication if Strassen's constant is $c_s$ vs.\ $c_0$?
+\end{enumerate}
