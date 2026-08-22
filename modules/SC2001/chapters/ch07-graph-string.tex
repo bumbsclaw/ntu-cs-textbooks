@@ -30,28 +30,34 @@ We assume adjacency-list representation; adjacency matrix would cost $\Theta(n^2
 \textsc{BFS}$(G,s)$ explores in waves of increasing distance from source $s$.
 It uses a FIFO \emph{queue} $Q$: $s$ is enqueued, then repeatedly dequeued, and each undiscovered neighbour is enqueued.
 
-\begin{quote}\ttfamily\small
+\begin{quote}\ttfamily\scriptsize
 \textsc{BFS}$(G,s)$\\
 1\ dist$[s]\gets0$; parent$[s]\gets\textsc{nil}$; $Q\gets[s]$; visited$\gets\{s\}$\\
 2\ \textbf{while} $Q\neq\emptyset$ \textbf{do}\\
 3\ \ \ $u\gets\textsc{Dequeue}(Q)$\\
 4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do}\\
-5\ \ \ \ \ \ \textbf{if} $v\notin$ visited \textbf{then} visited$\cup\{v\}$; dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
+5\ \ \ \ \ \ \textbf{if} $v\notin$ visited \textbf{then} visited$\cup\{v\}$;\\
+\ \ \ \ \ \ \ \ \ dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
 \end{quote}
 
 The \emph{layering} property: $Q$ always contains vertices of at most two consecutive distances $d,d+1$ from $s$, all $d$ before $d+1$. Hence dist$[v]$ is the shortest-path distance $\delta(s,v)$ in an unweighted graph (proved by induction on $d$). Parent pointers form a \emph{BFS tree} rooted at $s$; every non-tree edge connects vertices whose layers differ by at most one.
 
 \begin{figure}[h]\centering
 \begin{tikzpicture}[every node/.style={circle,draw,thick,minimum size=7mm,font=\small},xscale=1.15,yscale=0.95]
-\node (s) at (0,2) {$s$};
-\node (a) at (-1.6,0.6) {$a$}; \node (b) at (1.6,0.6) {$b$};
-\node (c) at (-2.4,-0.9) {$c$}; \node (d) at (0,-0.9) {$d$}; \node (e) at (2.4,-0.9) {$e$};
-\draw[thick,->] (s)--(a); \draw[thick,->] (s)--(b);
-\draw[thick,->] (a)--(c); \draw[thick,->] (a)--(d); \draw[thick,->] (b)--(d); \draw[thick,->] (b)--(e);
-\draw[thick,dashed,->] (c) to[bend left=18] (d); \draw[thick,dashed,->] (d) to[bend left=18] (e);
+\node[fill=blue!18] (s) at (0,2) {$s$};
+\node[fill=green!18] (a) at (-1.6,0.6) {$a$}; \node[fill=green!18] (b) at (1.6,0.6) {$b$};
+\node[fill=orange!18] (c) at (-2.4,-0.9) {$c$}; \node[fill=orange!18] (d) at (0,-0.9) {$d$}; \node[fill=orange!18] (e) at (2.4,-0.9) {$e$};
+\draw[thick,->,blue!60!black] (s)--(a); \draw[thick,->,blue!60!black] (s)--(b);
+\draw[thick,->,green!55!black] (a)--(c); \draw[thick,->,green!55!black] (a)--(d); \draw[thick,->,green!55!black] (b)--(d); \draw[thick,->,green!55!black] (b)--(e);
+\draw[thick,dashed,->,orange!75!black] (c) to[bend left=18] (d); \draw[thick,dashed,->,orange!75!black] (d) to[bend left=18] (e);
 \node[draw=none,font=\scriptsize] at (0,2.65) {layer 0};
 \node[draw=none,font=\scriptsize] at (0,0.05) {layer 1 \quad layer 2 below};
 \node[draw=none,font=\tiny,align=center] at (0,-1.7) {solid = BFS tree (parent); dashed = non-tree edges};
+\begin{scope}[on background layer]
+\fill[blue!6,rounded corners=3pt] (-0.7,1.6) rectangle (0.7,2.45);
+\fill[green!7,rounded corners=3pt] (-2.3,0.2) rectangle (2.3,1.05);
+\fill[orange!8,rounded corners=3pt] (-3.0,-1.35) rectangle (3.0,-0.45);
+\end{scope}
 \end{tikzpicture}
 \caption{BFS layering from $s$. Queue order visits layer~0, then layer~1 ($a,b$), then layer~2 ($c,d,e$). Each vertex is enqueued once; every edge examined once (twice if undirected): $O(n+m)$ time and $O(n)$ extra space.}
 \label{fig:bfs-tree}
@@ -66,8 +72,10 @@ Analysis: each vertex enters $Q$ once and each adjacency list is scanned once, g
 \subsection{DFS: Stack and Structure}
 \textsc{DFS} replaces the queue by a LIFO \emph{stack} (or recursion): go deep before going wide. Iterative version pushes $s$ onto a stack; at each step pop $u$ and push its undiscovered neighbours.
 
-\begin{quote}\ttfamily\small
-\textsc{DFS-Visit}$(u)$: mark $u$ discovered; \textbf{for} each $(u,v)\in E$ \textbf{if} $v$ undiscovered \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
+\begin{quote}\ttfamily\scriptsize
+\textsc{DFS-Visit}$(u)$: mark $u$ discovered;\\
+\textbf{for} each $(u,v)\in E$ \textbf{if} $v$ undiscovered\\
+\ \ \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
 \end{quote}
 
 With discovery/finish times $d[u],f[u]$, DFS classifies edges (undirected: tree/back; directed: tree/back/forward/cross) and yields the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or disjoint. This structure powers two classic applications: cycle detection (back edge $\Leftrightarrow$ cycle in directed graph) and topological sort (order vertices by decreasing $f[u]$ for a DAG). Kosaraju's two-pass DFS finds strongly connected components. Like BFS, DFS scans each vertex and edge once: $O(n+m)$ time, $O(n)$ stack/colour array.
@@ -82,12 +90,14 @@ Edge weights $w:E\to\mathbb{R}$. Let $\delta(s,v)$ denote the true shortest-path
 \subsection{Dijkstra: Greedy with a Heap}
 \textit{Assumption:} $w(e)\ge 0$ for all $e$. Dijkstra grows a set $S$ of settled vertices whose final distances are known, repeatedly extracting the unsettled vertex with minimum tentative distance.
 
-\begin{quote}\ttfamily\small
+\begin{quote}\ttfamily\scriptsize
 \textsc{Dijkstra}$(G,w,s)$\\
 1\ dist$[s]\gets0$; dist$[v\neq s]\gets\infty$; $S\gets\emptyset$; min-heap $Q$ on dist\\
 2\ \textbf{while} $Q\neq\emptyset$ \textbf{do}\\
 3\ \ \ $u\gets\textsc{ExtractMin}(Q)$; $S\gets S\cup\{u\}$\\
-4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do} \textsc{Relax}$(u,v)$: \textbf{if} dist$[v]>$dist$[u]+w(u,v)$ \textbf{then} dist$[v]\gets$dist$[u]+w(u,v)$; \textsc{DecreaseKey}$(Q,v)$
+4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do} \textsc{Relax}$(u,v)$:\\
+\ \ \ \ \ \ \textbf{if} dist$[v]>$dist$[u]+w(u,v)$ \textbf{then}\\
+\ \ \ \ \ \ \ \ \ dist$[v]\gets$dist$[u]+w(u,v)$; \textsc{DecreaseKey}$(Q,v)$
 \end{quote}
 
 Heap implementation: binary heap gives $O((n+m)\log n)$; Fibonacci heap improves to $O(m+n\log n)$. Early exit when a target $t$ is extracted --- its distance is already final. Relaxation is the only place dist decreases, mirroring the BFS layering but weighted.
@@ -129,14 +139,16 @@ Non-negative weights and single source: Dijkstra. Negative weights or cycle dete
 \label{sec:string}
 Text $T[1\ldots n]$, pattern $P[1\ldots m]$, alphabet $\Sigma$ ($n\ge m$). Report all shifts $s$ with $T[s+1\ldots s+m]=P$. We compare three strategies that trade comparison cost for preprocessing.
 
-\subsection{Na\"ive $\Theta((n-m+1)m)$ Scan}
+\subsection{Na\"ive \texorpdfstring{$\Theta((n-m+1)m)$}{Theta((n-m+1)m)} Scan}
 Slide $P$ over each alignment $s=0\ldots n-m$ and compare $P[1\ldots m]$ against $T[s+1\ldots s+m]$ character by character, breaking on first mismatch. Worst case $\Theta((n-m+1)m)$ --- e.g., $T=a^n$, $P=a^{m-1}b$ forces $m$ comparisons at each of $n-m+1$ positions. No preprocessing, $O(1)$ extra space. The next two algorithms avoid re-scanning characters already matched.
 
 \subsection{KMP: Prefix Function and Automaton}
 Let $\pi[q]=\max\{k<q: P[1\ldots k]\text{ is suffix of }P[1\ldots q]\}$ for $1\le q\le m$ ($\pi[1]=0$); equivalently $\pi[q]$ is the longest proper border of the prefix $P[1\ldots q]$. Computed in $O(m)$ by amortised fallback:
 
-\begin{quote}\ttfamily\small
-$\pi[1]\gets0;\ k\gets0$; \textbf{for} $q\gets2$ \textbf{to} $m$ \textbf{do} \textbf{while} $k>0\land P[q]\neq P[k+1]$ \textbf{do} $k\gets\pi[k]$; \textbf{if} $P[q]=P[k+1]$ \textbf{then} $k\gets k+1$; $\pi[q]\gets k$
+\begin{quote}\ttfamily\scriptsize
+$\pi[1]\gets0;\ k\gets0$; \textbf{for} $q\gets2$ \textbf{to} $m$ \textbf{do}\\
+\ \ \textbf{while} $k>0\land P[q]\neq P[k+1]$ \textbf{do} $k\gets\pi[k]$;\\
+\ \ \textbf{if} $P[q]=P[k+1]$ \textbf{then} $k\gets k+1$; $\pi[q]\gets k$
 \end{quote}
 
 Matching scans $T$ once, maintaining $q$ = length of longest prefix of $P$ that is a suffix of $T[1\ldots i]$; on mismatch fall back $q\gets\pi[q]$. Total $O(n+m)$ time, $O(m)$ extra space; each character of $T$ is examined at most twice.
@@ -146,17 +158,19 @@ The automaton view: state $q$ means ``first $q$ characters of $P$ just matched.'
 \begin{figure}[h]\centering
 \begin{tikzpicture}[->,>=Stealth,shorten >=1pt,auto,node distance=1.9cm,semithick]
 \tikzstyle{state}=[circle,draw,thick,minimum size=7mm,font=\small]
-\node[state,initial,initial text={}] (0) {$0$};
-\node[state] (1) [right of=0] {$1$};
-\node[state] (2) [right of=1] {$2$};
-\node[state] (3) [right of=2] {$3$};
-\node[state,accepting] (4) [right of=3] {$4$};
-\path (0) edge[bend left=10] node[font=\scriptsize,above] {a} (1)
+\tikzstyle{spine}=[->,>=Stealth,thick,blue!70!black]
+\tikzstyle{fail}=[->,>=Stealth,thick,dashed,red!60!black]
+\node[state,initial,initial text={},fill=blue!12] (0) {$0$};
+\node[state,fill=blue!8] (1) [right of=0] {$1$};
+\node[state,fill=blue!8] (2) [right of=1] {$2$};
+\node[state,fill=blue!8] (3) [right of=2] {$3$};
+\node[state,accepting,fill=green!15] (4) [right of=3] {$4$};
+\path[spine] (0) edge[bend left=10] node[font=\scriptsize,above] {a} (1)
       (1) edge[bend left=10] node[font=\scriptsize,above] {b} (2)
       (2) edge[bend left=10] node[font=\scriptsize,above] {a} (3)
-      (3) edge[bend left=10] node[font=\scriptsize,above] {b} (4)
-      (1) edge[loop above] node[font=\scriptsize] {a} (1)
-      (2) edge[bend left=30] node[font=\scriptsize,below] {a} (1)
+      (3) edge[bend left=10] node[font=\scriptsize,above] {b} (4);
+\path[spine] (1) edge[loop above] node[font=\scriptsize] {a} (1);
+\path[fail] (2) edge[bend left=30] node[font=\scriptsize,below] {a} (1)
       (3) edge[bend left=30] node[font=\scriptsize,below] {b} (2)
       (4) edge[bend left=38] node[font=\scriptsize,below] {b} (2)
       (4) edge[bend left=20] node[font=\scriptsize,above] {a} (3);

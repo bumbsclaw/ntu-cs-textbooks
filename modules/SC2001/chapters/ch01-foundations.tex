@@ -172,8 +172,8 @@ An \emph{algorithm} is distinct from a \emph{program}: the former is an abstract
 We write algorithms in language-agnostic pseudocode, one-indexed for arrays (as in CLRS), with \texttt{//} comments, assignment $\gets$, comparison $=,\neq,<,\le$, and control flow \texttt{if--then--else}, \texttt{while}, \texttt{for}, \texttt{return}. Indentation denotes block structure. Procedures are named in \textsc{SmallCaps}. We count \emph{primitive operations} (defined in \S\ref{sec:ram}) rather than wall-clock time.
 
 \begin{example}[Euclid's algorithm --- the oldest non-trivial algorithm]
-\begin{quote}\ttfamily\small
-\textsc{Euclid}$(a,b)$ \quad // assume $a\ge b\ge0$, integers\\\\
+\begin{quote}\ttfamily\scriptsize
+\textsc{Euclid}$(a,b)$ // assume $a\ge b\ge0$, integers\\\\
 1\ \ \textbf{while} $b\neq0$ \textbf{do}\\
 2\ \ \ \ \ \ $r \gets a \bmod b$\\
 3\ \ \ \ \ \ $a \gets b$\\
@@ -196,10 +196,11 @@ To compare algorithms fairly we need a shared model of ``how long a step takes''
 \begin{tikzpicture}[
   box/.style={draw, thick, rounded corners=3pt, fill=blue!5, minimum height=0.9cm, align=center, font=\small},
   memcell/.style={draw, thick, minimum width=1.0cm, minimum height=0.55cm, font=\scriptsize, align=center},
-  arrow/.style={-{Latex}, thick},
+  arrow/.style={-{Latex}, thick, color=violet!70!black},
   tape/.style={draw, thick, minimum width=0.55cm, minimum height=0.7cm, font=\scriptsize, align=center}
 ]
 % Input tape
+\fill[yellow!10,rounded corners=3pt] (-6.35,0.82) rectangle (-3.2,1.58);
 \node[font=\footnotesize\bfseries] at (-5.2,2.0) {Input tape};
 \foreach \i in {0,...,4} {
   \node[tape, fill=yellow!15] (in\i) at (-6.0+\i*0.62,1.2) {};
@@ -211,7 +212,7 @@ To compare algorithms fairly we need a shared model of ``how long a step takes''
 \node[tape, fill=gray!20] at (-3.52,1.2) {\#};
 
 % CPU box
-\node[box, minimum width=3.6cm, minimum height=3.2cm, fill=blue!7] (cpu) at (0,0) {};
+\node[box, minimum width=3.6cm, minimum height=3.2cm, fill=blue!7, draw=blue!60!black] (cpu) at (0,0) {};
 \node[font=\footnotesize\bfseries] at (0,1.25) {CPU};
 
 % Inside CPU
@@ -222,6 +223,7 @@ To compare algorithms fairly we need a shared model of ``how long a step takes''
 \node[box, minimum width=3.0cm, minimum height=0.45cm, fill=blue!10] (fetch) at (0,-1.05) {\scriptsize Fetch--Decode--Execute cycle};
 
 % Memory
+\fill[blue!4,rounded corners=4pt] (3.65,-2.15) rectangle (5.55,1.75);
 \node[font=\footnotesize\bfseries] at (4.6,2.0) {Memory (RAM)};
 \foreach \i/\addr in {0/0,1/1,2/2,3/3,4/4} {
   \pgfmathsetmacro{\y}{1.15 - \i*0.60}
@@ -237,6 +239,7 @@ To compare algorithms fairly we need a shared model of ``how long a step takes''
 \node[font=\tiny, align=center] at (4.6,-1.95) {random access\\in $O(1)$};
 
 % Output tape
+\fill[yellow!10,rounded corners=3pt] (-6.35,-3.42) rectangle (-3.75,-2.68);
 \node[font=\footnotesize\bfseries] at (-5.2,-2.3) {Output tape};
 \foreach \i in {0,...,3} {
   \node[tape, fill=yellow!15] (out\i) at (-6.0+\i*0.62,-3.05) {};
@@ -253,7 +256,7 @@ To compare algorithms fairly we need a shared model of ``how long a step takes''
 % Inside CPU arrows
 \draw[arrow, thin] (regs) -- (alu);
 \draw[arrow, thin] (alu) -- (regs);
-\node[font=\tiny, align=center] at (0,-2.05) {each primitive op costs $1$};
+\node[font=\tiny, align=center, fill=orange!15, rounded corners=2pt, inner sep=2pt] at (0,-2.05) {each primitive op costs $1$};
 
 \end{tikzpicture}
 \caption{The Random Access Machine (RAM). The CPU fetches instructions pointed to by the program counter, operates on registers and the ALU, and accesses any memory cell $M[i]$ in unit time. Input is read sequentially; output is write-only. This idealisation underlies all running-time analysis in the book.}

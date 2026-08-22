@@ -20,7 +20,7 @@ After this chapter you will be able to:
 \end{enumerate}
 
 % ============================================================
-\section{$\mathsf{P}$, $\mathsf{NP}$, and $\mathsf{coNP}$}
+\section{\texorpdfstring{$\mathsf{P}$, $\mathsf{NP}$, and $\mathsf{coNP}$}{P, NP, and coNP}}
 \label{sec:p-np}
 
 A \emph{language} $L\subseteq\{0,1\}^*$ is a decision problem: $x\in L$ means ``yes''.
@@ -55,7 +55,7 @@ For \textsc{Clique}$(G,k)$, the certificate lists $k$ vertices; the verifier che
 % Witness length is polynomial by definition; without this bound every decidable language would trivially be in $\mathsf{NP}$.
 A useful intuition: $\mathsf{P}$ = can \emph{find} quickly; $\mathsf{NP}$ = can \emph{check} quickly given a hint. Whether hints ever help asymptotically is exactly $\mathsf{P}$ vs.\ $\mathsf{NP}$.
 
-\section{Polynomial Reductions and $\mathsf{NP}$-Completeness}
+\section{\texorpdfstring{Polynomial Reductions and $\mathsf{NP}$-Completeness}{Polynomial Reductions and NP-Completeness}}
 \label{sec:npc}
 
 \begin{definition}[Polynomial reduction]
@@ -73,7 +73,7 @@ Thus an $\mathsf{NP}$-complete problem is a hardest problem in $\mathsf{NP}$: a 
 \end{theorem}
 Every $\mathsf{NP}$ verification can be encoded as a Boolean circuit/tableau whose satisfiability mirrors the existence of a certificate. From this single seed, hundreds of problems inherit completeness by reduction chains. Since $\le_p$ is transitive (compose the polynomial maps), it suffices to reduce from any known $\mathsf{NP}$-complete problem rather than from all of $\mathsf{NP}$.
 
-\subsection{SAT $\le_p$ 3SAT: clause splitting}
+\subsection{\texorpdfstring{SAT $\le_p$ 3SAT}{SAT <=p 3SAT}: clause splitting}
 A \textsc{SAT} clause $(l_1\vee\cdots\vee l_k)$ with $k>3$ is split using fresh variables $y_i$:
 \[
 (l_1\vee l_2\vee y_1)\wedge(\bar y_1\vee l_3\vee y_2)\wedge\cdots\wedge(\bar y_{k-3}\vee l_{k-1}\vee l_k).
@@ -84,10 +84,10 @@ Clauses with $1$ or $2$ literals are padded by repeating a literal. The new 3-CN
 $(x_1\vee\bar x_2\vee x_3\vee x_4)$ becomes $(x_1\vee\bar x_2\vee y_1)\wedge(\bar y_1\vee x_3\vee y_2)\wedge(\bar y_2\vee x_4\vee x_4)$. Any assignment satisfying the original extends to the $y_i$ (set $y_1=0$ if $x_1\vee\bar x_2$ true, else $1$); conversely, any satisfying assignment for the 3-CNF restricts to one for the original.
 \end{example}
 
-\subsection{3SAT $\le_p$ \textsc{Clique}: triangles and conflicts}
+\subsection{\texorpdfstring{3SAT $\le_p$ \textsc{Clique}}{3SAT <=p Clique}: triangles and conflicts}
 Given 3-CNF $\phi=C_1\wedge\cdots\wedge C_m$ where $C_j=(\ell_{j1}\vee\ell_{j2}\vee\ell_{j3})$, build $G$ with $3m$ vertices---a triangle per clause (one vertex per literal). Add edges between all pairs except (i) within-clause non-edges are kept as triangle edges and (ii) \emph{conflict edges} are omitted between $x$ and $\bar x$ across clauses. Set $k=m$. Then $G$ has a $k$-clique iff $\phi$ is satisfiable: pick one true literal per clause; they are pairwise non-conflicting. Size is $O(m^2)$, polynomial.
 
-\subsection{\textsc{Clique} $\le_p$ \textsc{Vertex Cover}: complement}
+\subsection{\texorpdfstring{\textsc{Clique} $\le_p$ \textsc{Vertex Cover}}{Clique <=p Vertex Cover}: complement}
 For $G=(V,E)$, $\bar G=(V,\bar E)$ is the complement. $S\subseteq V$ is a clique in $G$ iff $V\setminus S$ is a vertex cover in $\bar G$: an edge missing from $S$ in $G$ becomes an uncovered edge in $\bar G$ and vice versa. So $(G,k)\mapsto(\bar G,|V|-k)$ is a reduction, and \textsc{Vertex Cover} is $\mathsf{NP}$-complete. Chaining further, \textsc{Vertex Cover}$\le_p$\textsc{Set Cover}, \textsc{Hamiltonian Cycle}, and \textsc{Subset Sum} are also $\mathsf{NP}$-complete; any $\mathsf{NP}$-hard problem not known to be in $\mathsf{NP}$ (e.g.\ halting) is called $\mathsf{NP}$-hard only.
 
 \begin{example}[Clique vs.\ Vertex Cover]
@@ -101,29 +101,30 @@ $\mathsf{NP}$-complete $\subseteq$ $\mathsf{NP}$; $\mathsf{NP}$-hard may lie out
 % --- TIKZ 1: Reduction chain DAG ---
 \begin{figure}[h]\centering
 \begin{tikzpicture}[node distance=1.6cm, every node/.style={font=\small},
-  box/.style={draw,thick,rounded corners,minimum width=2.2cm,minimum height=0.85cm,align=center,fill=blue!6},
-  arr/.style={-Latex,thick}]
-\node[box] (sat) {SAT\\{\scriptsize Cook--Levin}};
-\node[box,right=of sat] (3sat) {3SAT\\{\scriptsize clause split}};
-\node[box,right=of 3sat] (clique) {Clique\\{\scriptsize triangles}};
-\node[box,right=of clique] (vc) {Vertex Cover\\{\scriptsize complement}};
-\draw[arr] (sat) -- node[above,font=\scriptsize]{$\le_p$} (3sat);
-\draw[arr] (3sat) -- node[above,font=\scriptsize]{$\le_p$} (clique);
-\draw[arr] (clique) -- node[above,font=\scriptsize]{$\le_p$} (vc);
+  box/.style={draw,thick,rounded corners,minimum width=2.2cm,minimum height=0.85cm,align=center},
+  arr/.style={-Latex,thick,blue!60!black},
+  arr2/.style={-Latex,thick,dashed,violet!70!black}]
+\node[box,fill=blue!12] (sat) {SAT\\{\scriptsize Cook--Levin}};
+\node[box,right=of sat,fill=teal!12] (3sat) {3SAT\\{\scriptsize clause split}};
+\node[box,right=of 3sat,fill=orange!14] (clique) {Clique\\{\scriptsize triangles}};
+\node[box,right=of clique,fill=red!10] (vc) {Vertex Cover\\{\scriptsize complement}};
+\draw[arr,blue!60!black] (sat) -- node[above,font=\scriptsize,blue!60!black]{$\le_p$} (3sat);
+\draw[arr,teal!60!black] (3sat) -- node[above,font=\scriptsize,teal!60!black]{$\le_p$} (clique);
+\draw[arr,orange!70!black] (clique) -- node[above,font=\scriptsize,orange!70!black]{$\le_p$} (vc);
 \node[draw=none,font=\scriptsize,align=center,below=0.7cm of 3sat] (etc) {$\downarrow\le_p$ Set Cover, Hamiltonian Cycle, \dots\\{\tiny each step polynomial-time; completeness propagates}};
-\draw[arr,dashed] (vc) -- (etc);
+\draw[arr2] (vc) -- (etc);
 \end{tikzpicture}
 \caption{Reduction chain from Cook--Levin. Hardness flows rightward: solving any downstream problem in polynomial time would collapse the whole chain.}
 \label{fig:reduction-chain}
 \end{figure}
 
 % ============================================================
-\section{Coping with $\mathsf{NP}$-Completeness}
+\section{\texorpdfstring{Coping with $\mathsf{NP}$-Completeness}{Coping with NP-Completeness}}
 \label{sec:coping}
 
 When a problem is $\mathsf{NP}$-complete we do not expect an exact polynomial algorithm. SC2001 emphasises three coping strategies: bounded approximation, logarithmic approximation, and fast heuristics without guarantees.
 
-\subsection{$2$-approximation for \textsc{Vertex Cover} via maximal matching}
+\subsection{\texorpdfstring{$2$-approximation for \textsc{Vertex Cover}}{2-approximation for Vertex Cover} via maximal matching}
 \textsc{Approx-VC}: pick any maximal matching $M$ (greedily add disjoint edges until stuck) and return $C$ = all endpoints of $M$.
 
 Any maximal matching is a lower bound on $\textsc{OPT}$: disjoint edges force distinct cover vertices. This yields a simple $2$-approximation.
@@ -133,7 +134,7 @@ $C$ is a vertex cover with $|C|\le 2\cdot\textsc{OPT}$.
 \end{theorem}
 \emph{Proof.} $M$ is maximal, so every edge shares an endpoint with some $e\in M$; thus $C$ covers all edges. Any vertex cover must pick at least one endpoint per edge of $M$, and edges of $M$ are disjoint, so $\textsc{OPT}\ge|M|$. But $|C|=2|M|\le2\cdot\textsc{OPT}$. Tight example: a complete bipartite $K_{n,n}$ has $\textsc{OPT}=n$, $M=n$, $|C|=2n$. Time $O(n+m)$: scan edges once to build $M$, then output $C$. No need to find a maximum matching---any maximal one suffices, which is why the algorithm is linear.
 
-\subsection{Greedy \textsc{Set Cover}: $\ln n$ approximation}
+\subsection{\texorpdfstring{Greedy \textsc{Set Cover}: $\ln n$}{Greedy Set Cover: ln n} approximation}
 Repeatedly pick the set covering the most uncovered elements. If $\textsc{OPT}=k$ and $n$ elements remain, some set covers $\ge n/k$ of them, so $n$ shrinks geometrically. Standard charging gives $|\textsc{Greedy}|\le H_n\cdot\textsc{OPT}=O(\log n)\cdot\textsc{OPT}$ where $H_n=1+\tfrac12+\cdots+\tfrac1n$, and this is essentially optimal unless $\mathsf{P}=\mathsf{NP}$ (Feige's $\Omega(\log n)$ inapproximability). The same greedy idea underlies many log-factor approximations.
 
 \subsection{Heuristic for \textsc{TSP}: nearest neighbour}
@@ -146,17 +147,25 @@ Beyond approximation, practical coping includes: (i) \emph{parameterised algorit
 \begin{tikzpicture}[font=\small]
 % Left: P != NP believed
 \begin{scope}[xshift=-3.2cm]
-  \draw[thick,fill=green!7] (0,0) ellipse (2.0 and 1.25);
-  \draw[thick,fill=blue!10] (0,0) ellipse (1.15 and 0.68);
+  \fill[green!10] (0,0) ellipse (2.0 and 1.25);
+  \fill[blue!6] (0,0) ellipse (1.15 and 0.68);
+  \draw[thick,green!55!black] (0,0) ellipse (2.0 and 1.25);
+  \draw[thick,blue!55!black] (0,0) ellipse (1.15 and 0.68);
+  \fill[red!18] (0,-0.35) ellipse (0.42 and 0.22);
   \node[font=\scriptsize,align=center] at (0,0) {$\mathsf{P}$};
-  \node[font=\scriptsize] at (1.45,0.85) {$\mathsf{NP}$};
-  \node[font=\scriptsize,align=center] at (0,-0.95) {NPC};
+  \node[font=\scriptsize,green!50!black] at (1.55,0.95) {$\mathsf{NP}$};
+  \node[font=\scriptsize,align=center,red!60!black] at (0,-0.35) {NPC};
   \node[draw=none,font=\scriptsize\bfseries] at (0,1.65) {Believed: $\mathsf{P}\neq\mathsf{NP}$};
 \end{scope}
 % Right: P = NP collapsed
 \begin{scope}[xshift=3.2cm]
-  \draw[thick,fill=green!7] (0,0) ellipse (2.0 and 1.25);
-  \node[font=\scriptsize,align=center] at (0,0) {$\mathsf{P}=\mathsf{NP}=\mathsf{NPC}$};
+  \fill[violet!10] (0,0) ellipse (2.0 and 1.25);
+  \fill[blue!8] (0,0) ellipse (1.15 and 0.68);
+  \fill[red!14] (0,-0.15) ellipse (0.52 and 0.24);
+  \draw[thick,violet!60!black] (0,0) ellipse (2.0 and 1.25);
+  \draw[thick,blue!40!black,dashed] (0,0) ellipse (1.15 and 0.68);
+  \node[font=\scriptsize,align=center] at (0,0.25) {$\mathsf{P}=\mathsf{NP}$};
+  \node[font=\scriptsize,red!60!black] at (0,-0.15) {NPC};
   \node[draw=none,font=\scriptsize\bfseries] at (0,1.65) {If $\mathsf{P}=\mathsf{NP}$: collapse};
 \end{scope}
 \node[draw=none,font=\tiny,align=center] at (0,-1.7) {$\mathsf{NPC}$ = $\mathsf{NP}$-complete. Left: $\mathsf{P}\subsetneq\mathsf{NP}$, $\mathsf{NPC}\cap\mathsf{P}=\emptyset$. Right: all coincide.};
@@ -165,7 +174,7 @@ Beyond approximation, practical coping includes: (i) \emph{parameterised algorit
 \label{fig:p-np-venn}
 \end{figure}
 
-\section{$\mathsf{P}$ vs.\ $\mathsf{NP}$ and Why $\mathsf{P}\neq\mathsf{NP}$ Is Believed}
+\section{\texorpdfstring{$\mathsf{P}$ vs.\ $\mathsf{NP}$ and Why $\mathsf{P}\neq\mathsf{NP}$ Is Believed}{P vs. NP and Why P != NP Is Believed}}
 \label{sec:p-vs-np}
 
 $\mathsf{P}$ vs.\ $\mathsf{NP}$ asks whether every efficiently verifiable problem is efficiently solvable. A proof either way would be momentous: $\mathsf{P}=\mathsf{NP}$ would give polynomial algorithms for all $\mathsf{NP}$-complete problems (cryptography breaks, optimisation becomes easy); $\mathsf{P}\neq\mathsf{NP}$ confirms inherent hardness. Why should we believe $\mathsf{P}\neq\mathsf{NP}$? Three strands reinforce each other. (i) decades of failed search for polynomial algorithms despite intense effort, (ii) oracles/barriers suggesting techniques relativise or algebrize insufficiently, and (iii) cryptographic practice whose security would otherwise collapse. A polynomial algorithm for any $\mathsf{NP}$-complete problem would propagate via $\le_p$ to all of $\mathsf{NP}$ (Fig.~\ref{fig:reduction-chain}). Concretely, if $\mathsf{P}=\mathsf{NP}$ then integer factoring, Nash equilibria, and protein folding would all admit efficient algorithms---an extraordinary consequence with no evidence. Yet belief is not proof---a valid separation must rule out \emph{all} polynomial algorithms, a far stronger task than exhibiting one.

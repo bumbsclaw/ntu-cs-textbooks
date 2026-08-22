@@ -46,14 +46,14 @@ Two recurring lemmas support the exchange: (i) \emph{greedy stays ahead} (after 
 
 Given $n$ intervals $[s_i,f_i)$ (half-open), find a maximum-cardinality subset of pairwise compatible (non-overlapping) intervals.
 
-\begin{verbatim}
+\begin{lstlisting}[language=Python]
 EarliestFinish(intervals):
   sort by finish time f_1 <= f_2 <= ... <= f_n
   S = empty; last = -inf
   for i = 1..n:
     if s_i >= last:  S.add(i); last = f_i
   return S
-\end{verbatim}
+\end{lstlisting}
 
 \begin{theorem}[Optimality of earliest finish]
 EarliestFinish returns a maximum-size compatible set.
@@ -78,7 +78,7 @@ Given alphabet $C$ with frequencies $freq(c)>0$, find a binary \emph{prefix code
 
 Huffman's greedy rule: repeatedly merge the two lowest-frequency nodes.
 
-\begin{verbatim}
+\begin{lstlisting}[language=Python]
 Huffman(C, freq):
   Q = min-heap of leaves by freq
   for i = 1 to |C|-1:
@@ -86,15 +86,15 @@ Huffman(C, freq):
     z = internal node with children x,y, freq(z)=freq(x)+freq(y)
     Q.insert(z)
   return Q.extractMin()  // root
-\end{verbatim}
+\end{lstlisting}
 
 \begin{figure}[h]\centering
-\begin{tikzpicture}[every node/.style={circle,draw,inner sep=2pt,font=\small},
+\begin{tikzpicture}[every node/.style={circle,draw,thick,inner sep=2pt,font=\small},
   level distance=12mm, sibling distance=14mm,
-  edge from parent/.style={draw,-stealth}]
-\node {55}
-  child { node {25} child { node {12} } child { node {13} } }
-  child { node {30} child { node {14} } child { node {16} } };
+  edge from parent/.style={draw,-stealth,thick}]
+\node[fill=orange!18] {55}
+  child { node[fill=blue!12] {25} child { node[fill=green!15] {12} } child { node[fill=green!15] {13} } }
+  child { node[fill=blue!12] {30} child { node[fill=green!12] {14} } child { node[fill=green!12] {16} } };
 \end{tikzpicture}
 \caption{Huffman tree sketch: internal labels are summed frequencies; leaves carry character frequencies (here $12,13,14,16$). The two smallest ($12,13$) are siblings at maximum depth---the greedy choice.}
 \label{fig:huffman}
@@ -135,31 +135,31 @@ Let $e=(u,v)$ be the lightest edge crossing $(S,V\setminus S)$ and suppose some 
 
 Both classic algorithms are greedy instantiations of this property.
 
-\begin{verbatim}
+\begin{lstlisting}[language=Python]
 Kruskal(V,E,w):
   sort E by w ascending; make Union-Find on V
   T = empty
   for e=(u,v) in sorted E:
     if Find(u) != Find(v): T.add(e); Union(u,v)
   return T
-\end{verbatim}
+\end{lstlisting}
 Each edge added by Kruskal is the lightest crossing the cut $(C,V\setminus C)$ where $C$ is its component before the union.
 
-\begin{verbatim}
+\begin{lstlisting}[language=Python]
 Prim(V,E,w, r):
   S={r}; T=empty; PQ = edges leaving S keyed by w
   while S != V:
     e=(u,v)=PQ.extractMin() with u in S, v not in S
     T.add(e); S.add(v); insert edges from v to V\S into PQ
   return T
-\end{verbatim}
+\end{lstlisting}
 Each edge added by Prim is exactly the minimum edge of cut $(S,V\setminus S)$.
 
 \begin{figure}[h]\centering
-\begin{tikzpicture}[scale=0.95, every node/.style={circle,draw,inner sep=2pt,font=\small}]
-  \node (a) at (0,1.5) {$a$}; \node (b) at (2,1.5) {$b$};
-  \node (c) at (0,0) {$c$}; \node (d) at (2,0) {$d$};
-  \draw[dashed,rounded corners] (-0.5,-0.5) rectangle (1,2);
+\begin{tikzpicture}[scale=0.95, every node/.style={circle,draw,thick,inner sep=2pt,font=\small}]
+  \node[fill=blue!12] (a) at (0,1.5) {$a$}; \node[fill=blue!12] (b) at (2,1.5) {$b$};
+  \node[fill=green!12] (c) at (0,0) {$c$}; \node[fill=green!12] (d) at (2,0) {$d$};
+  \draw[dashed,rounded corners,fill=blue!5] (-0.5,-0.5) rectangle (1,2);
   \node[draw=none,font=\footnotesize] at (0.5,2.2) {cut $S=\{a,c\}$};
   \draw (a) -- node[above,font=\footnotesize] {1} (b);
   \draw[ultra thick,blue] (a) -- node[left,font=\footnotesize] {2} (c);

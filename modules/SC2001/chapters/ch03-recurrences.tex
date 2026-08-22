@@ -67,15 +67,16 @@ where the last term is the total leaf cost ($a^{L}=n^{\log_{b}a}$ leaves each co
 \begin{tikzpicture}[
   level distance=14mm, sibling distance=34mm,
   every node/.style={font=\footnotesize},
-  rnode/.style={draw,rounded corners,fill=blue!6,inner sep=2pt,minimum width=22mm,align=center},
-  leaf/.style={draw,circle,fill=green!8,inner sep=1.5pt}
+  rnode/.style={draw,rounded corners,fill=blue!10,inner sep=2pt,minimum width=22mm,align=center},
+  rnodeB/.style={draw,rounded corners,fill=teal!14,inner sep=2pt,minimum width=22mm,align=center},
+  leaf/.style={draw,circle,fill=orange!18,inner sep=1.5pt}
 ]
 \node[rnode] (root) {$f(n)$\\[-1pt]{\scriptsize $n$}}
-  child {node[rnode] {$f(n/b)$}
+  child {node[rnodeB] {$f(n/b)$}
     child {node[leaf] {$\cdots$} edge from parent[draw=none]}
     child {node[leaf] {$\cdots$} edge from parent[draw=none]}
   }
-  child {node[rnode] {$f(n/b)$}
+  child {node[rnodeB] {$f(n/b)$}
     child {node[leaf] {$\cdots$} edge from parent[draw=none]}
     child {node[leaf] {$\cdots$} edge from parent[draw=none]}
   };
@@ -95,7 +96,10 @@ $T(n)=2T(n/2)+cn$. Level $i$ has $2^{i}$ nodes of cost $cn/2^{i}=cn$, so each le
 
 \begin{example}[Karatsuba preview]
 $T(n)=3T(n/2)+cn$. Level $i$ costs $3^{i}\cdot c(n/2^{i})=cn(3/2)^{i}$---a geometric series with ratio $3/2>1$, dominated by its last term:
-\[\sum_{i=0}^{L-1}cn(3/2)^{i}=cn\frac{(3/2)^{L}-1}{3/2-1}=\Theta(n\cdot n^{\log_{2}3-1})=\Theta(n^{\log_{2}3}).\]
+\begin{align*}
+\sum_{i=0}^{L-1}cn(3/2)^{i}&=cn\frac{(3/2)^{L}-1}{3/2-1}\\
+&\quad=\Theta(n\cdot n^{\log_{2}3-1})=\Theta(n^{\log_{2}3}).
+\end{align*}
 The Master theorem automates this calculation.
 \end{example}
 
@@ -125,10 +129,16 @@ Figure~\ref{fig:mastergeom} gives the geometric intuition: the three cases corre
 \begin{tikzpicture}[scale=0.92,font=\footnotesize]
 \draw[->] (0,0) -- (7.2,0) node[right] {$i$ (level)};
 \draw[->] (0,0) -- (0,3.2) node[above] {cost at level $i$};
+\fill[blue!7] (0,0) -- (6,0.4) -- (6,0) -- (0,0) -- cycle;
+\fill[red!7] (0,2.6) -- (6,2.6) -- (6,3.0) -- (0,3.0) -- cycle;
+\fill[orange!10] (0,1.3) rectangle (6,1.7);
 \draw[thick,blue!70!black] (0,2.6) -- (6,0.4) node[anchor=north west,black] {Case 1: decreasing --- leaves dominate};
 \draw[thick,orange!70!black] (0,1.5) -- (6,1.5) node[anchor=south west,black] {Case 2: balanced --- all levels equal};
 \draw[thick,red!70!black] (0,0.4) -- (6,2.6) node[anchor=south west,black] {Case 3: increasing --- root dominates};
 \draw[dashed,gray] (0,1.5) -- (6,1.5);
+\node[font=\tiny, fill=white, rounded corners=1pt, inner sep=1pt] at (1.2,2.85) {\color{blue!70!black}Case 1};
+\node[font=\tiny, fill=white, rounded corners=1pt, inner sep=1pt] at (1.2,1.9) {\color{orange!70!black}Case 2};
+\node[font=\tiny, fill=white, rounded corners=1pt, inner sep=1pt] at (1.2,0.15) {\color{red!70!black}Case 3};
 \node[anchor=north,font=\scriptsize,gray] at (3,-0.1) {$0\qquad\cdots\qquad \log_{b}n$};
 \end{tikzpicture}
 \caption{Master theorem geometry: per-level cost $a^{i}f(n/b^{i})$ across tree levels. The dominant contribution determines the case.}
