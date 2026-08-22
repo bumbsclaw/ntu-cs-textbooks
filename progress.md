@@ -11,7 +11,7 @@
 |-------|--------|-------|
 | 0 - Curriculum deep research and outline | DONE | outline committed 44c9533; verified 135 AU (17+16+47+35+20) |
 | 0a - Adversarial review of outline | DONE (FAIL→FIXED) | 2026-08-23 01:05 SGT — verdict FAIL BLOCKING (SC2000 title, Core double-count, College Core 27→16 bucket, MPE 35/36 invariant). Review: docs/curriculum-outline-review.md. Trivial fixes patched in outline (SC2000→Prob&Stats, SC1003 deduped from Core, HW0288/SC2203/SC2008 prereq nuances, MPE Highest Distinction, bucket footnotes). Non-blocking TODOs (SC4023 verification, graph detail) logged in review §Recommended Fixes. |
-| 1 - Exemplar fleet (SC2001) | IN_PROGRESS | fleet deleg_bd18a029 dispatched 01:12 SGT on muse-spark-1.2-contribution — 4 writers (ch1-2, ch3-4, ch5-6, ch7-8) + adversarial reviewer; target: modules/SC2001/chapters/*.tex + REVIEW.md |
+| 1 - Exemplar fleet (SC2001) | IN_PROGRESS | fleet deleg_bd18a029 partial 01:15 SGT — ch1-foundations DONE (685b806); ch2-ch8 hit opencode-go 500/503 transient (max_tokens~3000 + retry per memory). Retry fleet deleg_e5f2 queued 01:16 SGT chunked (1 chapter per subagent, max_tokens 3000) on muse-spark-1.2-contribution |
 | 2 - Batch expansion (3 cores) | PENDING | SC1007, SC2005, SC2006 etc |
 | 3 - Final QA fleet | PENDING | |
 | 4 - LaTeX PDF render | PENDING | latexmk + push |
@@ -19,7 +19,7 @@
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
 |------|-------|----|------|---------|-------|-------------|----|-----|
-| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (adversarial review ab1d8cd) | IN_PROGRESS (writers) | pending | pending | pending |
+| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (ab1d8cd) | PARTIAL ch1 DONE (685b806), ch2-ch8 retrying | pending | pending | pending |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
