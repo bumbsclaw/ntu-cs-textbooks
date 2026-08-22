@@ -24,9 +24,17 @@ After this chapter you will be able to:
 \label{sec:bfs-dfs}
 
 Let $G=(V,E)$ be unweighted for traversal; weights return in \S\ref{sec:shortest}.
-We assume adjacency-list representation; adjacency matrix would cost $\Theta(n^2)$ per scan.
+\paragraph{How to store a graph?} Think of friends: a \emph{matrix} is a full $n\times n$ attendance sheet (1 if $i$ knows $j$) --- $\Theta(n^2)$ even for a sparse class; a \emph{list} stores only who each person actually knows. We use adjacency lists: for each $v$ keep its neighbour list; scanning all edges costs $\Theta(n+m)$, not $\Theta(n^2)$.
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\node[circle,draw,thick,fill=blue!14,minimum size=7mm] (1) at (0,1.2) {1}; \node[circle,draw,thick,fill=green!14,minimum size=7mm] (2) at (1.8,1.2) {2}; \node[circle,draw,thick,fill=orange!14,minimum size=7mm] (3) at (0,0) {3}; \node[circle,draw,thick,fill=violet!14,minimum size=7mm] (4) at (1.8,0) {4};
+\draw[thick,->] (1)--(2); \draw[thick,->] (1)--(3); \draw[thick,->] (2)--(4);
+\node[draw,rounded corners,fill=gray!6,font=\tiny,align=left] at (5.2,1.0) {list: $1\!\to\![2,3]$\\ $2\!\to\![4]$\\ $3\!\to\![]$\\ $4\!\to\![]$};
+\node[draw,fill=gray!6,font=\tiny] at (5.2,0.0) {$\begin{smallmatrix}0&1&1&0\\0&0&0&1\\0&0&0&0\\0&0&0&0\end{smallmatrix}$ matrix};
+\node[font=\tiny,gray] at (2.6,-0.85) {Left: sparse graph. Right: list stores 3 entries vs 16 in matrix.};
+\end{tikzpicture}\caption{Adjacency lists vs matrix --- lists pay for edges present, matrices pay for all pairs.}\label{fig:adj-storage}\end{figure}
 
 \subsection{BFS: Queue and Layering}
+\paragraph{Queue = line, Stack = pile.} A \emph{queue} is a supermarket line: first in, first out (FIFO) --- you leave in the order you arrived. A \emph{stack} is a pile of plates: last in, first out (LIFO) --- you take the top plate. BFS uses a line (fair: all distance-1 vertices before distance-2); DFS uses a pile (commit deep, backtrack). Same graph, swapped container, different order.
 \textsc{BFS}$(G,s)$ explores in waves of increasing distance from source $s$.
 It uses a FIFO \emph{queue} $Q$: $s$ is enqueued, then repeatedly dequeued, and each undiscovered neighbour is enqueued.
 
@@ -40,6 +48,12 @@ It uses a FIFO \emph{queue} $Q$: $s$ is enqueued, then repeatedly dequeued, and 
 \ \ \ \ \ \ \ \ \ dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
 \end{quote}
 
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\draw[blue!30,thick] (0,0) circle (0.55); \draw[green!40,thick] (0,0) circle (1.05); \draw[orange!50,thick] (0,0) circle (1.55);
+\node[circle,draw,thick,fill=blue!16,minimum size=5mm] at (0,0) {$s$}; \node[font=\tiny,fill=white] at (0.75,0.25) {wave 0};
+\node[font=\tiny,fill=white] at (1.30,0.35) {wave 1}; \node[font=\tiny,fill=white] at (1.85,0.45) {wave 2};
+\node[font=\tiny,gray,align=center] at (0,-1.95) {Pond ripple: BFS visits all of wave~$d$ before wave~$d{+}1$. FIFO queue holds at most two adjacent waves.};
+\end{tikzpicture}\caption{Wave-front view of BFS --- distance layers expand like ripples; the queue is the line of people in ripple order.}\label{fig:bfs-wave}\end{figure}
 The \emph{layering} property: $Q$ always contains vertices of at most two consecutive distances $d,d+1$ from $s$, all $d$ before $d+1$. Hence dist$[v]$ is the shortest-path distance $\delta(s,v)$ in an unweighted graph (proved by induction on $d$). Parent pointers form a \emph{BFS tree} rooted at $s$; every non-tree edge connects vertices whose layers differ by at most one.
 
 \begin{figure}[h]\centering
@@ -78,7 +92,15 @@ Analysis: each vertex enters $Q$ once and each adjacency list is scanned once, g
 \ \ \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
 \end{quote}
 
-With discovery/finish times $d[u],f[u]$, DFS classifies edges (undirected: tree/back; directed: tree/back/forward/cross) and yields the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or disjoint. This structure powers two classic applications: cycle detection (back edge $\Leftrightarrow$ cycle in directed graph) and topological sort (order vertices by decreasing $f[u]$ for a DAG). Kosaraju's two-pass DFS finds strongly connected components. Like BFS, DFS scans each vertex and edge once: $O(n+m)$ time, $O(n)$ stack/colour array.
+{\sloppy
+With discovery/finish times $d[u]$, $f[u]$, DFS classifies edges
+(undirected: tree/back; directed: tree/back/forward/cross) and yields
+the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or
+disjoint. This powers two classic applications: cycle detection (back
+edge $\Leftrightarrow$ cycle in directed graph) and topological sort
+(order vertices by decreasing $f[u]$ for a DAG). Kosaraju's two-pass DFS
+finds strongly connected components. Like BFS, DFS scans each vertex and
+edge once: $O(n+m)$ time, $O(n)$ stack/colour array.\par}
 
 \textit{Queue vs.\ stack intuition:} BFS's queue enforces breadth (fairness across branches); DFS's stack enforces depth (commitment to one branch). Swapping the container is the only algorithmic difference, yet the resulting visit orders and edge classifications diverge sharply.
 
@@ -100,8 +122,22 @@ Edge weights $w:E\to\mathbb{R}$. Let $\delta(s,v)$ denote the true shortest-path
 \ \ \ \ \ \ \ \ \ dist$[v]\gets$dist$[u]+w(u,v)$; \textsc{DecreaseKey}$(Q,v)$
 \end{quote}
 
+\paragraph{Heap = priority line.} A queue serves in arrival order; a \emph{heap} serves the smallest key first, like a hospital triage line where the most urgent patient jumps ahead. Dijkstra's $Q$ is triaged by dist: \textsc{ExtractMin} takes the currently closest unsettled vertex, \textsc{DecreaseKey} moves a vertex forward when a shorter route is found.
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\node[draw,rounded corners,fill=blue!10,minimum width=3.2cm,minimum height=0.65cm] (q) at (0,0.5) {queue: [\,a(4),\,b(2),\,c(7)\,]$_{\rm FIFO}\to a$ first};
+\node[draw,rounded corners,fill=orange!14,minimum width=3.2cm,minimum height=0.65cm] (h) at (0,-0.6) {heap: [\,b(2),\,a(4),\,c(7)\,]$_{\rm min}\to b$ first};
+\draw[->,thick,blue!60!black] (q.east) to[bend left=12] node[font=\tiny,above] {same items} (h.east);
+\node[font=\tiny,gray,align=center] at (0,-1.45) {Same three vertices, different next-out: queue $\to$ arrival order, heap $\to$ smallest dist.};
+\end{tikzpicture}\caption{Queue vs heap: Dijkstra needs a priority line, not a fair line.}\label{fig:queue-vs-heap}\end{figure}
 Heap implementation: binary heap gives $O((n+m)\log n)$; Fibonacci heap improves to $O(m+n\log n)$. Early exit when a target $t$ is extracted --- its distance is already final. Relaxation is the only place dist decreases, mirroring the BFS layering but weighted.
 
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\fill[blue!12,rounded corners=4pt] (-2.6,-1.1) rectangle (0.1,1.1); \fill[orange!12,rounded corners=4pt] (0.4,-1.1) rectangle (2.6,1.1);
+\node[circle,draw,thick,fill=blue!22,minimum size=6mm] (s) at (-1.6,0.5) {$s$}; \node[circle,draw,thick,fill=blue!18,minimum size=6mm] (a) at (-0.7,-0.4) {$a$}; \node[circle,draw,thick,fill=green!18,minimum size=6mm] (b) at (1.1,0.5) {$b$}; \node[circle,draw,thick,fill=gray!14,minimum size=6mm] (t) at (1.9,-0.5) {$t$};
+\draw[thick,->,blue!60!black] (s)--(a) node[midway,above,font=\tiny] {2}; \draw[thick,->,green!55!black] (s)--(b) node[midway,above,font=\tiny] {4}; \draw[thick,->,orange!60!black,dashed] (a)--(b) node[midway,below,font=\tiny] {1}; \draw[thick,->] (b)--(t) node[midway,right,font=\tiny] {3};
+\node[font=\scriptsize,blue!60!black] at (-1.3,1.45) {$S$ settled}; \node[font=\scriptsize,orange!60!black] at (1.5,1.45) {$V\!\setminus\! S$ frontier}; \draw[thick,red!60!black,->] (0.1,0) -- (0.4,0) node[midway,above,font=\tiny] {cut};
+\node[font=\tiny,gray,align=center] at (0,-1.45) {Settled $S$ (blue) = proven shortest; frontier edges cross cut; $\min_{y\notin S}$dist$[y]$ is safe --- any detour stays $\ge0$.};
+\end{tikzpicture}\caption{Dijkstra frontier: $S$ is the safe zone; the closest frontier vertex cannot be improved via a non-negative detour.}\label{fig:dijkstra-frontier}\end{figure}
 \textit{Correctness --- invariant:} At the start of each iteration with $S$ already settled,
 \begin{center}
 (I)\quad $\forall\,x\in S:\ \text{dist}[x]=\delta(s,x)$ \quad and \quad $\forall\,y\notin S:\ \text{dist}[y]=\min_{P:\,s\to y\text{ with inner vertices in }S} w(P)$.
@@ -143,6 +179,14 @@ Text $T[1\ldots n]$, pattern $P[1\ldots m]$, alphabet $\Sigma$ ($n\ge m$). Repor
 Slide $P$ over each alignment $s=0\ldots n-m$ and compare $P[1\ldots m]$ against $T[s+1\ldots s+m]$ character by character, breaking on first mismatch. Worst case $\Theta((n-m+1)m)$ --- e.g., $T=a^n$, $P=a^{m-1}b$ forces $m$ comparisons at each of $n-m+1$ positions. No preprocessing, $O(1)$ extra space. The next two algorithms avoid re-scanning characters already matched.
 
 \subsection{KMP: Prefix Function and Automaton}
+\paragraph{Border = overlap.} For $P=\mathtt{abab}$, prefix $\mathtt{ab}$ = suffix $\mathtt{ab}$ --- it \emph{borders} the string. On mismatch you slide the pattern so the longest border that still matches the text suffix stays aligned; you do not restart at $0$.
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\draw[thick,fill=blue!10] (0,0) rectangle (4.8,0.7); \node at (2.4,0.35) {$\mathtt{a\,b\,a\,b}$ \; $P[1\ldots4]$};
+\draw[thick,blue!60!black,decorate,decoration={brace,amplitude=3pt}] (0,0.75) -- (2.4,0.75) node[midway,above=3pt,font=\tiny] {prefix $\mathtt{ab}$};
+\draw[thick,orange!70!black,decorate,decoration={brace,amplitude=3pt,mirror}] (2.4,-0.05) -- (4.8,-0.05) node[midway,below=3pt,font=\tiny] {suffix $\mathtt{ab}$ = same};
+\draw[->,thick,red!60!black,dashed] (1.2,0.95) to[bend left=10] (3.6,0.95) node[midway,above,font=\tiny] {border length 2};
+\node[font=\tiny,gray,align=center] at (2.4,-0.65) {Border = proper prefix that is also suffix; $\pi[4]=2$. Shortest fallback that preserves a partial match.};
+\end{tikzpicture}\caption{Border picture for $\mathtt{abab}$ --- the overlap that lets KMP fall back instead of restarting.}\label{fig:kmp-border}\end{figure}
 Let $\pi[q]=\max\{k<q: P[1\ldots k]\text{ is suffix of }P[1\ldots q]\}$ for $1\le q\le m$ ($\pi[1]=0$); equivalently $\pi[q]$ is the longest proper border of the prefix $P[1\ldots q]$. Computed in $O(m)$ by amortised fallback:
 
 \begin{quote}\ttfamily\scriptsize
@@ -180,6 +224,7 @@ The automaton view: state $q$ means ``first $q$ characters of $P$ just matched.'
 \end{figure}
 
 \subsection{Rabin--Karp: Rolling Hash}
+\paragraph{Clock arithmetic.} Working $\bmod\,q$ is like a clock with $q$ hours: after $q-1$ you wrap to $0$. Adding or multiplying then taking $\bmod\,q$ discards full laps but preserves remainders; collisions are two different strings landing on the same hour mark. A large prime $q$ makes accidental collisions rare.
 Treat strings as base-$b$ numbers modulo a prime $q$. Let $h(s)=T[s+1\ldots s+m]\bmod q$ and $p=P\bmod q$. With precomputed $b^{m-1}\bmod q$,
 \[
 h(s+1)=\bigl(b\cdot(h(s)-T[s+1]\cdot b^{m-1})+T[s+m+1]\bigr)\bmod q,

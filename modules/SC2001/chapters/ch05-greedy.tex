@@ -2,11 +2,9 @@
 % No \documentclass — this file is \input/\include'd by main.tex.
 \chapter{Greedy Algorithms}
 \label{ch:greedy}
-
 \begin{quote}
 \emph{``Make the best local choice and never look back.''} --- The greedy motto. Sometimes it yields optimal solutions; often it does not. The craft lies in knowing which and proving it.
 \end{quote}
-
 \noindent\textbf{Prerequisites:} Asymptotic notation (Ch.~2), exchange arguments and induction (Ch.~1), priority queues and Union-Find (Ch.~3), basic graph terminology (Ch.~6 preview).
 
 \section*{Learning Outcomes}
@@ -20,17 +18,45 @@ After this chapter you will be able to:
     \item exhibit inputs where the greedy heuristic fails (coin change).
 \end{enumerate}
 
-% ============================================================
 \section{The Greedy Paradigm and the Exchange Argument}
 \label{sec:greedy-paradigm}
-
 A \emph{greedy} algorithm builds a solution incrementally, choosing at each step the locally best option according to some criterion, never reconsidering earlier choices.
 
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.82]
+  \draw[->,thick] (0,0) -- (9,0) node[right,font=\small] {time};
+  \foreach \x in {0,...,8} \draw (\x,0.08) -- (\x,-0.08) node[below,font=\tiny] {\x};
+  \draw[fill=blue!20,draw=blue!60!black,thick,rounded corners] (0.2,0.4) rectangle (2.8,0.85) node[midway,font=\scriptsize] {[0,3)};
+  \draw[fill=orange!20,draw=orange!60!black,thick,rounded corners] (1.0,1.0) rectangle (4.2,1.45) node[midway,font=\scriptsize] {[1,5)};
+  \draw[fill=green!20,draw=green!60!black,thick,rounded corners] (3.0,0.4) rectangle (5.5,0.85) node[midway,font=\scriptsize] {[3,6)};
+  \draw[fill=violet!15,draw=violet!60!black,thick,rounded corners] (5.0,1.0) rectangle (7.0,1.45) node[midway,font=\scriptsize] {[5,7)};
+  \draw[fill=red!12,draw=red!60!black,thick,rounded corners] (6.5,0.4) rectangle (8.5,0.85) node[midway,font=\scriptsize] {[6,9)};
+\end{tikzpicture}
+\caption{Intervals on a timeline. Earliest finish (blue) leaves the most room --- scan left-to-right, no backtracking.}
+\label{fig:timeline-intervals}
+\end{figure}
 \begin{definition}[Greedy choice \& optimal substructure]
 An optimisation problem has the \emph{greedy-choice property} if a globally optimal solution can be assembled by making a locally optimal first choice and then solving the remaining subproblem optimally. It has \emph{optimal substructure} if an optimal solution contains optimal solutions to subproblems.
 \end{definition}
 
 Greedy is not universally correct; it requires both properties. Proofs of correctness almost always use an \emph{exchange argument}:
+
+\begin{center}
+\begin{tikzpicture}[scale=0.80, every node/.style={font=\scriptsize}]
+  \node[anchor=east,font=\scriptsize\bfseries] at (-0.2,0.75) {$G$:};
+  \draw[fill=blue!18,draw=blue!60!black,thick] (0.3,0.55) rectangle (1.5,0.95) node[midway] {$g_1$};
+  \draw[fill=blue!18,draw=blue!60!black,thick] (1.7,0.55) rectangle (2.9,0.95) node[midway] {$g_2$};
+  \draw[fill=orange!25,draw=orange!70!black,thick] (3.1,0.55) rectangle (4.3,0.95) node[midway] {$g_r$};
+  \node[anchor=east,font=\scriptsize\bfseries] at (-0.2,0.05) {$O$:};
+  \draw[fill=blue!18,draw=blue!60!black,thick] (0.3,-0.15) rectangle (1.5,0.25) node[midway] {$g_1$};
+  \draw[fill=blue!18,draw=blue!60!black,thick] (1.7,-0.15) rectangle (2.9,0.25) node[midway] {$g_2$};
+  \draw[fill=red!18,draw=red!60!black,thick] (3.1,-0.15) rectangle (4.3,0.25) node[midway] {$o_r$};
+  \draw[<->,thick,red!60!black] (3.7,0.55) -- (3.7,0.25);
+  \draw[dashed,gray] (3.0,-0.25) rectangle (4.4,1.05);
+  \node[font=\tiny,align=center] at (6.0,0.40) {first divergence $r$\\swap $o_r\!\to\!g_r$};
+\end{tikzpicture}
+\end{center}
+Make $O$ look more like $G$ without hurting it --- the core of every exchange proof.
 
 \begin{center}
 \fbox{\parbox{0.92\linewidth}{%
@@ -40,7 +66,6 @@ Greedy is not universally correct; it requires both properties. Proofs of correc
 
 Two recurring lemmas support the exchange: (i) \emph{greedy stays ahead} (after $k$ steps the greedy partial solution is at least as good as any competitor's), and (ii) \emph{cut/exchange} (swapping in the greedy element does not hurt feasibility or cost).
 
-% ============================================================
 \section{Interval Scheduling: Earliest Finish Time}
 \label{sec:interval-scheduling}
 
@@ -64,13 +89,15 @@ Let $G=\langle g_1,\dots,g_k\rangle$ be the greedy set in order of finish time a
 
 The argument shows \emph{greedy stays ahead}: $f_{g_i}\le f_{o_i}$ for all $i\le\min(k,m)$. This invariant is the core of many greedy proofs---compare the $k$th greedy choice directly to the $k$th choice of any competitor.
 
+{\sloppy
 \begin{example}[Small instance]
-Intervals $[1,4),[3,5),[0,6),[5,7),[8,9)$ sorted by finish time are $[1,4),[3,5),[0,6),[5,7),[8,9)$. Greedy picks $[1,4),[5,7),[8,9)$ (size~3), which is optimal. Replacing $[1,4)$ by $[0,6)$ cannot improve the count.
-\end{example}
+Intervals $[1,4),[3,5),[0,6),[5,7),[8,9)$ sorted by finish are
+$[1,4),[3,5),$ $[0,6),[5,7),[8,9)$. Greedy picks $[1,4),[5,7),[8,9)$
+(size~3), optimal; $[1,4)\!\to\![0,6)$ cannot improve.
+\end{example}\par}
 
 Running time is $O(n\log n)$ for sorting plus $O(n)$ scanning. Variants (earliest start time, shortest interval, fewest conflicts) all fail---counterexamples are left as exercises.
 
-% ============================================================
 \section{Huffman Coding}
 \label{sec:huffman}
 
@@ -103,6 +130,24 @@ Huffman(C, freq):
 \begin{lemma}[Sibling property]
 There exists an optimal prefix tree in which the two least-frequent characters are siblings at maximum depth.
 \end{lemma}
+\paragraph{Numeric swap demo (before $\Delta$).} Rare $x$ (freq~12, depth~2) vs.\ frequent $a$ (freq~14, depth~3):
+\begin{center}\small
+\begin{tabular}{c|cc|c} & freq & depth & $freq\!\cdot\!depth$\\\hline $x$&12&2&24\\ $a$&14&3&42\\\hline\multicolumn{3}{c|}{before}&66\end{tabular}
+$\to$
+\begin{tabular}{c|cc|c} & freq & depth & $freq\!\cdot\!depth$\\\hline $x$&12&3&36\\ $a$&14&2&28\\\hline\multicolumn{3}{c|}{after}&64\end{tabular}
+\end{center}
+\begin{center}
+\begin{tikzpicture}[scale=0.70, every node/.style={circle,draw,thick,inner sep=1.5pt,font=\scriptsize}, level distance=10mm, sibling distance=11mm, edge from parent/.style={draw,-stealth,thick}]
+  \node[fill=orange!15] at (0,0) {root} child { node[fill=blue!15] {$x$:12} } child { node[fill=violet!10] {$\cdot$} child { node[fill=red!15] {$a$:14} } child { node[fill=green!10] {$\cdot$} } };
+  \node[draw=none,font=\tiny] at (0,-2.5) {before};
+\end{tikzpicture}\hspace{4mm}
+\begin{tikzpicture}[scale=0.70, every node/.style={circle,draw,thick,inner sep=1.5pt,font=\scriptsize}, level distance=10mm, sibling distance=11mm, edge from parent/.style={draw,-stealth,thick}]
+  \node[fill=orange!15] at (0,0) {root} child { node[fill=red!15] {$a$:14} } child { node[fill=violet!10] {$\cdot$} child { node[fill=blue!15] {$x$:12} } child { node[fill=green!10] {$\cdot$} } };
+  \node[draw=none,font=\tiny] at (0,-2.5) {after: saving $2$};
+\end{tikzpicture}
+\end{center}
+Saving $=(14-12)(3-2)=2\ge0$; in general $\Delta=(freq(a)-freq(x))(d(a)-d(x))$.
+
 \begin{proof}[Exchange]
 Take an optimal tree $T$ and let $x,y$ be the two least-frequent characters. Let $a,b$ be siblings at maximum depth in $T$. If $\{x,y\}=\{a,b\}$ we are done. Otherwise swap $x$ with $a$ (and $y$ with $b$ if needed). Since $freq(x)\le freq(a)$ and $d(x)\le d(a)$ cannot both be reversed, each swap does not increase $B(T)$: $\Delta = (freq(a)-freq(x))(d(a)-d(x))\ge 0$ cost is not raised. The resulting tree is optimal with $x,y$ as deepest siblings.
 \end{proof}
@@ -116,14 +161,32 @@ Induction on $|C|=n$. Base $n=2$ trivial. For $n>1$, let $x,y$ be the two smalle
 Complexity is $O(n\log n)$ with a heap. Decoding is unambiguous precisely because the code is prefix-free---the tree path is followed until a leaf is reached. Optimal merging and the structure of prefix codes both hinge on the same exchange idea.
 
 \begin{remark}
-Kraft's inequality $\sum_c 2^{-d_T(c)}\le 1$ characterises feasible prefix-code lengths. Huffman finds lengths satisfying it with minimum $\sum freq(c)d_T(c)$, i.e.\ minimum redundancy above entropy $H=-\sum p_c\log p_c$.
+Kraft's inequality $\sum_c 2^{-d_T(c)}\le 1$ characterises feasible prefix-code lengths. Huffman achieves minimum $\sum freq(c)d_T(c)$, i.e.\ minimum redundancy above entropy $H=-\sum p_c\log p_c$.
 \end{remark}
 
-% ============================================================
 \section{Minimum Spanning Trees: The Cut Property}
 \label{sec:mst}
 
 Let $G=(V,E)$ be connected, undirected, with distinct edge weights $w(e)$ (ties broken arbitrarily). A \emph{spanning tree} minimises total weight among all spanning trees if it is an MST.
+
+Picture a cut first: partition $V$ into $S$ and $V\setminus S$ (dashed bubble). Which crossing edge must every MST take? The lightest one.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.78, every node/.style={circle,draw,thick,inner sep=2pt,font=\small}]
+  \node[fill=blue!12] (a) at (0,1.5) {$a$}; \node[fill=blue!12] (b) at (2,1.5) {$b$};
+  \node[fill=green!12] (c) at (0,0) {$c$}; \node[fill=green!12] (d) at (2,0) {$d$};
+  \draw[dashed,rounded corners,fill=blue!5] (-0.5,-0.5) rectangle (1,2);
+  \node[draw=none,font=\footnotesize] at (0.5,2.2) {cut $S=\{a,c\}$};
+  \draw (a) -- node[above,font=\footnotesize] {1} (b);
+  \draw[ultra thick,blue] (a) -- node[left,font=\footnotesize] {2} (c);
+  \draw (c) -- node[below,font=\footnotesize] {4} (d);
+  \draw (b) -- node[right,font=\footnotesize] {3} (d);
+  \draw[red,very thick] (a) -- node[above right,font=\footnotesize] {5} (d);
+  \draw[red] (c) -- node[below right,font=\footnotesize] {6} (b);
+\end{tikzpicture}
+\caption{Cut $(S,V\setminus S)$, $S=\{a,c\}$. Crossing edges weigh $1,3,5,6$; the lightest (weight~1) must be in every MST (cut property below).}
+\label{fig:mst-cut}
+\end{figure}
 
 \begin{definition}[Cut property]
 For any cut $(S,V\setminus S)$, the minimum-weight edge crossing the cut belongs to every MST.
@@ -140,14 +203,14 @@ Kruskal(V,E,w):
   sort E by w ascending; make Union-Find on V
   T = empty
   for e=(u,v) in sorted E:
-    if Find(u) != Find(v): T.add(e); Union(u,v)
+    if Find(u) != Find(v): T.add(e); Union(u,v)  % Find=already connected? Union=merge
   return T
 \end{lstlisting}
 Each edge added by Kruskal is the lightest crossing the cut $(C,V\setminus C)$ where $C$ is its component before the union.
 
 \begin{lstlisting}[language=Python]
 Prim(V,E,w, r):
-  S={r}; T=empty; PQ = edges leaving S keyed by w
+  S={r}; T=empty; PQ = edges leaving S keyed by w  % key = cheapest edge leaving $S$
   while S != V:
     e=(u,v)=PQ.extractMin() with u in S, v not in S
     T.add(e); S.add(v); insert edges from v to V\S into PQ
@@ -155,26 +218,8 @@ Prim(V,E,w, r):
 \end{lstlisting}
 Each edge added by Prim is exactly the minimum edge of cut $(S,V\setminus S)$.
 
-\begin{figure}[h]\centering
-\begin{tikzpicture}[scale=0.78, every node/.style={circle,draw,thick,inner sep=2pt,font=\small}]
-  \node[fill=blue!12] (a) at (0,1.5) {$a$}; \node[fill=blue!12] (b) at (2,1.5) {$b$};
-  \node[fill=green!12] (c) at (0,0) {$c$}; \node[fill=green!12] (d) at (2,0) {$d$};
-  \draw[dashed,rounded corners,fill=blue!5] (-0.5,-0.5) rectangle (1,2);
-  \node[draw=none,font=\footnotesize] at (0.5,2.2) {cut $S=\{a,c\}$};
-  \draw (a) -- node[above,font=\footnotesize] {1} (b);
-  \draw[ultra thick,blue] (a) -- node[left,font=\footnotesize] {2} (c);
-  \draw (c) -- node[below,font=\footnotesize] {4} (d);
-  \draw (b) -- node[right,font=\footnotesize] {3} (d);
-  \draw[red,very thick] (a) -- node[above right,font=\footnotesize] {5} (d);
-  \draw[red] (c) -- node[below right,font=\footnotesize] {6} (b);
-\end{tikzpicture}
-\caption{Cut $(S,V\setminus S)$ with $S=\{a,c\}$. The lightest crossing edge (weight~1, $a$--$b$) must be in every MST; any MST containing a heavier crossing edge can be improved by exchange.}
-\label{fig:mst-cut}
-\end{figure}
-
 Correctness of both follows immediately from the cut property: every edge they add is forced into every MST, so the final tree is contained in all MSTs and hence is one itself. Kruskal runs in $O(|E|\log|E|)$ (sorting dominates); Prim with a binary heap is $O(|E|\log|V|)$, $O(|E|+|V|\log|V|)$ with a Fibonacci heap. The cycle property (heaviest edge on any cycle is never in any MST) is dual and also proved by exchange.
 
-% ============================================================
 \section{When Greedy Fails: Coin Change}
 \label{sec:coin-change}
 
@@ -193,28 +238,21 @@ choice & -- & 1 & 1 & 3 & 4 & 1+4 & 3+3
 \end{tabular}
 \end{center}
 Greedy is myopic: taking $4$ at $x=6$ forces two $1$s, while $dp$ considers all predecessors $x-d_i$.
-
 More generally, no fixed greedy order works for all $D$. The problem is solved optimally by dynamic programming in $O(kA)$:
 \[ dp[0]=0,\quad dp[x]=\min_{d_i\le x}\{1+dp[x-d_i]\}. \]
 The failure illustrates the missing greedy-choice property: a locally optimal coin can block a globally better combination.
 
-% ============================================================
 \section{Exercises}
 \label{sec:greedy-exercises}
 
 \begin{enumerate}[label=E\arabic*.]
     \item \textbf{Interval variants that fail.} Give counterexamples showing that (a) earliest start time, (b) shortest interval first, and (c) fewest conflicts first are \emph{not} optimal for interval scheduling.
-
     \item \textbf{Huffman trace.} For frequencies $\{5,9,12,13,16,45\}$, simulate Huffman step-by-step, draw the final tree, compute $B(T)$, and verify the average code length against the entropy lower bound.
-
     \item \textbf{Coin-change classification.} Prove that greedy is optimal for $D=\{1,5,10,25\}$ (US coins without the half-dollar). Then find the smallest $A$ where greedy fails for $D=\{1,3,4\}$ and prove $dp$ above is correct.
-
     \item \textbf{Cut/cycle duality.} Prove the \emph{cycle property}: if $e$ is the maximum-weight edge on some cycle, no MST contains $e$. Deduce that the MST is unique when all edge weights are distinct.
-
     \item \textbf{Scheduling with deadlines.} Each job has duration $t_i$ and deadline $d_i$. The greedy order by earliest deadline minimises maximum lateness $L_{\max}=\max_i(f_i-d_i)$ where $f_i$ is completion time. Prove optimality via an exchange argument (adjacent swap).
 \end{enumerate}
 
-% ============================================================
 \section*{Chapter Notes}
-Huffman (1952) and Kruskal (1956)/Prim (1957) are textbook examples of matroid optimisation; interval scheduling is a special case of weighted interval scheduling (Ch.~7, DP). The U.S.\ coin system is canonical---Pearson (2005) gives a polynomial-time test for canonicity. For the general theory of when greedy succeeds, see matroids and greedoids.
+Huffman (1952), Kruskal/Prim (1956--57): matroid optimisation; interval scheduling $\to$ weighted (Ch.\,7 DP). U.S.\ coins canonical---Pearson (2005). See matroids/greedoids.
 

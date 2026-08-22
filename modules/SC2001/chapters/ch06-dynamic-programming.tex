@@ -67,6 +67,20 @@ Given $X = x_1\ldots x_m$ and $Y = y_1\ldots y_n$, a \emph{subsequence} deletes 
 
 \subsection{Optimal Substructure and Recurrence}
 
+Picture a grid with $X$ down the rows and $Y$ across the columns. The \emph{longest zigzag} from $(0,0)$ to $(m,n)$---step $\diagup$ on a match, otherwise $\uparrow$ or $\leftarrow$---collects the most matching characters; its length \emph{is} the LCS.
+
+\begin{center}
+\begin{tikzpicture}[scale=0.85,every node/.style={font=\scriptsize}]
+\tikzset{cell/.style={draw,minimum size=7mm,anchor=center}}
+\foreach \x in {0,...,3}\foreach \y in {0,...,3}\node[cell,fill=gray!5] at (\x*0.8,-\y*0.8) {};
+\node[font=\tiny] at (1.2,0.45) {$Y_j$}; \node[font=\tiny] at (-0.65,-1.2) {$X_i$};
+\draw[->,blue,thick] (0.8,-0.8) -- (1.6,-1.6) node[midway,above,sloped,font=\tiny] {$\diagup$ if $x_i{=}y_j$};
+\draw[->,orange,thick] (1.6,-0.8) -- (1.6,-1.6) node[midway,right,font=\tiny] {$\uparrow$};
+\draw[->,violet,thick] (0.8,-1.6) -- (1.6,-1.6) node[midway,below,font=\tiny] {$\leftarrow$};
+\node[font=\tiny,below] at (1.2,-3.0) {empty $c$ table: each cell depends on 3 neighbours; longest zigzag = LCS};
+\end{tikzpicture}
+\end{center}
+
 Let $c[i][j]$ be the LCS length of $X_i = x_1\ldots x_i$ and $Y_j = y_1\ldots y_j$, with $c[0][j]=c[i][0]=0$.
 
 \[
@@ -154,6 +168,12 @@ Example: $W=5$, items $(w,v)$: $1:(2,3), 2:(3,4), 3:(4,5), 4:(5,6)$.
 \end{tikzpicture}
 \end{center}
 
+\begin{center}\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+\tikzset{c/.style={draw,minimum width=6mm,minimum height=5mm,anchor=center}}
+\foreach \i in {0,...,5}\node[c,fill=blue!8] at (\i*0.75,0) {\i};
+\draw[->,red,thick] (3.8,0.42) -- (0.3,0.42) node[midway,above,font=\tiny] {backwards: $dp[w]\!\leftarrow\!dp[w{-}w_i]$ (old row only)};
+\node[font=\tiny,below] at (1.9,-0.35) {1-D $dp[0..W]$ --- forward loop reuses item (unbounded); backward prevents reuse};
+\end{tikzpicture}\end{center}
 Optimum $K[4][5]=7$ (items $1{+}2$, weight $5$). Backtrack: if $K[i][w]\neq K[i-1][w]$, item $i$ was taken; move to $w-w_i$, else move to $i-1$. Space can be reduced to $O(W)$ with a 1-D array iterated backwards, but backtracking then needs the full table or stored decisions.
 
 %------------------------------------------------------------------
@@ -162,6 +182,10 @@ Optimum $K[4][5]=7$ (items $1{+}2$, weight $5$). Backtrack: if $K[i][w]\neq K[i-
 
 Given matrices $A_1\ldots A_n$ where $A_i$ is $p_{i-1}\times p_i$, the cost of multiplying $A_i\cdots A_j$ depends on parenthesisation. Multiplying $p\times q$ by $q\times r$ costs $pqr$ scalar multiplications.
 
+\begin{center}\begin{tikzpicture}[every node/.style={font=\scriptsize},level distance=10mm,sibling distance=18mm,box/.style={draw,rounded corners,minimum width=10mm,minimum height=5mm,align=center}]
+\node[box,fill=orange!15] {$A_1\!\cdots\! A_n$} child{node[box,fill=blue!10] {$A_i\!\cdots\! A_k$}} child{node[box,fill=green!15] {$A_{k+1}\!\cdots\! A_j$}};
+\node[font=\tiny,below] at (0,-1.55) {every parenthesisation splits at some $k$ --- pick cheapest $k$};
+\end{tikzpicture}\end{center}
 Let $m[i][j]$ be the minimum cost to compute $A_i\cdots A_j$, with $m[i][i]=0$:
 
 \[
@@ -200,7 +224,11 @@ taking $\infty$ if no $d_i\le x$ yields a finite predecessor. Equivalently, tabu
 
 This is unbounded knapsack: each coin may be reused, so the recurrence looks back at the same coin set (contrast 0/1 knapsack which moves to $i-1$). Time $O(kN)$, space $O(N)$. Reconstruct coins by storing $\mathit{choice}[x]$, the first coin used.
 
-Example: $d=(1,3,4)$, $N=6$. Then $\mathit{dp}$ is $0,1,2,1,1,2,2$ for $x=0\ldots 6$; e.g.\ $\mathit{dp}[6]=1+\min(\mathit{dp}[5],\mathit{dp}[3],\mathit{dp}[2])=1+1=2$ via $3+3$. Greedy (always take largest $d_i\le x$) fails here: it gives $4+1+1$ (3 coins).
+Example: $d=(1,3,4)$, $N=6$. Then $\mathit{dp}$ is $0,1,2,$ $1,1,2,2$
+for $x=0\ldots 6$; e.g.\ $\mathit{dp}[6]=1+\min(\mathit{dp}[5],%
+\mathit{dp}[3],\mathit{dp}[2])=1+1=2$ via $3+3$.
+Greedy (always take largest $d_i\le x$) fails
+here: it gives $4+1+1$ (3 coins).
 
 \begin{lstlisting}[language=Python]
 def coin_change(coins, N):
@@ -215,11 +243,9 @@ def coin_change(coins, N):
 \end{lstlisting}
 
 The same table answers counting variants: number of ways uses $\mathit{ways}[x]+= \mathit{ways}[x-d_i]$ with careful ordering to avoid permuting combinations.
-
 %------------------------------------------------------------------
 \section{Exercises}
 \label{sec:dp-exercises}
-
 \begin{enumerate}
     \item \textbf{LCS by hand.} Compute the full $c$ and $b$ tables for $X=\langle B,D,C,A\rangle$, $Y=\langle A,B,C,D\rangle$. List all distinct LCSs and trace each backtracking path.
 
@@ -229,5 +255,5 @@ The same table answers counting variants: number of ways uses $\mathit{ways}[x]+
 
     \item \textbf{Coin change variants.} With $d=(1,3,4)$ and $N=6$, (a) show the $\mathit{dp}$ table and the coins chosen, (b) give a counterexample where greedy fails for $d=(1,7,10)$, and (c) modify the DP to count the number of distinct combinations (order irrelevant) and compute it for $N=6$.
 
-    \item \textbf{Edit distance (DP design).} Define edit distance with operations insert, delete, replace (cost $1$). Derive the recurrence for $\mathit{ed}[i][j]$ on prefixes, state the table size and filling order, and adapt the algorithm to output an optimal edit sequence.
+    \item \textbf{Edit distance.} Define edit distance (insert, delete, replace cost $1$). Derive recurrence for $\mathit{ed}[i][j]$ on prefixes, state table size and filling order, and adapt to output an optimal edit sequence.
 \end{enumerate}

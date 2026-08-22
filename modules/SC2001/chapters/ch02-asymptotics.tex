@@ -24,40 +24,30 @@ After this chapter you will be able to:
 \label{sec:why-asymptotics}
 RAM time is $T(n)=\sum (\text{cost}_{i}\times\text{count}_{i}(n))$, an unwieldy exact formula. Constants depend on compiler and hardware; what survives across machines is \emph{rate of growth}. Asymptotic notation suppresses constants and lower-order terms and compares $T(n)$ to a clean reference $g(n)$ for large $n$ only.
 
-We consider functions $f,g:\mathbb{N}\to\mathbb{R}_{\ge 0}$ eventually non-negative. ``Large $n$'' is captured by $\exists n_{0}\,\forall n\ge n_{0}$.
+Two programs solve the same task: $A$ takes $f_{A}(n)=3n^{2}+5n$~steps, $B$ takes $f_{B}(n)=100n$~steps (constant factors from hardware). For small $n$, $B$ may be slower; for large $n$, shape wins and $B$ crushes $A$ regardless of the $100\times$ constant. ``Large $n$'' means $\exists n_{0}\,\forall n\ge n_{0}$.
+
+\begin{table}[h]\centering\small
+\begin{tabular}{r r r l}
+\toprule $n$ & $3n^{2}+5n$ & $100n$ & winner \\\midrule
+10 & 350 & 1\,000 & $A$ (350 $<$ 1\,000) \\
+100 & 30\,500 & 10\,000 & $B$ \\
+1\,000 & 3\,005\,000 & 100\,000 & $B$ by $30\times$ \\
+10\,000 & 300\,050\,000 & 1\,000\,000 & $B$ by $300\times$ \\\bottomrule
+\end{tabular}
+\caption{Shape overtakes constants: quadratic $3n^{2}+5n$ beats $100n$ only below the crossover $n_{0}\approx33$; after that the linear algorithm wins forever.}
+\label{tab:shape-wins}
+\end{table}
+
+We consider $f,g:\mathbb{N}\to\mathbb{R}_{\ge0}$ eventually non-negative; ``after $n_{0}$'' is the formal handle for ``for large $n$.''
 
 % ============================================================
 \section{The Five Notations}
 \label{sec:five-notations}
-
-\begin{definition}[$O$ --- asymptotic upper bound]
-$f(n)=O(g(n))$ iff $\exists c>0\,\exists n_{0}\in\mathbb{N}\,\forall n\ge n_{0}:\;0\le f(n)\le c\,g(n)$.
-\end{definition}
-
-\begin{definition}[$\Omega$ --- asymptotic lower bound]
-$f(n)=\Omega(g(n))$ iff $\exists c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c\,g(n)\le f(n)$.
-\end{definition}
-
-\begin{definition}[$\Theta$ --- tight bound]
-$f(n)=\Theta(g(n))$ iff $\exists c_{1},c_{2}>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c_{1}g(n)\le f(n)\le c_{2}g(n)$. Equivalently $f=O(g)$ and $f=\Omega(g)$.
-\end{definition}
-
-\begin{definition}[$o$ --- strict upper bound]
-$f(n)=o(g(n))$ iff $\forall c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le f(n)<c\,g(n)$. That is, $f/g\to0$.
-\end{definition}
-
-\begin{definition}[$\omega$ --- strict lower bound]
-$f(n)=\omega(g(n))$ iff $\forall c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c\,g(n)<f(n)$. That is, $f/g\to\infty$.
-\end{definition}
-
-\begin{remark}[Quantifier order matters]
-$O$ has $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$; $o$ has $\forall c\,\exists n_{0}\,\forall n\ge n_{0}$. Negations swap quantifiers: $f\neq O(g)$ iff $\forall c>0\,\forall n_{0}\,\exists n\ge n_{0}: f(n)>c\,g(n)$. The abuse $f=O(g)$ means $f\in O(g)$ as a set.
-\end{remark}
+\textbf{Picture first.} $f=O(g)$ means ``$f$ stays under a scaled copy of $g$ after some cutoff $n_{0}$'' (\emph{one} suitable $c$ suffices). $\Omega$ is the mirror (stays above), $\Theta$ is sandwiched between two scalings, while $o$/$\omega$ require the sandwich for \emph{every} $c>0$ --- the band can be made arbitrarily tight (dashed narrowing bands in Fig.~\ref{fig:asymptotic-bands}). The formal $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$ below is just that picture in quantifiers.
 
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}[scale=0.70, every node/.style={font=\scriptsize}]
-  % Axes shared style
   \def\h{2.2} \def\w{3.8}
   % --- O panel ---
   \begin{scope}
@@ -68,9 +58,12 @@ $O$ has $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$; $o$ has $\forall c\,\exi
     \node[blue] at (3.2,1.3) {$f(n)$};
     \draw[red, thick, domain=0.15:\w, smooth] plot (\x,{0.32*\x*\x+0.65});
     \node[red] at (3.2,2.35) {$c\,g(n)$};
+    \draw[red, dashed, thin, domain=0.15:\w, smooth] plot (\x,{0.24*\x*\x+0.45});
+    \node[red, font=\tiny] at (2.4,2.00) {$c'g$};
     \fill[blue!12] (1.0,0.55) -- plot[domain=1.0:\w] (\x,{0.32*\x*\x+0.65}) -- (\w,0.55) -- cycle;
     \node at (1.9,-0.55) {$f=O(g)$};
     \node[font=\tiny, blue!60!black] at (1.9,1.9) {$f\le c\,g$};
+    \node[font=\tiny, red!60!black] at (1.9,1.05) {$o$: every $c$};
   \end{scope}
   % --- Omega panel ---
   \begin{scope}[xshift=5.0cm]
@@ -81,8 +74,10 @@ $O$ has $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$; $o$ has $\forall c\,\exi
     \node[blue] at (3.2,2.3) {$f(n)$};
     \draw[red, thick, domain=0.15:\w, smooth] plot (\x,{0.18*\x*\x+0.18});
     \node[red] at (3.2,0.95) {$c\,g(n)$};
+    \draw[red, dashed, thin, domain=0.15:\w, smooth] plot (\x,{0.10*\x*\x+0.10});
     \fill[green!12] (1.0,0.50) -- plot[domain=1.0:\w] (\x,{0.18*\x*\x+0.18}) -- plot[domain=\w:1.0] (\x,{0.30*\x*\x+0.55}) -- cycle;
     \node at (1.9,-0.55) {$f=\Omega(g)$};
+    \node[font=\tiny, red!60!black] at (1.9,0.35) {$\omega$: every $c$};
   \end{scope}
   % --- Theta panel ---
   \begin{scope}[xshift=10.0cm]
@@ -99,16 +94,36 @@ $O$ has $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$; $o$ has $\forall c\,\exi
     \node at (1.9,-0.55) {$f=\Theta(g)$};
   \end{scope}
 \end{tikzpicture}
-\caption{$O$, $\Omega$, and $\Theta$ as eventually-sandwiching bands. Only behaviour for $n\ge n_{0}$ matters; constants $c,c_{1},c_{2}$ scale the reference $g(n)$.}
+\caption{$O$, $\Omega$, $\Theta$ as eventually-sandwiching bands (color fills). Dashed red curves show $o$/$\omega$: the sandwich must hold for \emph{every} $c>0$, so the band can be narrowed arbitrarily. Only $n\ge n_{0}$ matters.}
 \label{fig:asymptotic-bands}
 \end{figure}
 
-Fig.~\ref{fig:asymptotic-bands} visualises the three bands. $o$ and $\omega$ require the sandwich to hold for \emph{every} $c>0$ (arbitrarily tight).
+\begin{definition}[$O$ --- asymptotic upper bound]
+$f(n)=O(g(n))$ iff $\exists c>0\,\exists n_{0}\in\mathbb{N}\,\forall n\ge n_{0}:\;0\le f(n)\le c\,g(n)$.
+\end{definition}
+\begin{definition}[$\Omega$ --- asymptotic lower bound]
+$f(n)=\Omega(g(n))$ iff $\exists c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c\,g(n)\le f(n)$.
+\end{definition}
+\begin{definition}[$\Theta$ --- tight bound]
+$f(n)=\Theta(g(n))$ iff $\exists c_{1},c_{2}>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c_{1}g(n)\le f(n)\le c_{2}g(n)$. Equivalently $f=O(g)$ and $f=\Omega(g)$.
+\end{definition}
+\begin{definition}[$o$ --- strict upper bound]
+$f(n)=o(g(n))$ iff $\forall c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le f(n)<c\,g(n)$. That is, $f/g\to0$.
+\end{definition}
+\begin{definition}[$\omega$ --- strict lower bound]
+$f(n)=\omega(g(n))$ iff $\forall c>0\,\exists n_{0}\,\forall n\ge n_{0}:\;0\le c\,g(n)<f(n)$. That is, $f/g\to\infty$.
+\end{definition}
+\begin{remark}[Quantifier order matters]
+$O$ has $\exists c\,\exists n_{0}\,\forall n\ge n_{0}$; $o$ has $\forall c\,\exists n_{0}\,\forall n\ge n_{0}$. Negations swap quantifiers: $f\neq O(g)$ iff $\forall c>0\,\forall n_{0}\,\exists n\ge n_{0}: f(n)>c\,g(n)$. The abuse $f=O(g)$ means $f\in O(g)$ as a set.
+\end{remark}
 
 % ============================================================
 \section{The Limit Method}
 \label{sec:limit-method}
-When limits exist, quantifier gymnastics reduces to calculus.
+\noindent\fbox{\parbox{0.97\linewidth}{\small\textbf{Intuition (no calculus needed).} If the ratio $f(n)/g(n)$ settles near a constant, $f$ and $g$ grow at the same rate ($\Theta$); if it tends to $0$, $f$ is negligible ($o$); if it blows up, $f$ dominates ($\omega$). Numbers first: for $f(n)=3n^{2}+5n$, $g(n)=n^{2}$,
+\begin{center}\small\begin{tabular}{r r r}\toprule $n$ & $f(n)/g(n)=(3n^{2}+5n)/n^{2}$ & $\to$ \\\midrule 10 & 3.50 & \\ 100 & 3.05 & 3 \\ 1\,000 & 3.005 & \\ \bottomrule\end{tabular}\end{center}
+The ratio $\to3\in(0,\infty)$, so we expect $f=\Theta(g)$. The theorem below makes this precise; l'H\^opital is just an optional calculus shortcut for the limit, not the definition.}}
+\smallskip
 
 \begin{theorem}[Limit test]
 Let $L=\lim_{n\to\infty}f(n)/g(n)$ (in $\mathbb{R}_{\ge0}\cup\{\infty\}$), assuming $g(n)>0$ eventually.
@@ -123,17 +138,14 @@ If $L$ does not exist (oscillation), the test is inconclusive and we return to d
 \begin{example}
 $3n^{2}+5n+20=\Theta(n^{2})$ because $(3n^{2}+5n+20)/n^{2}\to3\in(0,\infty)$. Similarly $\log(n!)=\Theta(n\log n)$ since $n!\le n^{n}$ and $n!\ge(n/2)^{n/2}$, or via Stirling; we prove it rigorously in Ch.~3.
 \end{example}
-
 \begin{example}[Limits need care]
 $f(n)=n^{1+\sin n}$ oscillates between $n^{0}$ and $n^{2}$; $f(n)/n$ has no limit and $f$ is neither $O(n)$ nor $\Omega(n^{2})$. Always check existence.
 \end{example}
-
-Useful rules: l'H\^opital for $\infty/\infty$, and $\log_{a}n=\Theta(\log_{b}n)$ for any $a,b>1$ (change of base is a constant factor). Hence we write simply $\Theta(\log n)$.
+\emph{Optional shortcut:} l'H\^opital for $\infty/\infty$, and $\log_{a}n=\Theta(\log_{b}n)$ for any $a,b>1$ (change of base is a constant factor). Hence we write simply $\Theta(\log n)$.
 
 % ============================================================
 \section{Growth Hierarchy}
 \label{sec:hierarchy}
-
 \begin{theorem}[Hierarchy]
 For any $\epsilon>0$ and $c>1$:
 \[
@@ -177,6 +189,9 @@ Fig.~\ref{fig:growth-hierarchy} shows the separation. Consequence: an $O(n\log n
 % ============================================================
 \section{Best, Worst, and Average Case}
 \label{sec:cases}
+\noindent\fbox{\parbox{0.97\linewidth}{\small\textbf{Micro-primer: expectation.} Fix $N$ inputs of size $n$ and pick one uniformly at random (each with prob.\ $1/N$). The \emph{average} running time is the ordinary average $\mathbb{E}[T]=\frac1N\sum_{i=1}^{N}T(I_{i})$. For an event, the \emph{indicator} $X=\mathbf{1}[\text{event}]$ is $1$ if it happens, $0$ otherwise, so $\mathbb{E}[X]=\Pr[\text{event}]$ and $\mathbb{E}[\sum X_{j}]=\sum\mathbb{E}[X_{j}]$ (linearity).}}
+\smallskip
+
 For input size $n$, let $T(I)$ be RAM steps on instance $I$ with $|I|=n$:
 \begin{itemize}
     \item \textbf{Worst case:} $T_{\text{worst}}(n)=\max_{|I|=n}T(I)$ --- the guarantee.
@@ -185,7 +200,7 @@ For input size $n$, let $T(I)$ be RAM steps on instance $I$ with $|I|=n$:
 \end{itemize}
 When we say ``$\textsc{LinearSearch}$ is $O(n)$'' we mean $T_{\text{worst}}(n)=O(n)$; its best case is $\Theta(1)$ and its average case (uniform, key present) is $\Theta(n)$. \textsc{InsertionSort} is $\Theta(n)$ best case (already sorted, inner loop never runs) but $\Theta(n^{2})$ worst case.
 
-Average-case analysis needs randomness: we fix $D_{n}$, then analyse $\mathbb{E}[T]$. Randomised algorithms (Ch.~8) instead randomise the \emph{algorithm} and bound $\mathbb{E}[T(I)]$ for every $I$.
+Average-case analysis needs the distribution $D_{n}$ stated explicitly. Randomised algorithms (Ch.~8) instead randomise the \emph{algorithm} and bound $\mathbb{E}[T(I)]$ for every $I$.
 
 % ============================================================
 \section{Bridge to Recurrences}
@@ -211,11 +226,8 @@ CLRS Ch.~3 is the standard reference for $O/\Theta/o/\omega$; Knuth (1976) intro
 \label{sec:ch02-exercises}
 \begin{enumerate}[label=E2.\arabic*, leftmargin=*, itemsep=0.7em]
     \item \textbf{Definitions and negations.} Let $f(n)=5n^{2}+3n$ and $g(n)=n^{2}$. (a) Prove $f=O(g)$ by exhibiting $c,n_{0}$. (b) Prove $f=\Omega(g)$. Conclude $f=\Theta(g)$. (c) Write the formal negation of ``$h(n)=o(g(n))$'' with quantifiers and use it to show $n^{2}\neq o(n^{2})$.
-
     \item \textbf{Limit method vs.\ oscillation.} Classify each pair using the limit method when applicable; otherwise return to definitions: (a) $f(n)=n\log n$, $g(n)=n^{1.5}$; (b) $f(n)=2^{n}$, $g(n)=3^{n}$; (c) $f(n)=n^{1+\sin n}$, $g(n)=n$. Determine which of $O,\Omega,\Theta,o,\omega$ hold (list all that apply).
-
     \item \textbf{Cases and distributions.} Consider \textsc{LinearSearch} for a key in $A[1\ldots n]$ (distinct elements, key present uniformly at random position). (a) Give $T_{\text{best}}(n)$, $T_{\text{worst}}(n)$ with $\Theta$ bounds. (b) Compute $T_{\text{avg}}(n)$ exactly as a sum and give its $\Theta$ class. (c) Suppose the key is absent with probability $1/2$ and otherwise uniform among positions. How does $T_{\text{avg}}(n)$ change?
-
     \item \textbf{Setting up recurrences.} Write recurrences (with base cases) for: (a) \textsc{RecursiveMax} that finds the maximum by comparing $A[n]$ with the max of $A[1\ldots n-1]$; (b) binary search on a sorted array of size $n$ (worst case); (c) Karatsuba-style: $T(n)=3T(n/2)+\Theta(n)$ --- do not solve, just explain in one sentence what $3$, $n/2$, and $\Theta(n)$ represent. Identify which cases from (a)--(c) fit the Master form $aT(n/b)+f(n)$.
 \end{enumerate}
 % End of Chapter 2

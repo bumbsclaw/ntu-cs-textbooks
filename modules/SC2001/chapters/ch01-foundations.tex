@@ -1,6 +1,4 @@
-% SC2001 — Chapter 1: Foundations
-% No \documentclass — this file is \input/\include'd by main.tex (book/report class).
-% Preamble must load: amsmath, amssymb, amsthm, tikz, enumitem, algorithm/algorithmic or equivalent.
+% SC2001 --- Chapter 1: Foundations (0->100 ground-up)
 \chapter{Foundations: From Zero to Algorithmic Reasoning}
 \label{ch:foundations}
 
@@ -8,7 +6,9 @@
 \emph{``An algorithm must be seen to be believed.''} --- Donald Knuth. Before we design faster algorithms, we must agree on what an algorithm \emph{is}, how to argue that it is \emph{correct}, and what it costs to run. This chapter builds that floor from first principles.
 \end{quote}
 
-\noindent\textbf{Prerequisites:} None beyond elementary logic and high-school algebra, but we assume the maturity of MH1812 Discrete Mathematics and SC1007 Data Structures. Students who have not seen sets, functions, or proof by induction will find a self-contained refresher here. Readers already comfortable with induction may skim \S\ref{sec:induction} and focus on \S\ref{sec:ram}--\ref{sec:invariants}.
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: we build here, no MH1812/SC1007 needed.} This chapter defines every discrete-math notion from scratch---sets, functions, logic, sums, proofs, induction---with pictures before formalism. No prior discrete math or data-structures course is assumed. Later chapters depend only on what is built here.}}
+\vspace{0.4em}
 
 \section*{Learning Outcomes}
 After this chapter you will be able to:
@@ -23,296 +23,247 @@ After this chapter you will be able to:
 % ============================================================
 \section{Discrete Mathematics Refresher}
 \label{sec:discrete-refresher}
+We collect notation used throughout the book---built from zero, not assumed from MH1812. Each idea appears as picture $\to$ words $\to$ definition.
 
-We collect notation and facts used without comment throughout the book. This is not a substitute for MH1812, but a compact reference.
+% --- 2 TikZ BEFORE formal sets/functions (audit L30) ---
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+% Venn + dots for \in,\subseteq,|S|
+\begin{scope}
+\draw[thick,fill=blue!10] (0,0) circle (1.35);
+\draw[thick,fill=orange!18] (0.9,0) circle (0.85);
+\foreach \x/\y in {-0.6/0.5,-0.4/-0.4,0.2/0.7,0.85/0.18,1.05/-0.35,1.3/0.55} \fill (\x,\y) circle (1.6pt);
+\node at (-0.55,-1.65) {$S$}; \node at (1.55,-1.65) {$T\subseteq S$};
+\node[font=\tiny] at (0,-2.05) {$x\in S$\; $|S|=$ \#dots\; $\emptyset=$ no dots};
+\node[font=\footnotesize\bfseries] at (0.35,1.75) {Venn + dots};
+\end{scope}
+% Arrow domain->codomain: injective vs non-injective
+\begin{scope}[xshift=5.2cm]
+\node[font=\footnotesize\bfseries] at (1.1,1.75) {Function as arrows};
+% injective
+\draw[rounded corners=3pt,fill=green!10] (0,0.15) ellipse (0.62 and 0.85);
+\draw[rounded corners=3pt,fill=violet!10] (2.0,0.15) ellipse (0.62 and 0.85);
+\node[font=\tiny] at (0,1.15) {Domain $A$}; \node[font=\tiny] at (2.0,1.15) {Codomain $B$};
+\foreach \y/\yy in {0.6/0.6,0.0/0.0,-0.5/-0.5} {\fill (0,\y) circle (1.7pt); \fill (2.0,\yy) circle (1.7pt); \draw[->,thick,blue!60!black] (0.12,\y)--(1.88,\yy);}
+\node[font=\tiny,fill=white,inner sep=1pt] at (1.0,-1.05) {injective: arrows never merge};
+% non-injective below
+\begin{scope}[yshift=-2.35cm]
+\draw[rounded corners=3pt,fill=green!10] (0,0.15) ellipse (0.62 and 0.75);
+\draw[rounded corners=3pt,fill=violet!10] (2.0,0.15) ellipse (0.62 and 0.75);
+\foreach \y in {0.5,0.0,-0.4} \fill (0,\y) circle (1.7pt);
+\foreach \y in {0.4,-0.3} \fill (2.0,\y) circle (1.7pt);
+\draw[->,thick,blue!60!black] (0.12,0.5)--(1.88,0.4);
+\draw[->,thick,red!70!black] (0.12,0.0)--(1.88,0.4);
+\draw[->,thick,blue!60!black] (0.12,-0.4)--(1.88,-0.3);
+\node[font=\tiny,fill=white,inner sep=1pt] at (1.0,-1.0) {not injective: two $\to$ one};
+\end{scope}
+\end{scope}
+\end{tikzpicture}
+\caption{Left: sets as dot collections inside Venn ovals. Right: a function is arrows domain$\to$codomain; injective means no two arrows share a target.}
+\label{fig:sets-functions}
+\end{figure}
 
 \subsection{Sets, Functions, Relations}
-A \emph{set} is an unordered collection of distinct objects. We write $x \in S$, $S \subseteq T$, $S \subsetneq T$, $|S|$ for cardinality, $\emptyset$ for the empty set, $\mathbb{N}=\{0,1,2,\dots\}$ (we include $0$; any off-by-one is irrelevant asymptotically), $\mathbb{Z},\mathbb{Q},\mathbb{R},\mathbb{Z}^+$.
-
-A \emph{function} $f: A \to B$ assigns to each $a\in A$ exactly one $b=f(a)\in B$. $A$ is the domain, $B$ the codomain, $f(A)=\{f(a):a\in A\}$ the image. $f$ is \emph{injective} if $f(a)=f(a')\Rightarrow a=a'$, \emph{surjective} if $f(A)=B$, \emph{bijective} if both. The \emph{composition} $(g\circ f)(a)=g(f(a))$.
-
-A \emph{relation} $R\subseteq A\times A$ may be reflexive, symmetric, transitive, antisymmetric --- yielding equivalences and partial orders. A \emph{graph} $G=(V,E)$ with $E\subseteq V\times V$ appears from Chapter~6; we assume familiarity with paths, cycles, and trees from SC1007.
+A \emph{set} is an unordered collection of distinct objects. We write $x\in S$, $S\subseteq T$, $S\subsetneq T$, $|S|$ for cardinality, $\emptyset$ for the empty set, $\mathbb{N}=\{0,1,2,\dots\}$ (we include $0$), $\mathbb{Z},\mathbb{Q},\mathbb{R},\mathbb{Z}^+$.
+A \emph{function} $f:A\to B$ assigns to each $a\in A$ exactly one $b=f(a)\in B$. $A$ is the domain, $B$ the codomain, $f(A)=\{f(a):a\in A\}$ the image. $f$ is \emph{injective} if $f(a)=f(a')\Rightarrow a=a'$, \emph{surjective} if $f(A)=B$, \emph{bijective} if both. Composition $(g\circ f)(a)=g(f(a))$.
+A \emph{relation} $R\subseteq A\times A$ may be reflexive, symmetric, transitive, antisymmetric---yielding equivalences and partial orders. A \emph{graph} $G=(V,E)$ with $E\subseteq V\times V$ is used from Ch.~6; we define paths/cycles/trees when first needed (no SC1007 assumed).
 
 \subsection{Logic and Quantifiers}
-Propositions combine via $\neg,\land,\lor,\Rightarrow,\Leftrightarrow$. The quantifiers $\forall$ (\emph{for all}) and $\exists$ (\emph{there exists}) bind variables: $\forall n\in\mathbb{N},\, P(n)$ and $\exists x\in S,\, Q(x)$. Negation swaps them:
+\emph{Everyday first.} ``Every student passed'' vs.\ ``Some student passed'' already contain the two quantifiers. Picture a row of dots (students); colour a dot green if it satisfies property $P$.
+\begin{center}
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+\foreach \i in {0,...,4} {\fill[green!60!black] (\i*0.62,0.45) circle (3.2pt); \fill[green!60!black] (\i*0.62,-0.35) circle (3.2pt);}
+\fill[red!70!black] (2*0.62,-0.35) circle (3.2pt);
+\node[font=\tiny] at (1.25,1.0) {$\forall x\,P(x)$: every dot green};
+\node[font=\tiny] at (1.25,-1.05) {$\exists x\,\neg P(x)$: one red counterexample};
+\draw[->,thick] (3.6,0.05)--(4.1,0.05);
+\node[font=\tiny,align=center] at (5.55,0.05) {negation\\swaps + flips};
+\end{tikzpicture}
+\end{center}
+Formally, propositions combine via $\neg,\land,\lor,\Rightarrow,\Leftrightarrow$. Quantifiers $\forall$ (\emph{for all}) and $\exists$ (\emph{there exists}) bind variables: $\forall n\in\mathbb{N},\,P(n)$ and $\exists x\in S,\,Q(x)$. Swapping gives De Morgan:
 \[
-\neg(\forall x\, P(x)) \equiv \exists x\, \neg P(x),\qquad
-\neg(\exists x\, P(x)) \equiv \forall x\, \neg P(x).
+\neg(\forall x\,P(x))\equiv\exists x\,\neg P(x),\qquad
+\neg(\exists x\,P(x))\equiv\forall x\,\neg P(x).
 \]
-Implication $P\Rightarrow Q$ is equivalent to $\neg P\lor Q$ and to its contrapositive $\neg Q\Rightarrow\neg P$.
+``Not every student passed'' $\equiv$ ``Some student failed''---swap $\forall\leftrightarrow\exists$ and flip $P\to\neg P$. Implication $P\Rightarrow Q\equiv\neg P\lor Q\equiv(\neg Q\Rightarrow\neg P)$ (contrapositive).
 
 \subsection{Sums, Products, Logarithms}
-We use freely:
-\begin{itemize}
-    \item Arithmetic sum: $\sum_{i=1}^{n} i = n(n+1)/2$.
-    \item Geometric sum ($r\neq 1$): $\sum_{i=0}^{n-1} r^i = (r^n-1)/(r-1)$; if $|r|<1$, $\sum_{i=0}^{\infty} r^i = 1/(1-r)$.
-    \item Harmonic sum: $H_n = \sum_{i=1}^{n}1/i = \ln n + \gamma + O(1/n)$ where $\gamma\approx0.5772$.
-    \item Logarithms: $\log$ without base means $\log_2$ in this book when analysing algorithms; $\ln$ is base $e$, $\lg$ is always base $2$. Change of base: $\log_a n = (\log_b n)/(\log_b a)=\Theta(\log_b n)$. Hence base is irrelevant inside $O(\cdot)$.
-    \item Floors and ceilings: $\lfloor x\rfloor \le x < \lfloor x\rfloor+1$, $\lceil x\rceil-1 < x \le \lceil x\rceil$, and $x-1 < \lfloor x\rfloor \le x \le \lceil x\rceil < x+1$. We often drop $\lfloor\cdot\rfloor,\lceil\cdot\rceil$ in asymptotics, noting the error is at most $1$.
-    \item Factorials and exponentiation, inequalities: $n! \le n^n$, $2^n \le n!$ for $n\ge 4$, $(1+1/n)^n < e < (1+1/n)^{n+1}$.
-\end{itemize}
-
+We build each closed form from a picture, then state it. Each box is a 3-line derivation.
+\paragraph{Arithmetic $1+2+\cdots+n=n(n+1)/2$ (Gauss pairing).}
+Pair $1+n=n+1$, $2+(n-1)=n+1$, \dots---$n/2$ pairs. Two staircases make an $n\times(n+1)$ rectangle.
+\begin{center}
+\begin{tikzpicture}[scale=0.55]
+\foreach \i in {1,...,5} {\foreach \j in {1,...,\i} \fill[blue!55] (\j*0.32,\i*0.32) circle (1.8pt);}
+\foreach \i in {1,...,5} {\foreach \j in {1,...,5} \fill[orange!65] (2.4+\j*0.32,\i*0.32) circle (1.8pt);}
+\foreach \i in {1,...,5} {\foreach \j in {\i,...,5} \fill[orange!25] (2.4+\j*0.32,\i*0.32) circle (1.8pt);}
+\node[font=\tiny] at (1.0,-0.35) {$1+\cdots+n$}; \node[font=\tiny] at (4.0,-0.35) {two copies = $n(n+1)$ dots};
+\end{tikzpicture}
+$\displaystyle\sum_{i=1}^{n}i=n(n+1)/2$.
+\end{center}
+\paragraph{Geometric $1+r+\cdots+r^{n-1}=(r^n-1)/(r-1)$ (binary tree).}
+Level $i$ has $r^i$ nodes; stack levels form a tree. Multiply by $(r-1)$ telescopes. If $|r|<1$, $\sum_{i\ge0}r^i=1/(1-r)$.
+\begin{center}
+\begin{tikzpicture}[scale=0.62,level distance=7mm,sibling distance=10mm,every node/.style={circle,draw,fill=green!18,inner sep=1.2pt,font=\tiny}]
+\node {} child {node {} child {node {}} child {node {}}} child {node {} child {node {}} child {node {}}};
+\end{tikzpicture}
+\ {\scriptsize $1+r+r^2+\cdots$ as tree levels; $r=2$ doubles each row.}
+\end{center}
+$\displaystyle\sum_{i=0}^{n-1}r^i=(r^n-1)/(r-1)$.
+\paragraph{Harmonic $H_n=\sum_{i=1}^{n}1/i=\ln n+\gamma+O(1/n)$ (coupon/stack).}
+$H_n$ is area of $n$ bars width $1$, height $1/i$---sandwiched between $\int_1^{n+1}\!dx/x$ and $1+\int_1^n\!dx/x$. Hence $\ln(n+1)\le H_n\le1+\ln n$; limit $\gamma\approx0.5772$.
+\paragraph{Logarithms (rulers).} $\log$ without base $=\log_2$ for algorithms; $\ln=\log_e$, $\lg=\log_2$ always. Change of base is rescaling a ruler: $\log_a n=(\log_b n)/(\log_b a)=\Theta(\log_b n)$---base irrelevant inside $O(\cdot)$.
+\paragraph{Floors/ceilings (number line, off-by-one $\le1$).}
+\begin{center}
+\begin{tikzpicture}[scale=0.85]
+\draw[->,thick] (-2.2,0)--(2.2,0);
+\foreach \x in {-2,-1,0,1,2} {\draw (\x,0.12)--(\x,-0.12) node[below,font=\tiny] {$\x$};}
+\fill[blue!60!black] (0.7,0) circle (2pt) node[above,font=\tiny] {$x=0.7$};
+\draw[thick,red!70!black] (0,0.18)--(0.7,0.18) node[midway,above,font=\tiny] {$<1$};
+\node[font=\tiny] at (0,-0.55) {$\lfloor x\rfloor\le x<\lfloor x\rfloor+1$};
+\end{tikzpicture}
+\end{center}
+$\lfloor x\rfloor\le x<\lfloor x\rfloor+1$, $\lceil x\rceil-1<x\le\lceil x\rceil$, $x-1<\lfloor x\rfloor\le x\le\lceil x\rceil<x+1$---dropping $\lfloor\cdot\rfloor$ errs by at most $1$.
+Also $n!\le n^n$, $2^n\le n!$ for $n\ge4$, $(1+1/n)^n<e<(1+1/n)^{n+1}$.
 \begin{example}[Manipulating sums]
-For $n\ge 1$,
-\[
-\sum_{i=1}^{n} (2i-1) = 2\frac{n(n+1)}{2} - n = n^2.
-\]
-Linearity of summation ($\sum c\cdot a_i = c\sum a_i$, $\sum(a_i+b_i)=\sum a_i+\sum b_i$) justifies the first equality without induction.
+For $n\ge1$, $\sum_{i=1}^{n}(2i-1)=2\frac{n(n+1)}2-n=n^2$ by linearity $\sum c a_i=c\sum a_i$, $\sum(a_i+b_i)=\sum a_i+\sum b_i$.
 \end{example}
 
 % ============================================================
 \section{Proof Techniques}
 \label{sec:proofs}
-
-Every correctness proof and every lower bound in this book uses one of four patterns. Master them now.
-
+Every correctness proof uses one of four patterns.
 \begin{definition}[Theorem, Lemma, Corollary]
-A \emph{theorem} is a statement proved true. A \emph{lemma} is a helper theorem en route to a larger one. A \emph{corollary} is an immediate consequence.
+A \emph{theorem} is a statement proved true. A \emph{lemma} is a helper theorem; a \emph{corollary} is an immediate consequence.
 \end{definition}
-
-\subsection{Direct Proof}
-Assume the hypothesis; deduce the conclusion via definitions and previously proved facts.
-
-\begin{example}
-Claim: If $n$ is odd then $n^2$ is odd. \emph{Proof.} Write $n=2k+1$ for some $k\in\mathbb{Z}$. Then $n^2=4k^2+4k+1=2(2k^2+2k)+1$, which is odd. \qed
-\end{example}
-
-\subsection{Contrapositive}
-To prove $P\Rightarrow Q$, prove $\neg Q\Rightarrow\neg P$ instead (logically equivalent).
-
-\begin{example}
-Claim: If $n^2$ is even then $n$ is even. \emph{Proof.} Contrapositive: if $n$ is odd then $n^2$ is odd --- proved above. \qed
-\end{example}
-
-\subsection{Proof by Contradiction}
-Assume the statement is false and derive an impossibility ($R\land\neg R$).
-
-\begin{example}[Irrationality of $\sqrt2$]
-Suppose $\sqrt2=p/q$ in lowest terms, $p,q\in\mathbb{Z}^+$, $\gcd(p,q)=1$. Then $2q^2=p^2$, so $p^2$ is even, hence $p$ is even: $p=2k$. Then $2q^2=4k^2$, so $q^2=2k^2$, hence $q$ is even --- contradicting $\gcd(p,q)=1$. \qed
-\end{example}
-
-\subsection{Counterexample and Cases}
-To disprove $\forall x\, P(x)$ it suffices to exhibit one $x$ with $\neg P(x)$. To prove a claim that naturally splits (e.g., by parity, by size), prove each case separately and exhaust all possibilities.
-
-\begin{example}
-Claim ``Every integer $n>1$ is prime'' is false: $4=2\cdot2$ is a counterexample. Claim ``$n^2\bmod 4\in\{0,1\}$ for all $n\in\mathbb{Z}$'': check cases $n$ even ($n=2k\Rightarrow n^2=4k^2\equiv0$) and $n$ odd ($n=2k+1\Rightarrow n^2=4k(k+1)+1\equiv1$).
-\end{example}
-
-\begin{remark}[How to choose]
-Try direct proof first. If the conclusion is a negation (``not'', ``irrational'', ``no algorithm exists''), contradiction is often cleaner. If $P$ is itself a negation, contrapositive may be direct in disguise.
-\end{remark}
+\subsection{Direct Proof} Assume hypothesis; deduce conclusion.
+\begin{example} If $n$ odd then $n^2$ odd. \emph{Proof.} $n=2k+1\Rightarrow n^2=4k^2+4k+1=2(2k^2+2k)+1$ odd. \qed \end{example}
+\subsection{Contrapositive} Prove $\neg Q\Rightarrow\neg P$ instead of $P\Rightarrow Q$.
+\begin{example} If $n^2$ even then $n$ even. Contrapositive: if $n$ odd then $n^2$ odd---proved above. \qed \end{example}
+\subsection{Proof by Contradiction} Assume false, derive $R\land\neg R$.
+\begin{example}[Irrationality of $\sqrt2$] If $\sqrt2=p/q$ lowest terms, $2q^2=p^2\Rightarrow p$ even $=2k\Rightarrow q^2=2k^2\Rightarrow q$ even---contradicts $\gcd(p,q)=1$. \qed \end{example}
+\subsection{Counterexample and Cases} To disprove $\forall x\,P(x)$ give one $x$ with $\neg P(x)$; to prove by cases exhaust all possibilities.
+\begin{example} ``Every $n>1$ prime'' false: $4=2\cdot2$. ``$n^2\bmod4\in\{0,1\}$'': even $n=2k\Rightarrow4k^2\equiv0$; odd $n=2k+1\Rightarrow4k(k+1)+1\equiv1$. \end{example}
+\begin{remark}[How to choose] Try direct first. If conclusion is a negation (``not'', ``irrational'', ``no algorithm''), try contradiction. If $P$ itself is negated, contrapositive is often direct in disguise. \end{remark}
 
 % ============================================================
 \section{Mathematical Induction}
 \label{sec:induction}
-
-Induction is the single most used proof technique in algorithm analysis: it proves loop invariants, closed forms for recurrences, and properties of recursively defined structures.
-
-\subsection{Weak (Ordinary) Induction}
-To prove $\forall n\ge n_0,\, P(n)$:
-\begin{enumerate}[label=(I\arabic*)]
-    \item \textbf{Base case:} prove $P(n_0)$.
-    \item \textbf{Inductive step:} prove $\forall k\ge n_0,\, P(k)\Rightarrow P(k+1)$.
-\end{enumerate}
-The hypothesis $P(k)$ in the inductive step is the \emph{induction hypothesis} (IH).
-
-\begin{theorem}[Sum of first $n$ integers]
-For all $n\ge1$, $\sum_{i=1}^{n} i = n(n+1)/2$.
-\end{theorem}
-\begin{proof}
-Base $n=1$: $1=1\cdot2/2$. Assume IH for $k$: $\sum_{i=1}^{k}i=k(k+1)/2$. Then
-\[
-\sum_{i=1}^{k+1} i = \Bigl(\sum_{i=1}^{k}i\Bigr)+(k+1)=k(k+1)/2+(k+1)=(k+1)(k+2)/2.
-\]
-Thus $P(k)\Rightarrow P(k+1)$. By induction $P(n)$ holds for all $n\ge1$.
-\end{proof}
-
-\subsection{Strong Induction}
-To prove $\forall n\ge n_0,\, P(n)$, prove $P(n_0)$ and $\forall k\ge n_0,\, \bigl(\forall j,\,n_0\le j\le k\Rightarrow P(j)\bigr)\Rightarrow P(k+1)$. The IH assumes \emph{all} earlier cases, not just $k$. Strong and weak induction are logically equivalent, but strong induction avoids reproving ad hoc ``reach back'' lemmas.
-
-\begin{theorem}[Every $n\ge2$ has a prime divisor]
-For all $n\ge2$, $n$ is divisible by some prime.
-\end{theorem}
-\begin{proof}
-Base $n=2$: $2$ is prime and divides itself. Fix $k\ge2$ and assume every integer $j$ with $2\le j\le k$ has a prime divisor (strong IH). Consider $k+1$: if $k+1$ is prime we are done; otherwise $k+1=a\cdot b$ with $2\le a,b\le k$. By IH, $a$ has a prime divisor $p$, and $p\mid a\mid(k+1)$.
-\end{proof}
-
-\begin{theorem}[Fibonacci growth --- strong induction at work]
-Let $F_0=0,F_1=1,F_{n}=F_{n-1}+F_{n-2}$ for $n\ge2$. Then $F_n\ge 2^{n/2-1}$ for all $n\ge1$ (a weak lower bound used later to analyse recursive Fibonacci).
-\end{theorem}
-\begin{proof}
-Check $n=1$: $F_1=1\ge2^{-0.5}\approx0.707$. $n=2$: $F_2=1\ge2^{0}=1$ --- equality, but we need two bases because the recurrence reaches back two steps. Assume IH for all $1\le j\le k$ with $k\ge2$. Then $F_{k+1}=F_k+F_{k-1}\ge2^{k/2-1}+2^{(k-1)/2-1}=2^{(k-1)/2-1}(2^{1/2}+1)\ge2^{(k-1)/2-1}\cdot2=2^{(k+1)/2-1}$, using $ \sqrt2+1>2$.
-\end{proof}
-
-\subsection{Structural Induction}
-For recursively defined sets (lists, trees, well-formed formulae), prove $P$ for base structures and that constructors preserve $P$. This is induction on the \emph{structure}, not merely on size, and underpins correctness of recursive algorithms on trees/graphs in Chapters~5--6.
-
-\begin{example}[Binary trees]
-A binary tree is either $\mathsf{Leaf}$ or $\mathsf{Node}(L,x,R)$ where $L,R$ are binary trees. To prove ``number of leaves = number of internal nodes $+1$'' for full binary trees, check the leaf base and show the constructor preserves the invariant.
-\end{example}
-
-\begin{remark}[Common pitfalls]
-Always \emph{state} the IH explicitly, check that the base covers all cases the step reaches back to, and avoid ``all horses are the same colour''---style illicit generalisation where $P(k)\Rightarrow P(k+1)$ fails for small $k$.
-\end{remark}
+Induction proves loop invariants, recurrence closed forms, and properties of recursive structures.
+\subsection{Weak Induction} To prove $\forall n\ge n_0,\,P(n)$: (I1) base $P(n_0)$; (I2) $\forall k\ge n_0,\,P(k)\Rightarrow P(k+1)$. $P(k)$ is the IH.
+\begin{theorem}[Sum of first $n$ integers] For $n\ge1$, $\sum_{i=1}^{n}i=n(n+1)/2$. \end{theorem}
+\begin{proof} Base $1=1\cdot2/2$. IH $\sum_{i=1}^{k}i=k(k+1)/2$. Then $\sum_{i=1}^{k+1}i=k(k+1)/2+(k+1)=(k+1)(k+2)/2$. \end{proof}
+\subsection{Strong Induction} Assume all $P(j)$, $n_0\le j\le k$, to get $P(k+1)$.
+\begin{theorem}[Every $n\ge2$ has a prime divisor] For $n\ge2$, $n$ divisible by a prime. \end{theorem}
+\begin{proof} Base $2$ prime. Fix $k\ge2$, assume every $2\le j\le k$ has a prime divisor. If $k+1$ prime done; else $k+1=a\cdot b$, $2\le a,b\le k$, prime divisor of $a$ divides $k+1$. \end{proof}
+\begin{theorem}[Fibonacci growth] $F_0=0,F_1=1,F_n=F_{n-1}+F_{n-2}\Rightarrow F_n\ge2^{n/2-1}$ for $n\ge1$. \end{theorem}
+\begin{proof} Bases $n=1,2$ check. IH for $1\le j\le k$, $k\ge2$: $F_{k+1}=F_k+F_{k-1}\ge2^{k/2-1}+2^{(k-1)/2-1}\ge2^{(k+1)/2-1}$ since $\sqrt2+1>2$. \end{proof}
+\subsection{Structural Induction} For recursively defined sets (lists, trees), prove base structures and that constructors preserve $P$.
+\begin{example}[Binary trees] Tree is $\mathsf{Leaf}$ or $\mathsf{Node}(L,x,R)$. To prove ``leaves $=$ internal $+1$'' for full trees, check leaf base and show constructor preserves invariant. \end{example}
 
 % ============================================================
 \section{What Is an Algorithm?}
 \label{sec:what-is-algorithm}
-
-\begin{definition}[Algorithm, informal]
-An \emph{algorithm} is a finite, unambiguous sequence of elementary steps that, given any admissible input, terminates after finitely many steps and produces the required output.
-\end{definition}
-
-Knuth and later theory make this precise: an algorithm satisfies five criteria ---
-\emph{finiteness} (description is finite), \emph{definiteness} (each step is precisely defined), \emph{input} (zero or more inputs from a specified set), \emph{output} (one or more outputs with a specified relation to the inputs), \emph{effectiveness} (steps are basic enough to be carried out, in principle, by hand) --- plus, crucially, \emph{termination on every admissible input}. A procedure that may run forever is a \emph{computational method}, not an algorithm.
-
-An \emph{algorithm} is distinct from a \emph{program}: the former is an abstract idea, the latter its realisation in a programming language on concrete hardware. The same algorithm (e.g., binary search) can be implemented in Python, Java, or C with different constant-factor performance but the same asymptotic behaviour --- which is why we analyse the idea, not the code.
-
-\subsection{Pseudocode Conventions in This Book}
-We write algorithms in language-agnostic pseudocode, one-indexed for arrays (as in CLRS), with \texttt{//} comments, assignment $\gets$, comparison $=,\neq,<,\le$, and control flow \texttt{if--then--else}, \texttt{while}, \texttt{for}, \texttt{return}. Indentation denotes block structure. Procedures are named in \textsc{SmallCaps}. We count \emph{primitive operations} (defined in \S\ref{sec:ram}) rather than wall-clock time.
-
-\begin{example}[Euclid's algorithm --- the oldest non-trivial algorithm]
+\begin{definition}[Algorithm, informal] A finite, unambiguous sequence of elementary steps that, given any admissible input, terminates and produces the required output. \end{definition}
+Knuth's five criteria: finiteness, definiteness, input, output, effectiveness---plus termination on every admissible input. A procedure that may loop forever is a computational method, not an algorithm. An algorithm is distinct from a program: the idea vs.\ its realisation in Python/Java/C with the same asymptotics.
+\subsection{Pseudocode Conventions} Language-agnostic, one-indexed arrays (CLRS style), \texttt{//} comments, $\gets$, $=,\neq,<,\le$, \texttt{if--then--else}, \texttt{while}, \texttt{for}, \texttt{return}. Count primitive ops (\S\ref{sec:ram}) not wall-clock time.
+\begin{example}[Euclid --- oldest non-trivial algorithm]
 \begin{quote}\ttfamily\scriptsize
-\textsc{Euclid}$(a,b)$ // assume $a\ge b\ge0$, integers\\\\
+\textsc{Euclid}$(a,b)$ // assume $a\ge b\ge0$\\
 1\ \ \textbf{while} $b\neq0$ \textbf{do}\\
 2\ \ \ \ \ \ $r \gets a \bmod b$\\
 3\ \ \ \ \ \ $a \gets b$\\
 4\ \ \ \ \ \ $b \gets r$\\
 5\ \ \textbf{return} $a$
 \end{quote}
-We will prove in \S\ref{sec:invariants} that this returns $\gcd(a,b)$ and terminates, and in Chapter~2 that it runs in $O(\log\min(a,b))$ divisions --- exponentially faster than naive search.
+We prove in \S\ref{sec:invariants} this returns $\gcd(a,b)$ and in Ch.~2 it costs $O(\log\min(a,b))$ divisions.
 \end{example}
 
 % ============================================================
 \section{The Random Access Machine (RAM) Model}
 \label{sec:ram}
-
-To compare algorithms fairly we need a shared model of ``how long a step takes''. The workhorse is the \emph{Random Access Machine}, an idealised von Neumann computer that abstracts away caches, pipelines, and operating-system noise while preserving the essence of modern hardware.
-
-\subsection{Components}
-
+To compare algorithms fairly we need a shared cost model: the Random Access Machine, an idealised von Neumann computer.
 \begin{figure}[h]
 \centering
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
   box/.style={draw, thick, rounded corners=3pt, fill=blue!5, minimum height=0.9cm, align=center, font=\small},
   memcell/.style={draw, thick, minimum width=1.0cm, minimum height=0.55cm, font=\scriptsize, align=center},
   arrow/.style={-{Latex}, thick, color=violet!70!black},
   tape/.style={draw, thick, minimum width=0.55cm, minimum height=0.7cm, font=\scriptsize, align=center}
 ]
-% Input tape
 \fill[yellow!10,rounded corners=3pt] (-6.35,0.82) rectangle (-3.2,1.58);
 \node[font=\footnotesize\bfseries] at (-5.2,2.0) {Input tape};
-\foreach \i in {0,...,4} {
-  \node[tape, fill=yellow!15] (in\i) at (-6.0+\i*0.62,1.2) {};
-}
-\node[font=\scriptsize] at (-6.0,1.2) {$x_1$};
-\node[font=\scriptsize] at (-5.38,1.2) {$x_2$};
-\node[font=\scriptsize] at (-4.76,1.2) {$\cdots$};
-\node[font=\scriptsize] at (-4.14,1.2) {$x_n$};
-\node[tape, fill=gray!20] at (-3.52,1.2) {\#};
-
-% CPU box
+\foreach \i in {0,...,4} {\node[tape, fill=yellow!15] at (-6.0+\i*0.62,1.2) {};}
+\node[font=\scriptsize] at (-6.0,1.2) {$x_1$}; \node[font=\scriptsize] at (-5.38,1.2) {$x_2$}; \node[font=\scriptsize] at (-4.76,1.2) {$\cdots$}; \node[font=\scriptsize] at (-4.14,1.2) {$x_n$}; \node[tape, fill=gray!20] at (-3.52,1.2) {\#};
 \node[box, minimum width=3.6cm, minimum height=3.2cm, fill=blue!7, draw=blue!60!black] (cpu) at (0,0) {};
 \node[font=\footnotesize\bfseries] at (0,1.25) {CPU};
-
-% Inside CPU
 \node[box, minimum width=3.0cm, minimum height=0.6cm, fill=orange!18] (ctrl) at (0,0.65) {Control Unit + Program Counter};
 \node[box, minimum width=1.35cm, minimum height=0.7cm, fill=green!15] (regs) at (-0.73,-0.25) {Registers\\{\scriptsize $R_0\ldots R_k$}};
 \node[box, minimum width=1.35cm, minimum height=0.7cm, fill=red!12] (alu) at (0.73,-0.25) {ALU\\{\scriptsize $+,-,\times,\div$}};
-
 \node[box, minimum width=3.0cm, minimum height=0.45cm, fill=blue!10] (fetch) at (0,-1.05) {\scriptsize Fetch--Decode--Execute cycle};
-
-% Memory
 \fill[blue!4,rounded corners=4pt] (3.65,-2.15) rectangle (5.55,1.75);
 \node[font=\footnotesize\bfseries] at (4.6,2.0) {Memory (RAM)};
-\foreach \i/\addr in {0/0,1/1,2/2,3/3,4/4} {
-  \pgfmathsetmacro{\y}{1.15 - \i*0.60}
-  \node[memcell, fill=blue!5] (mem\i) at (4.6,\y) {};
-  \node[font=\scriptsize] at (4.6,\y) {};
-  \node[font=\tiny, anchor=east] at (3.85,\y) {\addr};
-}
-\node[font=\scriptsize] at (4.6,1.15) {$M[0]$};
-\node[font=\scriptsize] at (4.6,0.55) {$M[1]$};
-\node[font=\scriptsize] at (4.6,-0.05) {$M[2]$};
-\node[font=\scriptsize] at (4.6,-0.65) {$\vdots$};
-\node[font=\scriptsize] at (4.6,-1.25) {$M[m-1]$};
-\node[font=\tiny, align=center] at (4.6,-1.95) {random access\\in $O(1)$};
-
-% Output tape
+\foreach \i/\addr in {0/0,1/1,2/2,3/3,4/4} {\pgfmathsetmacro{\y}{1.15 - \i*0.60}\node[memcell, fill=blue!5] at (4.6,\y) {};\node[font=\tiny, anchor=east] at (3.85,\y) {\addr};}
+\node[font=\scriptsize] at (4.6,1.15) {$M[0]$}; \node[font=\scriptsize] at (4.6,0.55) {$M[1]$}; \node[font=\scriptsize] at (4.6,-0.05) {$M[2]$}; \node[font=\scriptsize] at (4.6,-0.65) {$\vdots$}; \node[font=\scriptsize] at (4.6,-1.25) {$M[m-1]$}; \node[font=\tiny, align=center] at (4.6,-1.95) {random access\\in $O(1)$};
 \fill[yellow!10,rounded corners=3pt] (-6.35,-3.42) rectangle (-3.75,-2.68);
 \node[font=\footnotesize\bfseries] at (-5.2,-2.3) {Output tape};
-\foreach \i in {0,...,3} {
-  \node[tape, fill=yellow!15] (out\i) at (-6.0+\i*0.62,-3.05) {};
-}
+\foreach \i in {0,...,3} {\node[tape, fill=yellow!15] at (-6.0+\i*0.62,-3.05) {};}
 \node[font=\scriptsize] at (-6.0,-3.05) {$y_1$};
-
-% Arrows: Input -> CPU
 \draw[arrow] (-4.4,1.2) -- (-1.8,0.6) node[midway, above, font=\tiny] {read};
-% CPU <-> Memory
 \draw[arrow] (1.8,0.35) -- (3.7,0.55) node[midway, above, font=\tiny] {load};
 \draw[arrow] (3.7,-0.05) -- (1.8,-0.35) node[midway, below, font=\tiny] {store};
-% CPU -> Output
 \draw[arrow] (-1.8,-0.6) -- (-4.4,-3.05) node[midway, below, font=\tiny] {write};
-% Inside CPU arrows
-\draw[arrow, thin] (regs) -- (alu);
-\draw[arrow, thin] (alu) -- (regs);
+\draw[arrow, thin] (regs) -- (alu); \draw[arrow, thin] (alu) -- (regs);
 \node[font=\tiny, align=center, fill=orange!15, rounded corners=2pt, inner sep=2pt] at (0,-2.05) {each primitive op costs $1$};
-
-\end{tikzpicture}
-\caption{The Random Access Machine (RAM). The CPU fetches instructions pointed to by the program counter, operates on registers and the ALU, and accesses any memory cell $M[i]$ in unit time. Input is read sequentially; output is write-only. This idealisation underlies all running-time analysis in the book.}
+\end{tikzpicture}}%
+\caption{The RAM. CPU fetches via program counter, operates on registers/ALU, accesses any $M[i]$ in unit time.}
 \label{fig:ram-model}
 \end{figure}
-
-Figure~\ref{fig:ram-model} summarises the model. Concretely:
-\begin{itemize}
-    \item \textbf{Memory:} an array $M[0\ldots m-1]$ of \emph{words} (integers), each large enough to hold any input value or pointer ($\Theta(\log n)$ bits). Any cell is accessed in $O(1)$ time --- the ``random access''.
-    \item \textbf{CPU:} a finite set of registers, an arithmetic-logic unit (ALU), and a program counter pointing to the next instruction.
-    \item \textbf{Instruction set:} \texttt{LOAD}, \texttt{STORE}, \texttt{ADD}, \texttt{SUB}, \texttt{MUL}, \texttt{DIV}, \texttt{MOD}, \texttt{COMPARE}, \texttt{JUMP}, \texttt{JZ/JNZ}, \texttt{READ}, \texttt{WRITE}, etc. Each \emph{primitive} operation costs one unit of time (the \emph{uniform-cost} criterion).
-    \item \textbf{Program:} a finite list of instructions stored in a separate program memory; it does not count toward input size.
-\end{itemize}
-
-\subsection{Cost Model and the Word-RAM Refinement}
-Under the uniform-cost RAM, the \emph{running time} of an algorithm on an input of size $n$ is the number of primitive steps executed. Input size is measured in words (or bits when bit-complexity matters). For most of this book uniform cost is adequate because numbers fit in a word.
-
-When numbers grow huge (cryptography, arbitrary-precision arithmetic), we switch to the \emph{logarithmic-cost} or \emph{word-RAM} model: a word holds $w=\Theta(\log n)$ bits, arithmetic on $w$-bit words costs $O(1)$, but operating on $b$-bit integers costs $\Theta(b/w)$. We flag explicitly when bit-complexity matters; otherwise assume uniform cost.
-
-\subsection{Why This Model?}
-The RAM abstracts away real hardware --- no cache hierarchy, no branch prediction, no parallelism --- yet it predicts relative performance remarkably well: an $O(n\log n)$ RAM algorithm beats an $O(n^2)$ one on real machines once $n$ exceeds a modest threshold, regardless of constant factors. It also lets us reason \emph{before} implementing. Its limitations (ignoring memory hierarchy and parallelism) are addressed in advanced courses; for SC2001 it is the agreed accounting rule.
-
-\begin{example}[Cost of linear search on RAM]
+Concretely: memory $M[0\ldots m-1]$ of words ($\Theta(\log n)$ bits) with $O(1)$ random access; CPU registers + ALU + program counter; instruction set \texttt{LOAD}, \texttt{STORE}, \texttt{ADD}, \texttt{SUB}, \texttt{MUL}, \texttt{DIV}, \texttt{MOD}, \texttt{COMPARE}, \texttt{JUMP}, \texttt{JZ}, \texttt{READ}, \texttt{WRITE} each cost $1$ (uniform cost); program stored separately.
+\subsection{Cost Model and Word-RAM Refinement}
+Running time $=$ number of primitive steps. Input size in words (or bits when bit-complexity matters). Uniform cost suffices while numbers fit in a word ($w=\Theta(\log n)$ bits). For huge integers, arithmetic on $b$-bit values costs $\Theta(b/w)$; we flag when bit-complexity matters.
+Why this model? It abstracts caches/pipelines yet predicts correctly: $O(n\log n)$ beats $O(n^2)$ past a modest $n$, letting us reason before implementing.
+\begin{example}[Cost of linear search]
 \begin{quote}\ttfamily
 \textsc{LinearSearch}$(A,n,key)$\\
 1\ \ \textbf{for} $i\gets1$ \textbf{to} $n$ \textbf{do}\\
 2\ \ \ \ \ \ \textbf{if} $A[i]=key$ \textbf{then return} $i$\\
 3\ \ \textbf{return} NIL
 \end{quote}
-Each loop iteration performs $O(1)$ RAM operations (one array access, one comparison, one branch). Hence the running time is proportional to the number of iterations --- the quantity we formalise in Chapter~2 as $O(n)$ worst-case.
+Each iteration does $O(1)$ RAM ops (array access + compare + branch); time $\propto$ iterations $=O(n)$ worst-case.
 \end{example}
 
 % ============================================================
 \section{Correctness: Loop Invariants and Termination}
 \label{sec:invariants}
-
-An algorithm is useless if it returns the wrong answer or never stops. \emph{Correctness} has two parts:
-\begin{itemize}
-    \item \textbf{Partial correctness:} \emph{if} the algorithm terminates, its output satisfies the specification.
-    \item \textbf{Termination:} the algorithm terminates on every admissible input.
-\end{itemize}
-Together they give \emph{total correctness}. For iterative algorithms, partial correctness is proved via \emph{loop invariants}; termination via a \emph{variant} (a quantity that strictly decreases and is bounded below).
-
+An algorithm is useless if wrong or non-terminating. \emph{Correctness} $=$ partial correctness (if it stops, output meets spec) + termination. For loops: invariant for the former, variant for the latter.
+% --- FLIPPED: Recipe + array-barrier TikZ BEFORE formal LI1-3 ---
+\begin{remark}[Recipe --- words before formal] When you write an invariant, answer: What is done? What remains? Where is the boundary? State it in words first (``first $j-1$ slots already sorted''), then formalise. \end{remark}
+\begin{center}
+\begin{tikzpicture}[scale=0.82]
+\draw[thick,fill=green!18] (0,0) rectangle (3.0,0.65);
+\draw[thick,fill=yellow!18] (3.0,0) rectangle (6.0,0.65);
+\draw[thick,fill=gray!12] (6.0,0) rectangle (7.0,0.65);
+\draw[thick,red!70!black] (3.0,-0.08)--(3.0,0.73);
+\foreach \x in {0,1,2,3,4,5,6} \draw (\x,0)--(\x,0.65);
+\node[font=\tiny] at (1.5,0.32) {sorted $A[1..j-1]$};
+\node[font=\tiny] at (4.5,0.32) {unsorted $A[j..n]$};
+\node[font=\tiny] at (6.5,0.32) {done};
+\node[font=\tiny,red!70!black] at (3.0,-0.35) {boundary $j$};
+\node[font=\tiny,align=center] at (3.5,-0.85) {Invariant = ``left of barrier sorted \& is permutation of original prefix''};
+\end{tikzpicture}
+\end{center}
 \begin{definition}[Loop invariant]
-A predicate $I$ on the program state is a \emph{loop invariant} for a loop with guard $G$ if:
+A predicate $I$ on program state is a \emph{loop invariant} for loop guard $G$ if:
 \begin{enumerate}[label=(LI\arabic*)]
-    \item \textbf{Initialisation:} $I$ holds before the first iteration.
-    \item \textbf{Maintenance:} if $I$ holds before an iteration and $G$ is true, then $I$ holds after that iteration.
-    \item \textbf{Termination:} when the loop exits ($\neg G$), $I\land\neg G$ implies the desired postcondition.
+    \item \textbf{Initialisation:} $I$ holds before first iteration.
+    \item \textbf{Maintenance:} if $I$ holds before an iteration and $G$ true, then $I$ holds after.
+    \item \textbf{Termination:} $I\land\neg G$ implies desired postcondition.
 \end{enumerate}
 \end{definition}
-Think of $I$ as the ``inductive hypothesis travelling around the loop'' --- its proof \emph{is} an induction on the number of iterations.
-
-We also need a \emph{variant} $v$ --- an integer expression such that each iteration strictly decreases $v$ and $v$ is bounded below (usually $v\ge0$). Existence of a variant guarantees the loop cannot run forever.
-
-\begin{example}[Insertion sort --- full correctness proof]
+Think of $I$ as the inductive hypothesis travelling around the loop---its proof \emph{is} induction on iteration count. A \emph{variant} $v$ (integer, strictly decreasing, bounded below, usually $\ge0$) guarantees termination.
+\begin{example}[Insertion sort --- full correctness]
 \begin{quote}\ttfamily
 \textsc{InsertionSort}$(A[1\ldots n])$\\
 1\ \ \textbf{for} $j\gets2$ \textbf{to} $n$ \textbf{do}\\
@@ -323,56 +274,22 @@ We also need a \emph{variant} $v$ --- an integer expression such that each itera
 6\ \ \ \ \ \ \ \ \ \ $i\gets i-1$\\
 7\ \ \ \ \ \ $A[i+1]\gets key$
 \end{quote}
-Specification: upon termination, $A[1\ldots n]$ is a permutation of the input and is non-decreasing.
-
-\emph{Outer-loop invariant:} At the start of each iteration $j$ ($2\le j\le n+1$), $A[1\ldots j-1]$ consists of the original elements $A_0[1\ldots j-1]$ in sorted order, and $A[j\ldots n]$ is untouched.
-
-\emph{Initialisation} ($j=2$): $A[1\ldots1]$ is trivially sorted. \emph{Maintenance:} Assume invariant at $j$. The inner while shifts the sorted block $A[1\ldots j-1]$ right until the correct position for $key=A_0[j]$ is found, then inserts $key$. Thus $A[1\ldots j]$ is sorted and contains exactly $A_0[1\ldots j]$. So invariant holds for $j+1$. \emph{Termination:} Loop exits when $j=n+1$; invariant gives $A[1\ldots n]$ sorted and a permutation of $A_0[1\ldots n]$.
-
-\emph{Inner loop:} Invariant: $A[i+2\ldots j]$ (if $i<j-1$) contains the original $A[1\ldots j-1]$ elements greater than $key$, shifted by one, and $A[1\ldots i]$ remains sorted and $\le key$ candidates. Variant: $i$, strictly decreasing and bounded below by $0$ --- so inner loop terminates. Outer loop variant is $n-j$, also decreasing. Hence total correctness.
+Spec: $A[1..n]$ is a permutation of input and non-decreasing. Outer invariant (words first): \emph{first $j-1$ slots are the original $A_0[1..j-1]$ in sorted order.} Formally $A[1..j-1]=\mathrm{sorted}(A_0[1..j-1])$. Initialisation $j=2$: $A[1..1]$ trivially sorted. Maintenance: inner loop shifts sorted block until position for $key=A_0[j]$ found, yielding sorted $A[1..j]$. Termination $j=n+1$: $A[1..n]$ sorted permutation. Inner invariant: $A[i+2..j]$ holds elements $>key$ shifted by one; $A[1..i]$ sorted. Variant $i$ decreases to $0$; outer variant $n-j$. Hence total correctness.
 \end{example}
-
-\begin{example}[Euclid terminates]
-Variant $v=b$ (the second argument). Each iteration replaces $(a,b)$ by $(b, a\bmod b)$ with $0\le a\bmod b < b$, so $v$ strictly decreases and stays $\ge0$. Hence the while loop must exit. Combined with invariant ``$\gcd(a,b)$ is unchanged'' (since $\gcd(a,b)=\gcd(b,a\bmod b)$), the returned $a$ equals the original gcd.
-\end{example}
-
-\begin{remark}[Recipe for students]
-When you write a loop invariant, answer three questions: What has been done so far? What remains? Where is the boundary? The invariant should mention the boundary index and state precisely what is true on each side. Vague invariants (``array is partially sorted'') are not invariants at all.
-\end{remark}
+\begin{example}[Euclid terminates] Variant $v=b$: $(a,b)\mapsto(b,a\bmod b)$ with $0\le a\bmod b<b$ so $v$ strictly decreases $\ge0$. Invariant $\gcd(a,b)$ unchanged ($\gcd(a,b)=\gcd(b,a\bmod b)$) gives postcondition $a=\gcd(a_0,b_0)$. \end{example}
 
 % ============================================================
 \section{Chapter Notes}
-
-The RAM model is due to Cook and Reckhow (1973) and formalised by Aho, Hopcroft, and Ullman. Our uniform-cost version follows CLRS Ch.~2; the word-RAM refinement is standard in modern algorithm theory (see Demaine, ``Cache-Oblivious Algorithms''). Loop invariants are Hoare logic in miniature (C.~A.~R.~Hoare, 1969); the full axiomatic method is covered in SC3270 Reasoning About Programs. For discrete mathematics, Rosen's \emph{Discrete Mathematics and Its Applications} and the MH1812 lecture notes remain the definitive references.
+The RAM model is due to Cook and Reckhow (1973) and Aho, Hopcroft, Ullman; our version follows CLRS Ch.~2; word-RAM is standard (Demaine). Loop invariants are Hoare logic in miniature (Hoare, 1969); full method in SC3270. For discrete math, Rosen and MH1812 notes remain references.
 
 % ============================================================
 \section{Exercises}
 \label{sec:ch01-exercises}
-
 \begin{enumerate}[label=E1.\arabic*, leftmargin=*, itemsep=0.8em]
-
-\item \textbf{Warm-up: logic and quantifiers.} Formalise ``Every SC2001 student who passed MH1812 can follow an induction proof'' using predicates, then write its negation without using $\neg$ directly in front of a quantifier. Explain why the negation is \emph{not} ``No SC2001 student who passed MH1812 can follow an induction proof.''
-
-\item \textbf{Induction --- weak vs.\ strong.} Prove by induction that for all $n\ge1$,
-\[
-\sum_{i=1}^{n} i^2 = \frac{n(n+1)(2n+1)}{6}.
-\]
-Then prove that every integer $n\ge12$ can be written as $4a+5b$ for non-negative integers $a,b$. Which proof needed strong induction, and why? (Hint for the second: check bases $12,13,14,15$ and step by $4$.)
-
-\item \textbf{RAM cost model.} Consider:
-\begin{quote}\ttfamily
-\textsc{SumArray}$(A[1\ldots n])$\\
-1\ \ $s\gets0$\\
-2\ \ \textbf{for} $i\gets1$ \textbf{to} $n$ \textbf{do} $s\gets s+A[i]$\\
-3\ \ \textbf{return} $s$
-\end{quote}
-(a) Count RAM primitive operations per line and give the total running time as a function of $n$ (up to constant factors). (b) Suppose each $A[i]$ is a $b$-bit integer with $b\gg\log n$. How does the answer change under the word-RAM model with word size $w=\Theta(\log n)$? (c) Would you call this algorithm $O(n)$ or $O(nb/w)$? Justify.
-
-\item \textbf{Loop invariant --- find the bug.} A student proposes this invariant for \textsc{LinearSearch}: ``At the start of iteration $i$, $key$ is not in $A[1\ldots i-1]$.'' Prove that if the loop invariant method is applied correctly, \textsc{LinearSearch} is correct. Then give a buggy variant of the algorithm where the same invariant still holds on every iteration but the algorithm is \emph{incorrect} upon termination, and explain which of (LI1)--(LI3) fails.
-
-\item \textbf{Euclid's invariant in full.} Prove the invariant ``$\gcd(a,b)$ is preserved'' for Euclid's algorithm from \S\ref{sec:what-is-algorithm}: show (a) $\gcd(a,b)=\gcd(b,a\bmod b)$ for $b>0$, (b) the invariant holds initially, is maintained, and implies the postcondition when $b=0$, and (c) the number of iterations is $O(\log b)$ by showing $a\bmod b < a/2$ when $b\le a$. This foreshadows the logarithmic analysis in Chapter~2.
-
+\item \textbf{Warm-up: logic and quantifiers.} Formalise ``Every SC2001 student who passed MH1812 can follow an induction proof'' using predicates, then write its negation without $\neg$ in front of a quantifier. Why is negation \emph{not} ``No student can''?
+\item \textbf{Induction --- weak vs.\ strong.} Prove $\sum_{i=1}^{n}i^2=n(n+1)(2n+1)/6$ by induction. Then prove every $n\ge12$ is $4a+5b$ ($a,b\ge0$). Which needed strong induction? (Hint: bases $12,13,14,15$.)
+\item \textbf{RAM cost model.} \begin{quote}\ttfamily\textsc{SumArray}$(A[1\ldots n])$\\1\ \ $s\gets0$\\2\ \ \textbf{for} $i\gets1$ \textbf{to} $n$ \textbf{do} $s\gets s+A[i]$\\3\ \ \textbf{return} $s$\end{quote} (a) Count RAM ops/line and total time. (b) If each $A[i]$ is $b\gg\log n$ bits, how does word-RAM $w=\Theta(\log n)$ change it? (c) $O(n)$ or $O(nb/w)$?
+\item \textbf{Loop invariant --- find the bug.} Invariant for \textsc{LinearSearch}: ``At start of iteration $i$, $key\notin A[1..i-1]$.'' Prove correctness if used correctly. Give a buggy variant where invariant holds but algorithm incorrect on termination; which of (LI1)--(LI3) fails?
+\item \textbf{Euclid's invariant in full.} Show (a) $\gcd(a,b)=\gcd(b,a\bmod b)$ for $b>0$, (b) invariant holds/when $b=0$ postcondition, (c) $O(\log b)$ iterations via $a\bmod b<a/2$ when $b\le a$.
 \end{enumerate}
-
-% ============================================================
 % End of Chapter 1
