@@ -1,0 +1,202 @@
+\chapter{Pipelining \& Hazards}\label{ch:pipeline}
+\begin{center}\small\textit{Like a laundry pipeline: while one load dries, the next washes. Latency for one load is unchanged; throughput quadruples.}\end{center}
+
+\section{Latency versus Throughput: Why Pipeline?}
+A single-cycle datapath finishes one instruction per long clock: $T_{\text{seq}}=t_{\text{IF}}+t_{\text{ID}}+t_{\text{EX}}+t_{\text{MEM}}+t_{\text{WB}}$. The ALU idles during IF; the memory idles during EX. Pipelining overlaps: each stage works on a \emph{different} instruction simultaneously, like an assembly line.
+
+Two metrics separate cleanly. \textbf{Latency} is time for \emph{one} instruction through all stages (still 5 cycles). \textbf{Throughput} is instructions completed per cycle in steady state (ideally 1/cycle). We pipeline to improve throughput at modest latency cost, not to make a single instruction faster. The laundry analogy is exact: one load takes 2 hours regardless, but with 4 stages you finish a load every 30 minutes in steady state.
+
+\begin{definition}[Ideal Speedup and Real Clock]
+With $n=5$ stages each $t$, $k$ instructions: sequential time $=k\cdot n\cdot t$, pipelined time $=(n+k-1)\cdot t$ (fill $n-1$ cycles, then one per cycle). Speedup $=kn/(n+k-1)\to n$ as $k\to\infty$. With unbalanced stage delays, clock period $=\max_i t_i + t_{\text{reg}}$, so real speedup $<n$. Register overhead $t_{\text{reg}}$ covers setup, clk-to-Q, and skew.
+\end{definition}
+
+Example: $t_{\text{IF}}=2.0$, $t_{\text{ID}}=1.5$, $t_{\text{EX}}=2.0$, $t_{\text{MEM}}=2.5$, $t_{\text{WB}}=1.0$\,ns, register overhead $0.2$\,ns. Single-cycle $T=9.0$\,ns. Pipelined $T_{\text{clk}}=\max t_i+0.2=2.7$\,ns. Five instructions: sequential $45$\,ns, pipelined $(5+4)\times2.7=24.3$\,ns, speedup $1.85\times$ not $5\times$ because the slowest stage (MEM at 2.5\,ns) dictates. For $k=1000$: sequential $9000$\,ns, pipelined $1004\times2.7=2711$\,ns, speedup $3.32\times$---approaching $n$ but capped by imbalance.
+
+\section{The 5-Stage Pipeline and Its Registers}
+Stages: \textbf{IF} fetch (PC$\to$IMEM), \textbf{ID} decode + reg-read, \textbf{EX} ALU/branch-compare, \textbf{MEM} D-memory, \textbf{WB} write-back. Between each pair sits a pipeline register that snapshots all state needed downstream: instruction word, PC+4, register operands, immediates, and control bits.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=blue!16, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (IF) at (0,0) {\textbf{IF}};
+\node[draw, fill=green!16, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (ID) at (2.4,0) {\textbf{ID}};
+\node[draw, fill=orange!18, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (EX) at (4.8,0) {\textbf{EX}};
+\node[draw, fill=red!14, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (MEM) at (7.2,0) {\textbf{MEM}};
+\node[draw, fill=violet!14, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (WB) at (9.6,0) {\textbf{WB}};
+\foreach \a/\b in {IF/ID, ID/EX, EX/MEM, MEM/WB} {\draw[-{Stealth}, thick, blue!60!black] (\a.east) -- (\b.west);}
+\draw[fill=gray!22, draw=gray!60!black] (1.2,-0.28) rectangle (1.45,0.28) node[midway, above, font=\tiny, yshift=0.42cm, align=center] {IF/ID};
+\draw[fill=gray!22, draw=gray!60!black] (3.6,-0.28) rectangle (3.85,0.28) node[midway, above, font=\tiny, yshift=0.42cm] {ID/EX};
+\draw[fill=gray!22, draw=gray!60!black] (6.0,-0.28) rectangle (6.25,0.28) node[midway, above, font=\tiny, yshift=0.42cm] {EX/MEM};
+\draw[fill=gray!22, draw=gray!60!black] (8.4,-0.28) rectangle (8.65,0.28) node[midway, above, font=\tiny, yshift=0.42cm] {MEM/WB};
+\node[below=0.65cm of IF, font=\tiny, align=center] {PC+IMEM};
+\node[below=0.65cm of ID, font=\tiny, align=center] {decode\\reg-file};
+\node[below=0.65cm of EX, font=\tiny, align=center] {ALU\\branch};
+\node[below=0.65cm of MEM, font=\tiny, align=center] {DMEM};
+\node[below=0.65cm of WB, font=\tiny, align=center] {write-back};
+\node[above=0.75cm of EX, font=\tiny, fill=yellow!12, draw=orange!40!black, rounded corners=2pt, inner sep=2pt] {Each register holds IR, PC+4, operands, immediates, control};
+\end{tikzpicture}
+\end{center}
+
+What each register carries: \texttt{IF/ID}: IR (32\,b), PC+4, PC. \texttt{ID/EX}: Rs1/Rs2 values, imm, Rd, funct3/7, control (ALUSrc, ALUOp, MemRead/Write, RegWrite, Branch). \texttt{EX/MEM}: ALU result, Rs2 (store data), Rd, Zero/branch, control. \texttt{MEM/WB}: memory data, ALU result, Rd, RegWrite/MemToReg. Width $\approx 120$--$160$\,b total per register. On reset or flush, control bits are zeroed to create a \texttt{nop}.
+
+Pipeline timeline (columns are cycles, rows are instructions in program order). Steady state is cycles 4--6 where all five stages are occupied.
+
+\begin{center}
+\small
+\begin{tabular}{lccccccccc}
+\toprule Instr & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9\\ \midrule
+\texttt{LW  x5,0(x6)}  & \cellcolor{blue!10}IF & \cellcolor{green!10}ID & \cellcolor{orange!10}EX & \cellcolor{red!10}MEM & \cellcolor{violet!10}WB & & & &\\
+\texttt{ADD x7,x5,x8}  & & \cellcolor{blue!10}IF & \cellcolor{green!10}ID & \cellcolor{orange!10}EX & \cellcolor{red!10}MEM & \cellcolor{violet!10}WB & & &\\
+\texttt{SW  x7,4(x9)}  & & & \cellcolor{blue!10}IF & \cellcolor{green!10}ID & \cellcolor{orange!10}EX & \cellcolor{red!10}MEM & \cellcolor{violet!10}WB & &\\
+\texttt{SUB x10,x7,x1} & & & & \cellcolor{blue!10}IF & \cellcolor{green!10}ID & \cellcolor{orange!10}EX & \cellcolor{red!10}MEM & \cellcolor{violet!10}WB &\\
+\texttt{BEQ x10,x0,L}  & & & & & \cellcolor{blue!10}IF & \cellcolor{green!10}ID & \cellcolor{orange!10}EX & \cellcolor{red!10}MEM & \cellcolor{violet!10}WB\\ \bottomrule
+\end{tabular}
+\end{center}
+Without hazards, CPI $=1$ in steady state. Each column has exactly one instruction per stage; the diagonal shows one instruction flowing through the pipeline every cycle.
+
+\section{Three Hazard Classes}
+Pipelining would be trivial without dependencies. Real code creates hazards that force stalls or forwarding. Recall \emph{latency} is unchanged (5 cycles); hazards hurt \emph{throughput} by inserting dead cycles.
+
+\textbf{1. Structural hazards}: two instructions need the same hardware simultaneously. Classic example: single-ported memory for IF and MEM---a load in MEM and the next fetch in IF collide. Fix: split I-MEM/D-MEM (Harvard at L1---separate I-cache and D-cache), or stall one stage. Modern cores avoid this by construction; the only remaining structural hazards are deliberate (e.g., one multiplier shared between EX stages in superscalar).
+
+\textbf{2. Data hazards (RAW)}: instruction $j$ reads a register that instruction $i$ has not yet written. Example: \texttt{ADD x5,x6,x7} $\to$ \texttt{SUB x8,x5,x9}---\texttt{SUB} needs \texttt{x5} in ID while \texttt{ADD} is still in EX. WAR/WAW hazards do not occur in this simple in-order 5-stage but appear in out-of-order pipelines.
+
+\textbf{3. Control hazards}: branch/jump target unknown until after EX (or ID if comparator moved). Instructions fetched after the branch may be wrong-path and must be flushed. Control hazards are rarer than data but cost more cycles per occurrence.
+
+\section{Forwarding: The Rd == Rs Truth Table}
+Rather than stall on every RAW, we \emph{forward} (bypass) the result from a later stage directly to the ALU input mux. The hazard/forwarding unit compares destination and source register numbers combinatorially in ID.
+
+\begin{center}
+\small
+\begin{tabular}{lllc}
+\toprule Condition & Meaning & Forward? & Mux select\\ \midrule
+\texttt{Rd$_{\text{EX}}$==Rs1$_{\text{ID}}$} and \texttt{RegWrite$_{\text{EX}}$} and \texttt{Rd$_{\text{EX}}\neq$x0} & EX produces Rs1 needed now & Yes & \texttt{FwdA}=EX/MEM\\
+\texttt{Rd$_{\text{EX}}$==Rs2$_{\text{ID}}$} and \texttt{RegWrite$_{\text{EX}}$} and \texttt{Rd$_{\text{EX}}\neq$x0} & EX produces Rs2 needed now & Yes & \texttt{FwdB}=EX/MEM\\
+\texttt{Rd$_{\text{MEM}}$==Rs1$_{\text{ID}}$} and \texttt{RegWrite$_{\text{MEM}}$} and \texttt{Rd$_{\text{MEM}}\neq$x0} & MEM/WB produces Rs1 & Yes* & \texttt{FwdA}=MEM/WB\\
+\texttt{Rd$_{\text{MEM}}$==Rs2$_{\text{ID}}$} and \texttt{RegWrite$_{\text{MEM}}$} and \texttt{Rd$_{\text{MEM}}\neq$x0} & MEM/WB produces Rs2 & Yes* & \texttt{FwdB}=MEM/WB\\
+Otherwise & No match or \texttt{x0} & No & \texttt{Fwd}=Reg\\ \bottomrule
+\end{tabular}
+\end{center}
+*EX/MEM has priority over MEM/WB when both match (more recent result wins). The check \texttt{Rd$\neq$x0} is essential because \texttt{x0} is hard-wired zero; forwarding a bogus value to \texttt{x0} would corrupt it. Sources: EX/MEM forwards the ALU result; MEM/WB forwards either the ALU result or loaded data depending on MemToReg.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=orange!18, trapezium, trapezium angle=72, minimum width=1.7cm, minimum height=1.05cm] (alu) at (4,0) {ALU};
+\node[draw, fill=blue!14, minimum width=1.7cm, minimum height=0.75cm, rounded corners=2pt] (fwd) at (4,1.75) {Forward Unit};
+\node[draw, fill=green!14, minimum width=1.35cm, minimum height=0.75cm, rounded corners=2pt] (exmem) at (6.8,0.35) {EX/MEM};
+\node[draw, fill=red!14, minimum width=1.35cm, minimum height=0.75cm, rounded corners=2pt] (memwb) at (6.8,-1.15) {MEM/WB};
+\node[draw, fill=blue!10, minimum width=1.4cm, minimum height=0.7cm, rounded corners=2pt] (idex) at (1.2,0) {ID/EX mux};
+\draw[-{Stealth}, thick, violet!70!black] (exmem.west) -| (fwd.east) node[pos=0.25, above, font=\tiny] {Rd, result};
+\draw[-{Stealth}, thick, violet!70!black] (memwb.west) -| (fwd.east);
+\draw[-{Stealth}, thick, blue!60!black] (fwd.south) -- (alu.north) node[midway, right, font=\tiny] {FwdA/B=0/1/2};
+\draw[-{Stealth}, thick, green!60!black] (idex.east) -- (alu.west) node[midway, above, font=\tiny] {Rs1/Rs2 or fwd};
+\node[below=0.45cm of alu, font=\tiny, align=center, fill=yellow!10, draw=orange!30, rounded corners=2pt] {mux: 0=reg, 1=EX/MEM, 2=MEM/WB};
+\node[left=0.15cm of idex, font=\tiny, text=gray!60!black] {Rs1,Rs2};
+\end{tikzpicture}
+\end{center}
+
+Code example with two forwardable hazards and one load-use that still stalls:
+\begin{lstlisting}[language={[x86masm]Assembler}]
+ADD x5,x6,x7       # EX/MEM -> next instr (forwarded)
+SUB x8,x5,x9       # uses x5, forwarded from ADD, no stall
+LW  x10,0(x5)      # load result only ready after MEM
+ADD x11,x10,x1     # load-use: cannot forward in time -> 1 bubble
+\end{lstlisting}
+Without forwarding, the first two instructions would each stall 2 cycles; with forwarding they stall zero.
+
+\section{Load-Use Hazard: The Unavoidable Bubble}
+A load produces data at the \emph{end} of MEM, but the next instruction needs it at the \emph{start} of EX---one cycle too early. No forwarding path can go backward in time, so a one-cycle \textbf{bubble} (nop) is mandatory.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\draw[fill=blue!10] (0,0) rectangle (1.2,0.55) node[midway] {IF};
+\draw[fill=green!12] (1.3,0) rectangle (2.5,0.55) node[midway] {ID};
+\draw[fill=orange!16] (2.6,0) rectangle (3.8,0.55) node[midway] {EX};
+\draw[fill=red!14] (3.9,0) rectangle (5.1,0.55) node[midway] {MEM};
+\draw[fill=violet!14] (5.2,0) rectangle (6.4,0.55) node[midway] {WB};
+\node[above=0.12cm of {(2.6,0.55)}, font=\tiny, text=gray!60!black] {LW x5,0(x6)};
+\draw[fill=blue!10] (0,-0.85) rectangle (1.2,-0.30) node[midway] {IF};
+\draw[fill=gray!22] (1.3,-0.85) rectangle (2.5,-0.30) node[midway] {stall};
+\draw[fill=orange!16] (2.6,-0.85) rectangle (3.8,-0.30) node[midway] {EX};
+\draw[fill=red!14] (3.9,-0.85) rectangle (5.1,-0.30) node[midway] {MEM};
+\draw[fill=violet!14] (5.2,-0.85) rectangle (6.4,-0.30) node[midway] {WB};
+\node[above=0.02cm of {(0,-0.30)}, font=\tiny, text=red!60!black] {ADD x7,x5,x8 (needs x5)};
+\draw[thick, red!60!black, -{Stealth}] (4.5,0) -- (4.5,-0.30) node[midway, right, font=\tiny] {too late};
+\node[below=0.15cm of {(1.3,-0.85)}, font=\tiny, text=red!70!black] {bubble (nop) into ID/EX; IF/ID frozen 1 cycle};
+\end{tikzpicture}
+\end{center}
+
+Detection logic evaluated in ID: if \texttt{MemRead$_{\text{ID/EX}}$} is set and \texttt{Rd$_{\text{ID/EX}}$} equals either \texttt{Rs1$_{\text{IF/ID}}$} or \texttt{Rs2$_{\text{IF/ID}}$}, stall IF and ID for one cycle and inject \texttt{nop} (all-zero control) into ID/EX. After the bubble, forwarding from MEM/WB supplies the loaded word. Cost: one dead cycle per load-use pair. Compiler scheduling (hoist an independent instruction between \texttt{LW} and its use) can hide it entirely: \texttt{LW x5,0(x6)}; \texttt{ADD x7,x8,x9}; \texttt{ADD x10,x5,x7}.
+
+\section{Control Hazards and Branch Prediction: CPI = 1 + s}
+Branches decide late. In the baseline, comparison happens in EX, so the two instructions fetched after the branch (in IF and ID) are speculative. If the branch is taken, they must be flushed (convert to nops by zeroing IF/ID and ID/EX control).
+
+Moving the comparator to ID (extra equality comparator plus early branch-target adder driven by ID's immediate) cuts penalty from 2 to 1 cycle: flush only IF/ID. This needs the register values to be ready in ID---a data hazard on a branch that immediately follows an ALU op may itself require a stall or forward to ID.
+
+Prediction hides even that last cycle:
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=blue!14, minimum width=1.7cm, minimum height=0.8cm, rounded corners=2pt] (b) at (0,0) {Branch in ID};
+\node[draw, fill=red!14, minimum width=3.2cm, minimum height=0.8cm, align=center, rounded corners=2pt] (flush) at (4.2,0) {Flush IF/ID (+ID/EX if EX)};
+\node[draw, fill=green!14, minimum width=1.7cm, minimum height=0.8cm, rounded corners=2pt] (target) at (8.4,0) {Target PC};
+\draw[-{Stealth}, thick, red!60!black] (b.east) -- (flush.west) node[midway, above, font=\tiny] {mispredict};
+\draw[-{Stealth}, thick, green!60!black] (flush.east) -- (target.west) node[midway, above, font=\tiny] {redirect};
+\node[below=0.55cm of flush, font=\tiny, align=center, fill=yellow!10, draw=gray!40, rounded corners=2pt] {Predict not-taken: 0 if correct, flush if taken;\\2-bit counter gives $>95\%$ on loops};
+\end{tikzpicture}
+\end{center}
+
+Performance under hazards is captured by one parameter $s$ (average stall cycles per instruction):
+\[ \text{CPI}= \text{CPI}_{\text{ideal}} + s = 1 + s,\qquad s = s_{\text{data}}+s_{\text{control}}+s_{\text{structural}}. \]
+For branches: let $f_b$ be branch frequency, $m$ mispredict rate, penalty $c$ per mispredict.
+Then $s_{\text{control}}=f_b\cdot m\cdot c$.
+Example with baseline EX-resolved branches: $f_b=20\%$, $m=30\%$ (predict-not-taken), $c=2$ gives $s=0.20\times0.30\times2=0.12$, so $\text{CPI}=1.12$.
+With a 2-bit predictor and ID-resolved branches: $m=5\%$, $c=1$ gives $s=0.20\times0.05\times1=0.01$, so $\text{CPI}=1.01$---almost ideal.
+Modern predictors (2-bit counters, correlating/tournament, TAGE) dominate branch-heavy performance; accuracy, not pipeline depth, sets CPI.
+
+Forwarding minimises $s_{\text{data}}$; branch prediction minimises $s_{\text{control}}$; split I/D caches minimise $s_{\text{structural}}$. Together they keep $s\ll1$.
+
+\section{Worked Hazard Walkthrough}
+Trace \texttt{LW x5,0(x1)}; \texttt{ADD x6,x5,x2}; \texttt{SUB x7,x6,x3}; \texttt{BEQ x7,x0,Loop} through the pipeline with full forwarding and ID-resolved branches.
+
+Cycle 1--2: \texttt{LW} in IF, then ID. No hazard yet.
+
+Cycle 3: \texttt{LW} in EX, \texttt{ADD} in ID. Hazard unit sees \texttt{MemRead$_{\text{ID/EX}}$} and \texttt{Rd$=$x5} equals \texttt{Rs1$_{\text{IF/ID}}$}---load-use detected. Action: freeze PC and IF/ID, inject bubble into ID/EX. \texttt{ADD} is held in ID one extra cycle.
+
+Cycle 4: \texttt{LW} in MEM, bubble in EX, \texttt{ADD} still in ID (now safe to forward from MEM/WB next cycle). No new hazard.
+
+Cycle 5: \texttt{LW} in WB (writes x5), \texttt{ADD} in EX (receives x5 forwarded from MEM/WB), \texttt{SUB} in ID. \texttt{SUB} needs \texttt{x6} which \texttt{ADD} will produce in EX/MEM next cycle---forwardable, no stall. Comparator in ID for the later \texttt{BEQ} will need \texttt{x7}, creating a similar forward chain.
+
+Result: one bubble for the load-use, zero for the ALU-ALU chain, one flush if the branch is mispredicted. CPI $=1+1/4=1.25$ for this snippet without branch mispredict; with correct prediction CPI $=1.25$, with mispredict $=1.50$.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.82]
+\node[draw, fill=blue!12, minimum width=1.35cm, minimum height=0.55cm] (a) at (0,0) {LW miss? no};
+\node[draw, fill=orange!16, minimum width=1.45cm, minimum height=0.55cm] (b) at (2.7,0) {ADD fwd MEM/WB};
+\node[draw, fill=green!14, minimum width=1.45cm, minimum height=0.55cm] (c) at (5.4,0) {SUB fwd EX/MEM};
+\node[draw, fill=red!12, minimum width=1.45cm, minimum height=0.55cm] (d) at (8.1,0) {BEQ predict};
+\draw[-{Stealth}, thick, blue!60!black] (a.east) -- (b.west);
+\draw[-{Stealth}, thick, green!60!black] (b.east) -- (c.west);
+\draw[-{Stealth}, thick, red!60!black] (c.east) -- (d.west);
+\node[below=0.35cm of b, font=\tiny, fill=gray!10, draw=gray!40, rounded corners=2pt] {1 bubble between LW and ADD};
+\end{tikzpicture}
+\end{center}
+
+\section{Stall Minimisation Toolbox}
+Compiler and hardware cooperate to keep $s$ small: (1) \textbf{schedule} independent instructions between load and use (often found by unrolling loops), (2) \textbf{unroll} to expose more independent work, (3) \textbf{predict} branches with 2-bit or TAGE predictors, (4) \textbf{speculate} past branches and squash on miss, (5) \textbf{superscalar} to find parallelism across wider issue. Each technique is judged by $\Delta\text{CPI}$ versus $\Delta T_{\text{clk}}$---if it raises clock period more than it cuts CPI, it loses.
+
+\section{Why Forwarding Sometimes Fails and How Compilers Help}
+Forwarding covers ALU$\to$ALU and MEM$\to$ALU paths, but two cases still stall. First, load-use as above: data arrives from DRAM too late. Second, branch data hazard: \texttt{ADD x5,x6,x7}; \texttt{BEQ x5,x8,Label} needs \texttt{x5} in ID for comparison, but \texttt{x5} is still in EX---requires a forward to ID or a one-cycle stall if the bypass to ID is not implemented. Compilers hide load-use by scheduling: place an independent instruction between the load and its consumer, e.g.\ unroll a loop to interleave iterations. When no independent work exists, the bubble is unavoidable and accounted for in $s_{\text{data}}$.
+
+\section{Branch Predictor Detail: 2-bit Saturating Counter}
+Each branch PC indexes a table of 2-bit counters: states 00 strongly not-taken, 01 weakly not-taken, 10 weakly taken, 11 strongly taken. Taken increments toward 11, not-taken decrements toward 00; prediction is taken if state $\ge10$. This filters single outliers: a loop branch taken 9 times then not-taken once stays predicted taken, unlike a 1-bit predictor that would mispredict twice. With $20\%$ branches and per-branch mispredict $5\%$, $s_{\text{control}}=0.20\times0.05\times1=0.01$ (ID-resolved), versus $0.12$ without prediction---an order-of-magnitude CPI win.
+
+\section{Advanced Glimpse: Superscalar and Out-of-Order}
+Real cores fetch/decode 4--8 instructions per cycle (superscalar), rename registers to remove WAR/WAW false dependencies, and execute out-of-order via Tomasulo reservation stations, retiring in-order for precise exceptions. Deeper pipelines (14--19 stages) raise $f$ but amplify hazard penalties, so the same trade-off $T_{\text{clk}}$ vs.\ CPI governs. The hazard taxonomy above scales: forwarding becomes a full bypass network with many read ports, branch prediction becomes TAGE with indirect targets and return stacks.
+
+\section{Exercises}
+\begin{exercise}For \texttt{LW x5,0(x1)}; \texttt{ADD x6,x5,x2}; \texttt{SUB x7,x6,x3}, list RAW hazards. Which are resolved by forwarding, which need a bubble? Show the timeline with and without forwarding.\end{exercise}
+\begin{exercise}Why does load-use need a bubble even with full forwarding? Draw the cycle diagram and mark when data is available vs.\ needed.\end{exercise}
+\begin{exercise}A pipeline has branch penalty 2 cycles, 20\% branches, 70\% predicted correctly. Compute $s_{\text{control}}$ and CPI. If moving compare to ID cuts penalty to 1, what is new CPI?\end{exercise}
+\begin{exercise}Explain why \texttt{Rd==x0} must suppress forwarding. Give a code snippet where omitting the check corrupts \texttt{x0}.\end{exercise}
+\begin{exercise}A 5-stage pipeline with $t_{\text{IF}}=2$, $t_{\text{ID}}=1.5$, $t_{\text{EX}}=2$, $t_{\text{MEM}}=2.5$, $t_{\text{WB}}=1$\,ns plus $0.2$\,ns register overhead. What is $T_{\text{clk}}$? Latency for one instruction? Throughput for 1000 instructions? Speedup vs.\ single-cycle?\end{exercise}
+

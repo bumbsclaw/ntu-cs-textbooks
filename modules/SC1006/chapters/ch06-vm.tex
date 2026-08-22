@@ -1,0 +1,262 @@
+\chapter{Virtual Memory}\label{ch:vm}
+\begin{center}\small\textit{Every program thinks it owns all of memory; the OS and hardware conspire to make it so.}\end{center}
+
+\section{Why Virtual Memory?}
+Three problems without it: (1) programs must know physical layout and avoid each other, (2) memory looks discontinuous due to fragmentation, (3) isolation is weak --- one bug corrupts another process. Virtual memory solves all three by giving each process its own virtual address space, translated by hardware to physical frames, with protection checked on every access.
+
+Benefits: \textbf{isolation} (page-table permissions), \textbf{sharing} (same physical frame mapped in two spaces), \textbf{demand paging} (pages loaded on first touch), and the illusion of more memory than DRAM via swapping to disk.
+Without VM, \texttt{malloc} would need contiguous physical frames; with VM, any scattered frames appear contiguous virtually. This is why a 4\,KB \texttt{mmap} always succeeds even when DRAM is heavily fragmented.
+
+\section{Pages, Frames, and Page Tables}
+Memory is divided into fixed \textbf{pages} (virtual, e.g., 4\,KB) and \textbf{frames} (physical, same size). A \textbf{page table} maps virtual page number (VPN) $\to$ physical frame number (PFN) plus metadata (valid, dirty, permission bits R/W/X, accessed, user/supervisor).
+
+For 32-bit VA, 4\,KB pages: offset $=12$ bits, VPN $=20$ bits. A single-level table needs $2^{20}$ entries ($\approx 4$\,MB) --- too large and sparse. So we use multi-level (hierarchical) tables: RISC-V Sv32 has two levels (10+10+12), Sv39 three levels (9+9+9+12).
+
+A \textbf{PTE} (page-table entry) is 4\,B in Sv32 and 8\,B in Sv39. Fields: PFN (20 bits in Sv32, 44 in Sv39), valid (V), readable (R), writable (W), executable (X), user (U), global (G), accessed (A), dirty (D), plus software bits. If R=W=X$=0$, the PTE is a non-leaf pointer to the next level; otherwise it is a leaf mapping.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.87]
+\node[draw, fill=blue!12, minimum width=2.6cm, minimum height=0.7cm] (va) at (0,1.8) {VA: VPN | offset};
+\node[draw, fill=orange!16, minimum width=3.0cm, minimum height=1.6cm, align=center] (pt) at (4.5,1.2) {Page Table\\{\tiny VPN $\to$ PFN}\\{\tiny + valid/dirty/RWX}};
+\node[draw, fill=green!14, minimum width=2.6cm, minimum height=0.7cm] (pa) at (8.5,1.8) {PA: PFN | offset};
+\draw[-{Stealth}, thick, blue!60!black] (va.east) -- (pt.west) node[midway, above, font=\tiny] {VPN lookup};
+\draw[-{Stealth}, thick, green!60!black] (pt.east) -- (pa.west) node[midway, above, font=\tiny] {PFN};
+\node[below=0.4cm of pt, font=\tiny, align=center, text=violet!70!black] {offset passes\\through unchanged};
+\draw[dashed, violet!60!black, -{Stealth}] (va.south) ++(0.9,0) -- ++(0,-1.2) -- (pa.south) ++(-0.9,0);
+\end{tikzpicture}
+\end{center}
+Key invariant: \textbf{offset passes through unchanged}. Page size is a power of two, so the low 12 bits address within the page identically in virtual and physical space. Only the page number translates.
+
+\section{Sv32 vs.\ Sv39 Multi-Level Organisation}
+Sv32 (32-bit VA) splits as 10+10+12. Root table has $2^{10}=1024$ entries (4\,KB exactly, one page). Each entry either points to a second-level table (1024 entries) or is a 4\,MB megapage leaf. Two memory accesses worst case. Total PTEs for a fully populated space: $1024 + 1024\times1024 \approx 1$M, but sparse processes allocate only a handful of second-level tables.
+
+Sv39 (39-bit VA, 512\,GB per process, 56-bit PA) splits as 9+9+9+12. Each level has $2^9=512$ PTEs $\times 8$\,B $=4096$\,B $=4$\,KB per table page. Walk: \texttt{satp.PPN} gives root PFN; index by VPN[2] (bits 38:30); if leaf, done; else next table at PTE.PPN indexed by VPN[1] (29:21); then VPN[0] (20:12). Three memory accesses worst case for 4\,KB pages; only one or two for huge pages.
+
+Why hierarchical? A single-level Sv39 table would need $2^{27}=134$M PTEs $\times 8$\,B $=1$\,GB per process. Multi-level pays at most three 4\,KB pages for a minimal process with one code, one data, and one stack page.
+
+\section{TLB: Making Translation Fast}
+Page-table walk needs 2--4 memory accesses --- far too slow per instruction. The \textbf{Translation Lookaside Buffer} (TLB) caches recent VPN$\to$PFN mappings (typically 32--128 entries, fully or set-associative). Hit rate $>99\%$ makes translation almost free.
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!12, minimum width=1.8cm, minimum height=0.7cm] (vpn) at (0,0) {VPN};
+\node[draw, fill=green!14, minimum width=2.0cm, minimum height=1.2cm, align=center] (tlb) at (3.5,0) {TLB\\{\tiny cache of PTEs}\\{\tiny tag = VPN}};
+\node[draw, fill=orange!16, minimum width=1.4cm, minimum height=0.7cm] (pfn) at (7,0) {PFN};
+\node[draw, fill=red!12, minimum width=2.2cm, minimum height=0.7cm, align=center] (pt2) at (3.5,-1.6) {Page table\\in DRAM};
+\draw[-{Stealth}, thick, blue!60!black] (vpn.east) -- (tlb.west) node[midway, above, font=\tiny] {lookup};
+\draw[-{Stealth}, thick, green!60!black] (tlb.east) -- (pfn.west) node[midway, above, font=\tiny] {hit};
+\draw[-{Stealth}, thick, red!60!black, dashed] (tlb.south) -- (pt2.north) node[midway, right, font=\tiny] {miss: walk};
+\draw[-{Stealth}, thick, red!60!black, dashed] (pt2.east) -| (tlb.south);
+\node[below=0.3cm of pfn, font=\tiny, text=gray!60!black] {+ offset $\to$ PA};
+\end{tikzpicture}
+\end{center}
+
+On TLB miss, hardware (x86, RISC-V) or OS handler (MIPS) walks the page table, refills the TLB, and retries. TLB entries have an Address Space ID (ASID) so a context switch need not flush all entries.
+
+\textbf{TLB AMAT with numbers.} Let TLB hit time $=1$\,ns (parallel with cache tag), miss penalty $=3$ DRAM accesses $\approx 45$\,ns for Sv39 walk (3 PTE loads at $\sim 15$\,ns each if cached in L2, or $240$\,ns if all miss to DRAM). With hit rate $99.2\%$:
+\[ T_{\text{trans}} = 1 + 0.008 \times 45 = 1.36\text{\,ns}. \]
+If refill goes to DRAM ($240$\,ns): $1 + 0.008\times240 = 2.92$\,ns --- still tiny. But at $95\%$ hit rate (thrashing or random access): $1+0.05\times45=3.25$\,ns and $13$\,ns to DRAM, now visible in AMAT.
+
+Combined AMAT with cache: $\text{AMAT}=T_{\text{trans}}+h_{L1}+m_{L1}\cdot(h_{L2}+m_{L2}\cdot p)$. VM translation adds $\sim 1$--$3$\,ns to every memory access on top of the cache hierarchy. Huge pages cut TLB misses by $512\times$ for large sequential regions, often worth more than a larger TLB.
+
+TLB reach $=$ entries $\times$ page size. 64-entry TLB with 4\,KB pages covers $256$\,KB; with 2\,MB huge pages it covers $128$\,MB --- 512$\times$ more. This is why databases and HPC workloads enable huge pages.
+\section{Page Faults and Demand Paging}
+If a PTE is invalid, a \textbf{page fault} traps to the OS. The handler allocates a frame (evicting another page if needed --- clock / LRU replacement), reads the page from disk if swapped, updates the PTE, and resumes. Demand paging means pages are allocated only on first touch, so a process can start with zero frames resident.
+
+Fault cost: $\sim 8$\,ms for SSD, $\sim 80$\,$\mu$s for NVMe, versus $80$\,ns for DRAM --- five orders of magnitude. So fault rate must stay $<0.01\%$ or the system thrashes. The OS monitors fault rate and may suspend processes to reduce pressure.
+
+Demand paging also enables \textbf{overcommit}: virtual size $\gg$ physical DRAM, with the OS paging cold pages to swap. Copy-on-write and memory-mapped files piggyback on the same fault mechanism.
+
+\section{RISC-V Sv39 Walk: Numeric VA $\to$ PA}
+Pick a concrete 39-bit VA: \texttt{0x00000040\_8040\_1234} (hex). Binary split with 9+9+9+12:
+page offset $=$ low 12 bits $=$ \texttt{0x234} (bits 11:0).
+VPN[0] $=$ bits 20:12 $=$ (\texttt{0x80401234} $>>12$) \& \texttt{0x1FF} $=$ \texttt{0x80401} \& \texttt{0x1FF}. Compute stepwise: \texttt{0x80401234} $>>12 =$ \texttt{0x80401}; \texttt{0x80401} mod 512 $=$ \texttt{0x001} $=$ 1. So VPN[0]$=1$.
+VPN[1] $=$ bits 29:21 $=$ (\texttt{0x80401234} $>>21$) \& \texttt{0x1FF} $=$ \texttt{0x402} \& \texttt{0x1FF} $=$ \texttt{0x002} $=$ 2. Check: $>>21 = 0x402$.
+VPN[2] $=$ bits 38:30 $=$ (\texttt{0x40\_80401234} $>>30$) \& \texttt{0x1FF} $=$ \texttt{0x102} \& \texttt{0x1FF} $=$ \texttt{0x002} $=$ 2. But we include high bits \texttt{0x40} $=0100\,0000$ so VPN[2] $=16$ after correcting for bit 38. More cleanly: VA $=$ \texttt{0x00\_0080\_4012\_34} is clearer with VPN[2]$=1$, VPN[1]$=2$, VPN[0]$=1$, offset \texttt{0x234}. Use that going forward.
+
+Assume \texttt{satp.PPN}= \texttt{0x80000} (root page at PA \texttt{0x80000\_000}). PTE size $8$\,B.
+Step 1---Level 2: PA$_{\text{PTE2}} = 0x80000\_000 + 1\times8 = 0x80000\_008$. Load PTE2: suppose it holds PPN $=0x80100$, V$=1$, R=W=X$=0$ (non-leaf pointer). So next table at PA \texttt{0x80100\_000}.
+
+Step 2---Level 1: PA$_{\text{PTE1}} = 0x80100\_000 + 2\times8 = 0x80100\_010$. Load PTE1: PPN $=0x80200$, non-leaf. Next table at \texttt{0x80200\_000}.
+
+Step 3---Level 0: PA$_{\text{PTE0}} = 0x80200\_000 + 1\times8 = 0x80200\_008$. Load PTE0: leaf with PPN $=0x90042$, R$=1$, W$=1$, V$=1$, A$=1$, D$=0$. Leaf PPN concatenated with offset forms PA.
+
+Final PA: PFN \texttt{0x90042} $<<12$ | \texttt{0x234} $=$ \texttt{0x90042\_234}. Access checks R/W/X against the operation; if violated, trap. Hardware sets A (and D on write) in the leaf PTE atomically.
+
+If this VA instead used a 2\,MB megapage, the walk would stop at Level~1: the leaf PTE at step 2 would have R/W/X $\neq 0$, and its PPN plus 21-bit offset (VPN[0] concatenated with 12-bit page offset) directly forms the PA with no Level~0 access.
+\section{Huge Pages: 2\,MB and 1\,GB Arithmetic}
+Sv39 encodes huge pages by making a higher-level PTE a leaf. A Level~1 leaf maps $2$\,MB: VPN[0] (9 bits) becomes part of the offset, so offset $=9+12=21$ bits $=2^{21}=2$\,MB. Virtual alignment requires low 21 bits of VA $=0$. PA forms as (PTE.PPN[43:9] concatenated with VPN[0] (9\,b) and 12\,b offset). Saves one PTE load and one TLB entry per 512 base pages.
+
+A Level~2 leaf maps $1$\,GB: offset $=9+9+12=30$ bits $=2^{30}=1$\,GB. Both VPN[1] and VPN[0] become offset; VA must be 1\,GB-aligned. PA $=$ PTE.PPN[43:18] concatenated with 30-bit offset. Saves two PTE loads and covers $1$\,GB per TLB entry.
+
+Coverage math: to map 1\,GB with 4\,KB pages needs $262144$ PTEs and $262144/512=512$ L0 tables plus TLB pressure $262144$ entries worth. With 2\,MB pages: $512$ PTEs. With 1\,GB pages: $1$ PTE. TLB reach scales identically: 64 TLB entries cover $256$\,KB (4\,KB), $128$\,MB (2\,MB), or $64$\,GB (1\,GB). Downside: internal fragmentation (a 17\,KB allocation still occupies 2\,MB) and coarser permission granularity.
+
+\section{Protection, Copy-on-Write, and \texttt{mmap}}
+Each PTE carries R/W/X/U bits: the MMU checks permission on every access; violation traps. The U bit separates user from supervisor; G marks global kernel mappings shared across ASIDs.
+
+\textbf{Copy-on-write (COW)} accelerates \texttt{fork()}. Parent and child initially share all frames with PTEs marked read-only (W$=0$, COW software bit $=1$) and a reference count per frame. On a write to a COW page, the fault handler allocates a new frame, copies 4\,KB, decrements the old count, updates the faulting PTE to W$=1$ and new PFN, and resumes. Cost: one fault + copy only for pages actually written, vs.\ eager copy of the entire address space. Typical \texttt{fork+exec} writes $<5\%$ of pages, so COW saves $20\times$.
+\textbf{Memory-mapped files} via \texttt{mmap}: the OS creates PTEs pointing to the page cache (disk blocks cached in DRAM) with file offset as backing store. A read fault loads the block from disk; a write sets D and is eventually flushed by \texttt{msync} or eviction. Shared \texttt{mmap} gives zero-copy IPC: two processes map the same file, their PTEs point to the same frames. Private \texttt{mmap} uses COW so writes remain process-local. Demand paging, COW, and \texttt{mmap} are three faces of the same page-fault machinery.
+
+\section{Address Translation Micro-Architecture}
+Every load/store conceptually does two translations: instruction fetch translates PC, then data access translates the effective address. RISC-V and x86 do this via a hardware page-table walker that runs concurrently with the L1 TLB lookup; on a TLB hit the walker is not invoked at all.
+
+The walker itself is a small state machine in the MMU: it issues loads to the memory hierarchy (which may hit in L2/L3) for each PTE level, checks V and permission bits at each step, and on success refills the TLB. OS-visible control: \texttt{satp} holds the root PPN, ASID, and mode (Sv39/Sv48). Changing \texttt{satp} requires an \texttt{sfence.vma} to flush stale TLB entries; forgetting the fence is a classic kernel bug that causes use-after-free of page tables.
+
+ASIDs avoid a full TLB flush on context switch. Without ASIDs, switching from process A to B must invalidate all TLB entries (cost $\sim 64$ refills $\approx 3$\,$\mu$s). With ASIDs, entries are tagged and only a matching ASID hits, so the TLB retains hot entries for both processes.
+
+\section{Page Replacement and Thrashing}
+When DRAM is full, evicting a page requires choosing a victim. The ideal is Belady's MIN (evict page reused farthest in future) but it needs future knowledge. Practical approximations: \textbf{clock} (second-chance) sweeps a circular list of frames, clearing the accessed bit; a page with A$=0$ after a full sweep is evicted. \textbf{LRU} tracks exact recency but costs more. The dirty bit decides writeback: clean pages are simply dropped, dirty pages must be written to swap/file first.
+Thrashing is diagnosed by high page-fault rate ($>100$/s) and low CPU utilisation (processes blocked on I/O). The OS responds by suspending a process (swap out its entire working set) or by growing the swap-backed pool. Working-set tracking (count distinct pages touched in last $\Delta t$) lets the OS estimate per-process demand and admit only as many processes as fit.
+
+\section{Shared Pages and TLB Shootdown}
+Shared libraries and \texttt{mmap} MAP\_SHARED create alias mappings: one physical frame appears at different VAs in multiple processes, each with its own PTE but same PFN. The TLB caches each mapping separately; coherence is maintained because all PTEs reflect the same permission.
+
+When the OS changes a PTE (e.g., COW break, \texttt{munmap}, permission change), stale TLB entries on other cores must be invalidated via \textbf{TLB shootdown}: an inter-processor interrupt (IPI) forces each core to execute \texttt{sfence.vma} for that VA. Shootdown cost grows with core count, so large servers batch invalidations and defer them until the next context switch where possible.
+
+\section{Address Translation Micro-Architecture}
+Every load/store conceptually does two translations: instruction fetch translates PC, then data access translates the effective address. RISC-V and x86 do this via a hardware page-table walker that runs concurrently with the L1 TLB lookup; on a TLB hit the walker is not invoked at all. The walker is a small state machine in the MMU: it issues loads to the memory hierarchy (which may hit in L2/L3) for each PTE level, checks V and permission bits at each step, and on success refills the TLB. OS-visible control: \texttt{satp} holds the root PPN, ASID, and mode (Sv39/Sv48). Changing \texttt{satp} requires an \texttt{sfence.vma} to flush stale TLB entries; forgetting the fence is a classic kernel bug that causes use-after-free of page tables.
+
+ASIDs avoid a full TLB flush on context switch. Without ASIDs, switching from process A to B must invalidate all TLB entries (cost $\sim 64$ refills $\approx 3$\,$\mu$s). With ASIDs, entries are tagged and only a matching ASID hits, so the TLB retains hot entries for both processes. Linux on RISC-V assigns ASIDs round-robin and flushes only when the ASID space wraps.
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.84]
+\node[draw, fill=blue!12, minimum width=1.6cm, minimum height=0.7cm, align=center] (satp2) at (0,0) {satp\\{\tiny root PPN + ASID}};
+\node[draw, fill=orange!16, minimum width=1.8cm, minimum height=0.9cm, align=center] (mmu) at (3.2,0) {MMU\\{\tiny TLB lookup}};
+\node[draw, fill=green!14, minimum width=1.8cm, minimum height=0.9cm, align=center] (walker) at (6.0,0) {Walker\\{\tiny 3$\times$ PTE load}};
+\node[draw, fill=red!12, minimum width=1.6cm, minimum height=0.7cm, align=center] (tlb2) at (3.2,-1.4) {TLB\\{\tiny ASID-tagged}};
+\draw[-{Stealth}, thick, blue!60!black] (satp2.east) -- (mmu.west);
+\draw[-{Stealth}, thick, green!60!black] (mmu.east) -- (walker.west) node[midway, above, font=\tiny] {miss};
+\draw[-{Stealth}, thick, violet!70!black] (mmu.south) -- (tlb2.north);
+\draw[-{Stealth}, dashed, red!60!black] (walker.south) |- (tlb2.east);
+\end{tikzpicture}
+\end{center}
+
+\section{Worked TLB AMAT and Shootdown}
+Revisit TLB AMAT with realistic refill costs. Suppose L1 TLB hit $=1$ cycle, L2 TLB (larger, slower) hit $=4$ cycles with 90\% of L1 misses hitting L2 TLB, and page-table walk from DRAM $=60$ cycles. Effective translation:
+\[ T = 1 + 0.01\times\big(4 + 0.10\times60\big)=1+0.01\times10=1.10\text{ cycles}. \]
+Without the L2 TLB: $1+0.01\times60=1.60$ cycles---the second-level TLB saves 0.5 cycles per access, significant at 3\,GHz.
+
+TLB shootdown cost: on an 8-core chip, \texttt{mprotect} changing one PTE must IPI all 7 other cores, each executing \texttt{sfence.vma}. IPI latency $\sim 1$\,$\mu$s plus fence $\sim 50$\,ns per core, total $\sim 7$\,$\mu$s. Batching invalidations (defer until context switch) amortises this; Linux does so for \texttt{munmap} of large regions. This is why huge pages also reduce shootdown frequency---one invalidation covers 512$\times$ more memory.
+
+\section{Page Replacement and Thrashing}
+When DRAM is full, evicting a page requires choosing a victim. The ideal is Belady's MIN (evict page reused farthest in future) but it needs future knowledge. Practical approximations: \textbf{clock} (second-chance) sweeps a circular list of frames, clearing the accessed bit; a page with A$=0$ after a full sweep is evicted. \textbf{LRU} tracks exact recency but costs more. The dirty bit decides writeback: clean pages are simply dropped, dirty pages must be written to swap/file first.
+
+Thrashing is diagnosed by high page-fault rate ($>100$/s) and low CPU utilisation (processes blocked on I/O). The OS responds by suspending a process (swap out its entire working set) or by growing the swap-backed pool. Working-set tracking (count distinct pages touched in last $\Delta t$) lets the OS estimate per-process demand and admit only as many processes as fit. This is analogous to cache capacity planning at OS scale.
+\section{Sv32 Walk: Parallel Example}
+Sv32 is the 32-bit counterpart that students actually implement in labs. VA \texttt{0x12345678} with 4\,KB pages: offset $=12$ bits $=$ \texttt{0x678} low, VPN[0] $=$ bits 21:12 $=$ (\texttt{0x12345} \& \texttt{0x3FF}) $=$ compute: \texttt{0x12345678} $>>12=$ \texttt{0x12345}, mod $1024$ $=$ \texttt{0x345} mod $1024$ $=$ \texttt{0x345}$=837$. VPN[1] $=$ bits 31:22 $=$ \texttt{0x12345678} $>>22=$ \texttt{0x48}, mod $1024$ $=$ \texttt{0x48}$=72$. Walk: root at \texttt{satp.PPN}, PTE at root$+72\times4$ points to L0 table, then PTE at L0$+837\times4$ gives PFN. Two loads, same offset-passthrough invariant. If the root PTE has R/W/X set, it is a 4\,MB megapage: offset becomes 22 bits, VPN[0] is offset, one load only.
+
+\section{Huge-Page Trade-offs and Transparent Huge Pages}
+Transparent Huge Pages (THP) let the OS opportunistically promote 512 contiguous 4\,KB pages into one 2\,MB page without application changes. Benefit: TLB reach jumps 512$\times$, page-table memory shrinks $512\times$ for that region, and allocation is contiguous so DMA benefits. Cost: promotion needs 2\,MB contiguity which may not exist under fragmentation (requires compaction, which stalls), and \texttt{fork} COW of a 2\,MB page copies 2\,MB even if only one byte is written. Databases often disable THP and use explicit \texttt{hugetlb} for predictable latency, while general workloads leave it enabled.
+
+Arithmetic reminder: mapping 2\,GB with 4\,KB pages needs $524288$ PTEs and $1024$ L0 tables; with 2\,MB pages it needs $1024$ PTEs; with 1\,GB pages it needs $2$ PTEs. TLB coverage with 64 entries: $256$\,KB vs.\ $128$\,MB vs.\ $64$\,GB. The gap is why a single 1\,GB huge page can eliminate TLB misses for an entire in-memory database working set.
+
+\section{Demand Paging in Action}
+Trace \texttt{malloc(4096)} followed by first access. \texttt{malloc} only reserves virtual range and creates invalid PTEs (V$=0$, software bit marking ``allocated but not yet backed''). No frame is allocated. On \texttt{*p = 42}, the store faults: trap to kernel, handler sees V$=0$ but ``allocated'' bit, allocates a zeroed frame (e.g., from the buddy allocator), sets PTE to PFN with V$=1$, R=W$=1$, A=D$=1$, and resumes. The faulting instruction re-executes and now hits. Subsequent accesses to the same page hit in TLB and never fault again.
+
+If DRAM is full, the handler must evict. Clock algorithm scans: frame with A$=1$ gets A cleared and is spared; frame with A$=0$ is victim. If victim is dirty (D$=1$), it is written to swap before reuse; if clean, it is simply reclaimed. This is why write-heavy workloads cause more paging I/O---every eviction needs a disk write.
+\section{Protection Example: Out-of-Bounds and Isolation}
+User code tries to read kernel VA \texttt{0xFFFF...}: PTE has U$=0$, so even though the translation exists, the MMU traps with ``supervisor page, user access''. Similarly, writing to a read-only code page (R$=1$, W$=0$) traps---this catches self-modifying-code bugs and enforces W$^\wedge$X (a page is either writable or executable, never both, mitigating code-injection attacks). Each process's page table is disjoint except for explicitly shared mappings, so one process cannot name another's frames at all; isolation is a direct consequence of separate translation tables, not just permission bits.
+
+\section{Inverted and Hashed Page Tables}
+For 64-bit VAs, hierarchical tables are deep (4--5 levels) and sparse. An alternative is an inverted page table: one entry per physical frame, hashed by (ASID, VPN), with chaining for collisions (as in IBM Power). Size scales with DRAM, not VA size, so a 16\,GB machine needs only 4\,M entries regardless of 64-bit VA. Trade-off: sharing is harder (one entry per frame, not per mapping) and TLB miss handling needs a hash lookup. Hashed tables suit large, sparse address spaces; multi-level tables suit dense, contiguous ones.
+
+\section{Putting VM and Cache Together}
+Modern pipelines translate then cache: virtually indexed, physically tagged (VIPT) L1 caches index with VA bits that are also within the page offset (low 12 bits), so cache index and TLB lookup proceed in parallel without aliasing. Physically indexed caches must wait for translation, adding 1--2 cycles to hit time. VIPT with 32\,KB, 64\,B blocks, 8-way: index bits $= \log_2(32\text{KB}/8/64)=6$, plus 6 offset $=12$ total, exactly the page offset---no alias, no extra latency. Larger or more associative VIPT caches need extra tricks (page colouring or way prediction) to avoid VA aliasing.
+
+Combined AMAT with translation: $\text{AMAT}_{\text{full}} = T_{\text{TLB}} + h_{L1} + m_{L1}\cdot(h_{L2}+m_{L2}\cdot p)$, where $T_{\text{TLB}}$ itself is $1$--$3$\,ns. For memory-intensive code, TLB misses and cache misses both matter; huge pages reduce $T_{\text{TLB}}$ while tiling reduces $m_{L1}$, and the two optimisations stack.
+
+\section{Full VA-to-PA Bit Arithmetic}
+Sv39 leaf PTE layout (64 bits, only low 54 used for PA):
+bits 53:28 hold PPN[2], 27:19 hold PPN[1], 18:10 hold PPN[0], 9:8 reserved,
+bit 7 is D, 6 is A, 5 is G, 4 is U, 3:1 are R/W/X, 0 is V.
+For a 4\,KB leaf, PA $=$ \{PPN[2], PPN[1], PPN[0], offset[11:0]\}.
+For a 2\,MB leaf, PA $=$ \{PPN[2], PPN[1], VPN[0], offset[11:0]\} where VPN[0] is the 9 bits that would have indexed L0.
+For a 1\,GB leaf, PA $=$ \{PPN[2], VPN[1], VPN[0], offset[11:0]\}.
+In our numeric walk, leaf PPN \texttt{0x90042} expands as binary
+\texttt{0b1\_0010\_0000\_0100\_0010}, and concatenating offset \texttt{0x234}
+gives PA \texttt{0x90042234} (the upper PPN bits are zero-extended to 56-bit PA).
+Permission check order matters: V must be 1, then U must allow user/supervisor,
+then R/W/X must allow the access type; violation raises page fault with \texttt{scause}=12/13/15.
+Sv32 is analogous with 10+10+12 split and 32-bit PTEs:
+PTE bits 31:20 hold PPN[1], 19:10 hold PPN[0], 9:8 reserved, 7 is D, 6 is A,
+5 is G, 4 is U, 3:1 are R/W/X, 0 is V.
+A megapage leaf at L1 yields 4\,MB offset $=10+12=22$ bits.
+Software bits (bits 8:9 in Sv39, bits 8:9 in Sv32) are free for OS use;
+Linux uses them to mark COW and to store swap type/offset when V$=0$.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.82]
+\node[draw, fill=blue!12, minimum width=2.4cm, minimum height=0.6cm] (va) at (0,0) {VA 39b: 9|9|9|12};
+\node[draw, fill=orange!16, minimum width=2.0cm, minimum height=0.6cm] (pte) at (3.8,0) {PTE 8B};
+\node[draw, fill=green!14, minimum width=2.4cm, minimum height=0.6cm] (pa) at (7.2,0) {PA 56b};
+\draw[-{Stealth}, thick, blue!60!black] (va.east) -- (pte.west) node[midway, above, font=\tiny] {walk};
+\draw[-{Stealth}, thick, green!60!black] (pte.east) -- (pa.west) node[midway, above, font=\tiny] {PPN+off};
+\node[below=0.25cm of pte, font=\tiny, align=center, text=violet!70!black] {R/W/X=0 $\to$ pointer\\else leaf};
+\end{tikzpicture}
+\end{center}
+
+\section{COW Fork Step-by-Step and \texttt{mmap} Modes}
+Step-by-step COW on \texttt{fork()}:
+(1) parent has pages A, B, C mapped RW.
+(2) \texttt{fork()} marks all PTEs RO, sets COW bit, increments frame refcounts to 2, copies page tables to child (frames shared, no data copied).
+(3) parent writes page B: fault, handler allocates new frame B', copies 4\,KB from B, decrements B's count to 1, updates parent's PTE for B to RW at B', resumes.
+(4) child still sees old B read-only until it writes, triggering its own COW break.
+If child immediately \texttt{exec()}, it discards all shared pages without any COW break---this is why \texttt{fork+exec} without COW would waste a full address-space copy.
+
+\texttt{mmap} modes and their PTE setup:
+shared file mapping: PTE PFN points to page cache, V$=1$, R/W from \texttt{prot}, backed by file; \texttt{msync} writes dirty pages back.
+private file mapping: same but COW bit set, so writes go to anonymous copy, file unchanged.
+anonymous mapping (\texttt{MAP\_ANONYMOUS}): V$=0$ initially, fault allocates zeroed frame, no file backing, swap-backed.
+Each mode reuses the same fault path; only the fault handler's backing-store action differs.
+
+\section{TLB Organisation and Reach Revisited}
+TLBs are typically fully associative or high-way set-associative with LRU or pseudo-LRU. A 64-entry fully associative TLB needs 64 comparators, feasible because entries are few and the structure is small. Larger L2 TLBs (512--1536 entries) are 4--8-way to save power, at the cost of occasional conflict misses. Split TLBs (separate I-TLB and D-TLB) avoid structural hazards between fetch and data translation, mirroring split L1 caches.
+
+TLB reach with mixed page sizes: suppose 32 TLB entries are used for 2\,MB huge pages and 32 for 4\,KB pages. Reach $=32\times2\text{MB}+32\times4\text{KB}=64\text{MB}+128\text{KB}\approx64.1\text{MB}$. A workload that \texttt{mmap}s a 64\,MB heap as huge pages enjoys near-zero TLB misses, while stack and code remain at 4\,KB without wasting huge-page frames. OS page allocators try to keep huge-page candidates aligned and contiguous to maximise this mixed reach without fragmentation.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.85]
+\node[draw, fill=blue!12, minimum width=1.8cm, minimum height=0.7cm] (itlb) at (0,0) {I-TLB 32e};
+\node[draw, fill=green!14, minimum width=1.8cm, minimum height=0.7cm] (dtlb) at (3.0,0) {D-TLB 32e};
+\node[draw, fill=orange!16, minimum width=2.0cm, minimum height=0.7cm] (l2tlb) at (6.0,0) {L2 TLB 512e};
+\node[draw, fill=red!12, minimum width=2.2cm, minimum height=0.7cm] (pt) at (6.0,-1.4) {Page tables};
+\draw[-{Stealth}, thick, blue!60!black] (itlb.east) -- (l2tlb.west |- itlb.east) node[midway, above, font=\tiny] {miss};
+\draw[-{Stealth}, thick, green!60!black] (dtlb.east) -- (l2tlb.west);
+\draw[-{Stealth}, dashed, red!60!black] (l2tlb.south) -- (pt.north) node[midway, right, font=\tiny] {walk};
+\end{tikzpicture}
+\end{center}
+
+\section{Swap, Page Cache, and Unified Memory}
+The page cache unifies file I/O and VM: file blocks are cached as anonymous frames with PTEs pointing to them, so \texttt{read()} may just map the page cache and copy, while \texttt{mmap} maps it directly. Evicting a file-backed page is cheap (write back only if dirty); evicting an anonymous page needs swap space. Swap is not a second memory but an overflow backing store: only cold anonymous pages are written there, and only on eviction. Modern systems use compressed swap (zswap) that keeps swapped pages compressed in DRAM, avoiding SSD I/O for lightly cold pages and cutting fault latency from milliseconds to microseconds.
+
+Unified view: the same frame can be simultaneously in the page cache, mapped in multiple address spaces, and tracked by the LRU/clock lists. The OS's job is to decide which frames to keep based on recency (accessed bit), dirtiness (dirty bit), and backing cost (file vs.\ swap). This is caching at OS scale, with the same locality principles as hardware caches but at 4\,KB granularity and millisecond timescales.
+
+\section{Exam Checklist: VM}
+For any VM question, follow this order:
+(1) page size $\to$ offset bits $=\log_2$(page size), VPN bits $=$ VA bits $-$ offset;
+(2) multi-level split: Sv32 10+10+12, Sv39 9+9+9+12, each table $4$\,KB;
+(3) walk: satp.PPN $\to$ root PA, add VPN[level]$\times$PTEsize, load PTE, check V and R/W/X, follow non-leaf, stop at leaf, concatenate PPN with offset;
+(4) TLB: $T = h + m\cdot p$, translation adds to AMAT, huge pages cut $m$ by 512$\times$ per level;
+(5) COW/mmap: RO+COW bit, fault allocates and copies, shared vs.\ private decides whether new frame is file-backed or anonymous.
+Common pitfall: treating Sv39 VPN fields as byte offsets---they index PTEs, so multiply by 8. Another pitfall: forgetting offset passthrough; PA offset always equals VA offset. For 2\,MB pages, VPN[0] joins the offset; for 1\,GB, VPN[1:0] do.
+
+Sv39 2\,MB huge page saves one PTE load and 511 TLB entries per 1\,GB region; promotion needs 2\,MB-aligned contiguous frames.
+Sv39 1\,GB huge page saves two PTE loads and covers 1\,GB per TLB entry; alignment requires 30 zero low bits, fragmentation is the blocker.
+Refill cost sensitivity: if PTEs hit in L2 (15\,ns) vs DRAM (80\,ns), Sv39 walk is 45\,ns vs 240\,ns; TLB hit rate dominates either way.
+ASID saves $\sim 3$\,$\mu$s per context switch by avoiding full TLB flush; shootdown on 8 cores costs $\sim 7$\,$\mu$s per \texttt{mprotect}.
+COW break copies 4\,KB and faults once; eager copy of 1\,GB address space would copy $262144$ pages even if only $5\%$ are written.
+\texttt{mmap} shared file: PTE points to page cache, dirty writeback on \texttt{msync}; private file uses COW so file stays clean.
+Demand paging allocates on first touch only; zero-filled anonymous pages start as copy-on-write mappings of the zero page.
+Inverted page table scales with DRAM size, not VA size; multi-level scales with VA density---choose per workload sparsity.
+VIPT L1 with $32$\,KB, $64$\,B, 8-way has index+offset $=12$ bits, exactly page offset, so translation and cache index run in parallel with no alias.
+
+Page colouring avoids VIPT alias by ensuring VA[12:6] $=$ PA[12:6] for 4\,KB pages; OS allocates coloured frames to avoid alias.
+Superpages reduce page-table memory: 1\,GB region needs 1 PTE vs $262144$ PTEs $+$ 512 tables at 4\,KB, saving $\sim 2$\,MB.
+Copy-on-write reference counts are per-frame; fork of 8\,GB with 10\% dirty after fork copies only $\sim 800$\,MB on demand.
+Swap thrashing signal: CPU $<20\%$ with high fault rate; fix by suspending one process rather than growing swap.
+Unified page cache means \texttt{read(2)} and \texttt{mmap} share frames; double-caching is avoided by design.
+
+\section{Exercises}
+\begin{exercise}For 32-bit VA, 4\,KB pages, single-level table with 4\,B per PTE: how large is the table? Why is two-level better when only 10\% of virtual space is used?\end{exercise}
+\begin{exercise}A TLB has 64 entries, hit rate 99\%, hit time 1\,ns, miss penalty 30\,ns (walk). What is effective translation time? How does it affect AMAT?\end{exercise}
+\begin{exercise}Explain copy-on-write: what PTE bits are set, what happens on a write to a COW page, and why is it faster than eager copy for \texttt{fork}?\end{exercise}
+\begin{exercise}Sv39 maps a 1\,GB huge page. How many TLB entries does it save versus 4\,KB pages for the same region? When would you prefer small pages anyway?\end{exercise}
+\begin{exercise}Why does the offset pass through translation unchanged? What would break if it did not?\end{exercise}

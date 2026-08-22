@@ -1,0 +1,256 @@
+\chapter{Single-Cycle Datapath: ALU \& Register File}\label{ch:datapath}
+\begin{center}\small\textit{From instruction bits to data flowing through adders, muxes, and memories.}\end{center}
+
+\section{From Zero: What a Single Instruction Must Do}
+A computer does only one thing: fetch an instruction from memory, figure out what it asks for, do the arithmetic or memory access, and store the result. Every RV32I instruction, no matter how different it looks in assembly, moves through the same five logical stages. Thinking in stages makes hardware systematic rather than ad-hoc:
+\begin{enumerate}
+\item \textbf{IF} --- Instruction Fetch: read the 32-bit word at address PC from instruction memory; concurrently compute PC+4 with a dedicated adder.
+\item \textbf{ID} --- Decode \& Register Read: extract opcode, rd, rs1, rs2, funct3/7; read \texttt{rs1} and \texttt{rs2} from the register file; sign-extend the immediate.
+\item \textbf{EX} --- Execute: ALU operates on the two operands. For loads/stores this is address calculation (\texttt{rs1}+imm); for branches it is comparison; for R-type it is the actual operation.
+\item \textbf{MEM} --- Memory Access: only loads and stores touch data memory; other instructions simply pass the ALU result through.
+\item \textbf{WB} --- Write Back: write the result (ALU output or memory data) into \texttt{rd} in the register file, unless the instruction is a store or branch which has no destination.
+\end{enumerate}
+A single-cycle machine does all five in one long clock period. The period must be long enough for the slowest instruction. That inefficiency is exactly what pipelining fixes in Ch.~\ref{ch:pipeline}.
+
+\section{Building Blocks: The Datapath LEGO Set}
+The datapath is combinational logic plus state. State holds across cycles; combinational logic settles within a cycle. We need seven blocks:
+\begin{itemize}
+\item \textbf{PC register}: a 32-bit edge-triggered register holding the address of the current instruction. Updated every cycle to PC+4, branch target, or jump target.
+\item \textbf{Instruction memory}: combinational-read ROM/SRAM; address in, 32-bit instruction out. In the single-cycle abstraction we use separate instruction and data memories (Harvard view) to avoid a structural hazard; real chips use caches behind one memory.
+\item \textbf{Register file}: 32 $\times$ 32-bit, two read ports and one write port, with \texttt{x0} hardwired to zero.
+\item \textbf{ALU}: 32-bit combinational unit that can add, subtract, and, or, xor, shift, and set-less-than.
+\item \textbf{Data memory}: read/write SRAM for loads and stores; combinational read, synchronous write.
+\item \textbf{Immediate generator (ImmGen)}: pure wiring plus sign-extension that re-assembles the scattered immediate bits into a 32-bit signed value.
+\item \textbf{Adders and muxes}: a 32-bit adder for PC+4, another for branch target (PC+imm), and 2-to-1 muxes that steer operands and write-back data under control signals.
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, rounded corners, minimum width=2.6cm, minimum height=2.0cm, align=center] (rf) at (0,0) {\textbf{Register File}\\32 $\times$ 32\,bit\\[2pt]{\tiny 2 read, 1 write}\\{\tiny \texttt{x0}$\equiv$0}};
+\node[above=0.2cm of rf, font=\tiny, text=gray!60!black] {clocked, write on rising edge};
+\node[draw, fill=orange!18, trapezium, trapezium angle=75, minimum width=1.8cm, minimum height=1.6cm, align=center] (alu) at (5,0) {\textbf{ALU}};
+\node[below=0.1cm of alu, font=\tiny] {ADD/SUB/AND/OR/XOR/SLT};
+\draw[-{Stealth}, thick, blue!60!black] (rf.east) -- ++(0.6,0.35) -- (alu.west |- {$(alu.west)+(0,0.35)$}) node[midway, above, font=\tiny] {A};
+\draw[-{Stealth}, thick, green!50!black] (rf.east) -- ++(0.6,-0.35) -- (alu.west |- {$(alu.west)+(0,-0.35)$}) node[midway, below, font=\tiny] {B};
+\node[draw, fill=green!12, rounded corners, minimum width=1.4cm, minimum height=0.6cm] (imm) at (2.8,1.7) {Imm Gen};
+\draw[-{Stealth}, dashed, violet!70!black] (imm) -| (alu.west |- {$(alu.west)+(0,-0.55)$}) node[pos=0.75, right, font=\tiny] {imm mux};
+\node[draw, fill=red!12, rounded corners, minimum width=2.0cm, minimum height=1.4cm, align=center] (dmem) at (5,-2.4) {\textbf{Data Mem}};
+\draw[-{Stealth}, thick, red!60!black] (alu.south) -- (dmem.north) node[midway, right, font=\tiny] {addr/result};
+\draw[-{Stealth}, thick, orange!60!black] (rf.east |- dmem) -- (dmem.west) node[midway, above, font=\tiny] {store data};
+\node[font=\tiny, fill=blue!8, draw, rounded corners, inner sep=2pt] at (-2.8,-2.8) {Combinational logic};
+\node[font=\tiny, fill=red!8, draw, rounded corners, inner sep=2pt] at (0.2,-2.8) {State (clocked)};
+\end{tikzpicture}
+\end{center}
+
+\section{The Register File: 32 $\times$ 32 with 2R1W}
+Inside are 32 registers of 32 D flip-flops each, or an SRAM array. The interface is what matters: two asynchronous read ports and one synchronous write port. Give it \texttt{rs1} (bits [19:15]) and \texttt{rs2} [24:20]; within a fraction of a nanosecond the data appears at ReadData1 and ReadData2. Give it \texttt{rd} [11:7], WriteData, and \texttt{RegWrite}=1; at the next rising clock edge the register updates. Reads are combinational so ID and EX can happen in the same cycle; writes are edge-triggered so WB of one instruction does not corrupt ID of the same instruction.
+\texttt{x0} is special: reads always return 0 and writes are silently dropped. Hardware does this by forcing ReadData to 0 when address is 0, and by gating \texttt{RegWrite} with \texttt{(rd != 0)}. Without this, \texttt{x0} would drift and every \texttt{BEQ x0,x0} trick would break.
+Why two read ports? An R-type \texttt{ADD rd,rs1,rs2} needs both operands at once; a single-port file would need two cycles and double the CPI. The cost is an extra decoder and 32 extra 32-bit muxes, trivial compared to the ALU. The register file sits on the critical path: its read delay plus ALU plus memory determines cycle time, so it is built from fast, small SRAM with sense amplifiers, not dense DRAM.
+
+\section{The ALU: One Adder Does Both ADD and SUB}
+RV32I needs ADD (also for address), SUB (for \texttt{BEQ} via subtraction), AND, OR, XOR, SLL, SRL, SRA, SLT and SLTU. Rather than separate adder and subtractor, we share one 32-bit adder. Subtraction uses two's complement: $A - B = A + \bar{B} + 1$, where $\bar{B}$ is bitwise NOT and the $+1$ enters as carry-in.
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.90]
+\node[draw, fill=yellow!16, minimum width=1.4cm, minimum height=0.7cm] (a) at (0,0) {$A$[31:0]};
+\node[draw, fill=yellow!16, minimum width=1.4cm, minimum height=0.7cm] (b) at (0,-1.2) {$B$[31:0]};
+\node[draw, fill=orange!20, trapezium, trapezium angle=70, minimum width=2.2cm, minimum height=1.8cm, align=center] (alu2) at (3.5,-0.55) {\textbf{32-bit ALU}\\{\tiny ADD/SUB/AND/OR}\\{\tiny XOR/SLT/SLL/SR}};
+\node[draw, fill=green!14, minimum width=1.3cm, minimum height=0.6cm] (ctrl) at (3.5,1.3) {ALUCtrl[3:0]};
+\draw[-{Stealth}, thick] (a.east) -- (alu2.west |- a.east);
+\draw[-{Stealth}, thick] (b.east) -- (alu2.west |- b.east);
+\draw[-{Stealth}, thick, violet!70!black] (ctrl.south) -- (alu2.north);
+\node[draw, fill=blue!12, minimum width=1.4cm, minimum height=0.6cm] (res) at (6.8,-0.35) {$R$[31:0]};
+\draw[-{Stealth}, thick, blue!60!black] (alu2.east |- res.west) -- (res.west);
+\node[below=0.3cm of res, font=\tiny, align=center] {Zero = $(R==0)$\\Overflow, Carry};
+\node[draw, fill=gray!12, minimum width=2.0cm, minimum height=0.55cm, font=\tiny] (mux) at (3.5,-2.2) {B-mux: $\bar{B}$+1 when SUB};
+\draw[dashed, -{Stealth}, gray] (mux.north) -- (alu2.south);
+\end{tikzpicture}
+\end{center}
+So \texttt{ALUControl} does not switch between two adders; it inverts $B$ and sets carry-in when it wants SUB or branch compare. The same trick gives \texttt{SLT}: compute $A-B$ and look at the sign bit, with overflow correction for signed comparison. Flags matter: \texttt{Zero} ($R==0$) tells \texttt{BEQ/BNE} if two registers are equal; \texttt{Negative} and \texttt{Overflow} together give signed less-than. Shifts are a separate barrel shifter muxed in front of the adder output, selected by \texttt{ALUCtrl}. A 4-bit \texttt{ALUCtrl} thus covers all ten operations with room to spare, and the decoder in Ch.~\ref{ch:control} maps \texttt{ALUOp}+funct to it.
+
+\section{Full Single-Cycle Datapath: Putting It Together}
+Wires now connect the blocks. Thick lines are 32-bit data; thin lines are control. Follow one instruction through the diagram below from left (PC) to right (write-back):
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.82]
+\node[draw, fill=blue!12, minimum width=1.0cm, minimum height=0.7cm] (pc) at (0,0) {PC};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.9cm, align=center] (imem) at (2.2,0) {Instr\\Mem};
+\node[draw, fill=orange!16, minimum width=1.8cm, minimum height=1.4cm, align=center] (rf2) at (4.6,0) {Reg File\\{\scriptsize rs1 rs2 / rd}};
+\node[draw, fill=yellow!14, minimum width=1.0cm, minimum height=0.6cm] (imm2) at (4.6,1.6) {ImmGen};
+\node[draw, fill=red!14, trapezium, trapezium angle=75, minimum width=1.3cm, minimum height=1.0cm] (alu3) at (7.0,0) {ALU};
+\node[draw, fill=violet!12, minimum width=1.5cm, minimum height=0.9cm, align=center] (dmem2) at (9.0,0) {Data\\Mem};
+\node[draw, fill=blue!10, minimum width=0.9cm, minimum height=0.6cm] (adder) at (1.0,1.6) {+4};
+\draw[-{Stealth}, thick] (pc) -- (imem);
+\draw[-{Stealth}, thick] (imem) -- (rf2) node[midway, above] {instr};
+\draw[-{Stealth}, thick] (imem.north) |- (imm2.west);
+\draw[-{Stealth}, thick, blue!60!black] (rf2.east) -- (alu3.west |- {$(alu3.west)+(0,0.3)$});
+\draw[-{Stealth}, thick, green!60!black] (rf2.east) -- ++(0.3,-0.6) -- (dmem2.west |- {$(dmem2.west)+(0,-0.3)$}) node[midway, below] {WD};
+\draw[-{Stealth}, thick] (imm2.east) -| (alu3.west |- {$(alu3.west)+(0,-0.3)$});
+\draw[-{Stealth}, thick, red!60!black] (alu3.east) -- (dmem2.west |- {$(dmem2.west)+(0,0.3)$});
+\draw[-{Stealth}, thick, violet!70!black] (dmem2.east) -- ++(0.5,0) |- (rf2.east |- {$(rf2.east)+(0,0.6)$}) node[pos=0.7, right] {WB};
+\draw[-{Stealth}, thick, gray] (pc.north) |- (adder.west);
+\draw[-{Stealth}, thick, gray] (adder.east) -- ++(0.5,0) |- (pc.north) node[pos=0.6, above] {PC+4};
+\end{tikzpicture}
+\end{center}
+Walkthrough examples: \texttt{LW x5,8(x6)} fetches at PC, reads \texttt{x6}, ImmGen makes 8, ALU adds them to form address, data memory reads, and the WB mux selects memory data into \texttt{x5}. \texttt{SW x5,8(x6)} does the same address calc but writes ReadData2 (\texttt{x5}) into data memory and disables \texttt{RegWrite}. \texttt{ADD x5,x6,x7} uses both register operands, ALU does ADD, WB mux selects ALU result. \texttt{BEQ x5,x6,offset} subtracts via $A+\bar{B}+1$, checks Zero, and muxes PC to branch target (PC+imm) when Zero=1; otherwise PC+4. \texttt{JAL x1,offset} writes PC+4 into \texttt{x1} and jumps to PC+imm unconditionally. Each mux is steered by one control bit; the full control table is in Ch.~\ref{ch:control}. The key insight is that data flows left-to-right, but only one path is active per instruction; muxes make a single datapath serve six instruction formats.
+
+\section{Immediate Generation: R/I/S/B/U/J and Why imm[0]=0}
+RISC-V immediates are scattered to keep opcode and register fields fixed. ImmGen is just wires plus sign-extension, selecting with the opcode. The regularity lets decode and register read overlap. The table below is worth memorising:
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}cllll@{}}
+\toprule Format & Bits in instruction & Assembled 32-bit immediate & Range & Notes\\ \midrule
+R & none & $0$ & --- & no immediate\\
+I & \texttt{instr[31:20]} & $\{\{20\{\text{instr[31]}\}\},\text{instr[31:20]}\}$ & $-2048$ to $+2047$ & \texttt{ADDI, LW, JALR}\\
+S & \texttt{[31:25]}$+$\texttt{[11:7]} & $\{\{20\{\text{instr[31]}\}\},\text{instr[31:25]},\text{instr[11:7]}\}$ & $-2048$ to $+2047$ & \texttt{SW}: rs2 data separate\\
+B & scrambled 12 bits & $\{19\{\text{instr[31]}\},\text{instr[31]},\text{instr[7]},\text{instr[30:25]},\text{instr[11:8]},0\}$ & $\pm4096$ & branch: imm[0]=0\\
+U & \texttt{[31:12]} & $\{\text{instr[31:12]},12\text{'b0}\}$ & 20-bit upper & \texttt{LUI/AUIPC}: low 12 zero\\
+J & scrambled 20 bits & $\{11\{\text{instr[31]}\},\text{instr[31]},\text{instr[19:12]},\text{instr[20]},\text{instr[30:21]},0\}$ & $\pm1$MB & \texttt{JAL}: imm[0]=0\\ \bottomrule
+\end{tabular}
+\end{center}
+Why is \texttt{imm[0]} always 0 for B and J? RISC-V instructions are half-word aligned (and word-aligned without compressed extension). A branch or jump offset measured in bytes is therefore always even; bit 0 would always be zero so it is omitted and hardwired to 0, gaining one extra bit of range. The scrambling of B and J (sign bit stays at \texttt{instr[31]}) looks messy but keeps the sign bit in one place for fast sign-extension and keeps the mux network shallow. Sign-extension replicates bit 31 across the upper bits; forgetting it makes negative offsets become huge positive ones, a classic lab bug. ImmGen also handles shift amounts: a 5-bit \texttt{shamt} from \texttt{rs2} or \texttt{imm[4:0]} for SLLI/SRLI/SRAI, zero-extended, not sign-extended.
+
+\section{Critical Path: What Sets the Clock}
+In a single-cycle machine the clock period must satisfy every instruction, so it is set by the longest combinational delay from PC clock edge back to the next PC or register setup:
+\[ T_{\text{clk}} \ge t_{\text{PC\_clk2Q}} + t_{\text{IMem}} + t_{\text{RF\_read}} + t_{\text{Mux}} + t_{\text{ALU}} + t_{\text{DMem}} + t_{\text{WB\_mux}} + t_{\text{RF\_setup}} \]
+Branches also need the branch-adder and Zero comparison, but loads are still longer because they traverse both memories. Numerically, if $t_{\text{IM}}=2$\,ns, $t_{\text{RF}}=1$\,ns, $t_{\text{ALU}}=2$\,ns, $t_{\text{DM}}=2$\,ns, plus muxes and setup $\approx 1$\,ns, then $T_{\text{clk}}\approx 8$\,ns or 125\,MHz. An R-type instruction finishes after the ALU in $\approx 5$\,ns but must wait the full 8\,ns. A \texttt{BEQ} that fails still pays for the data-memory path even though it does not use it. This waste is the core argument for pipelining: overlap the stages so each cycle does one stage of one instruction, raising throughput by nearly $5\times$ even though single-instruction latency stays similar. Ironically, the single-cycle datapath is the cleanest to understand precisely because everything is combinational between two clock edges, with no pipeline registers to reason about.
+
+\section{Step-by-Step Walkthrough: Six Instructions Through One Datapath}
+The same wires serve every instruction; only mux selects and enables change. Trace each:
+\texttt{ADD x5,x6,x7}: IF fetches at PC; ID reads \texttt{x6},\texttt{x7}; EX ALU does $A+B$ with \texttt{ALUSrc}=0; MEM does nothing; WB mux picks ALU result into \texttt{x5}. RegWrite=1.
+
+\texttt{ADDI x5,x6,42}: like ADD but \texttt{ALUSrc}=1 so ALU B comes from ImmGen (sign-extended 42) instead of \texttt{rs2}. Same WB as R-type.
+
+\texttt{LW x5,8(x6)}: ImmGen gives 8; ALU adds \texttt{x6}+8 to form address; data memory reads 32 bits at that address; WB mux picks memory data (MemToReg=1) into \texttt{x5}. Needs both \texttt{MemRead} and \texttt{RegWrite}.
+
+\texttt{SW x5,8(x6)}: address calc identical to LW, but ReadData2 (\texttt{x5}) is driven to DataMem write-data port and \texttt{MemWrite}=1; \texttt{RegWrite}=0 so no register is clobbered. The WB path is unused.
+
+\texttt{BEQ x5,x6,offset}: ALU does $A+\bar{B}+1$ (SUB) and Zero is tested; branch-adder computes PC+imm (with imm[0]=0); PC mux picks branch target only when Branch$\land$Zero=1. No memory, no WB. Getting the B-immediate scramble wrong flips forward/backward branches.
+
+\texttt{JAL x1,offset}: ImmGen assembles J-immediate (imm[0]=0, $\pm$1\,MB); PC+4 is saved to \texttt{x1} via WB mux (a dedicated PC+4 path), and PC jumps to PC+imm. \texttt{JALR} is similar but target is \texttt{rs1}+imm with LSB cleared.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.80]
+\node[draw, fill=blue!12, minimum width=1.5cm, minimum height=0.6cm] (a) at (0,0) {LW: Mem $\to$ Reg};
+\node[draw, fill=orange!16, minimum width=1.5cm, minimum height=0.6cm] (b) at (3.0,0) {SW: Reg $\to$ Mem};
+\node[draw, fill=green!14, minimum width=1.5cm, minimum height=0.6cm] (c) at (6.0,0) {BEQ: SUB+Zero};
+\node[draw, fill=red!12, minimum width=1.5cm, minimum height=0.6cm] (d) at (9.0,0) {JAL: PC+4 $\to$ rd};
+\draw[-{Stealth}, thick, blue!60!black] (a.east) -- (b.west);
+\draw[-{Stealth}, thick, green!60!black] (b.east) -- (c.west);
+\draw[-{Stealth}, thick, violet!70!black] (c.east) -- (d.west);
+\node[below=0.6cm of b, font=\scriptsize, align=center, text=gray!60!black] {Only mux selects differ --- datapath is shared};
+\end{tikzpicture}
+\end{center}
+
+\section{Timing: Why Single-Cycle Is Slow But Simple}
+Every signal must settle before the next rising edge. The PC register, instruction memory, register file read, ALUSrc mux, ALU (which itself is a 32-bit ripple or prefix adder), data memory, WB mux, and register setup all add. Loads dominate because they use both memories; R-type would be faster alone but must wait. Real numbers from a 45\,nm library: PC 0.2\,ns + IMem 1.8\,ns + RF 0.9\,ns + mux 0.2\,ns + ALU 1.7\,ns + DMem 2.0\,ns + WB 0.2\,ns + setup 0.3\,ns $\approx 7.3$\,ns. Raising voltage or using faster SRAM shrinks this but never removes the waste: a \texttt{NOP} still pays for data memory it never uses. Pipelining solves it by overlapping, but its control and hazard logic only makes sense once this single-cycle baseline is crystal clear. A useful lab check: single-step the clock and probe each net; if DMem address wobbles after the ALU settles, the clock is too fast and \texttt{LW} will intermittently write garbage.
+
+
+\section{PC Logic: Choosing the Next Instruction}
+The PC is the only sequential state besides memories and registers. Next PC is a 3-way choice: PC+4 (default), PC+imm (branch taken or JAL), or rs1+imm with LSB cleared (JALR). Two adders run in parallel every cycle so the branch target is ready before we know if the branch is taken.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.84]
+\node[draw, fill=blue!14, minimum width=1.0cm, minimum height=0.6cm] (pc) at (0,0) {PC};
+\node[draw, fill=green!12, minimum width=1.0cm, minimum height=0.6cm] (a4) at (1.8,1.0) {+4};
+\node[draw, fill=orange!16, minimum width=1.2cm, minimum height=0.6cm] (ab) at (1.8,-1.0) {+imm};
+\node[draw, fill=red!12, minimum width=1.1cm, minimum height=0.6cm] (mux) at (4.0,0) {PC mux};
+\draw[-{Stealth}, thick, blue!60!black] (pc.north) |- (a4.west);
+\draw[-{Stealth}, thick, orange!60!black] (pc.south) |- (ab.west);
+\draw[-{Stealth}, thick, violet!70!black] (ab.east) -- (mux.south) node[midway, right, font=\tiny] {PC+imm};
+\draw[-{Stealth}, thick, green!50!black] (a4.east) -| (mux.north) node[pos=0.7, above, font=\tiny] {PC+4};
+\draw[-{Stealth}, thick, red!60!black] (mux.east) -- ++(0.7,0) |- (pc.north) node[pos=0.75, right, font=\tiny] {next PC};
+\node[below=0.3cm of mux, font=\tiny, text=gray!60!black, align=center] {select = Jump $\lor$ (Branch $\land$ Zero)};
+\node[above=0.15cm of a4, font=\tiny] {always computed};
+\node[below=0.15cm of ab, font=\tiny] {ImmGen + PC};
+\end{tikzpicture}
+\end{center}
+Control decides late: the Zero flag from the ALU (SUB) arrives just in time for the PC mux. If the clock were faster, Zero would still be settling when PC must latch, and branches would jump randomly. This is another reason loads set the period but branches stress the control timing. \texttt{JALR} reuses the ALU to compute rs1+imm, then clears bit 0 by AND with \texttt{0xFFFFFFFE}, a separate AND gate in the PC path.
+
+\section{Worked Example: B-type Immediate for $-8$ Bytes}
+Take \texttt{BEQ x5,x6,-8} meaning branch to PC$-8$. The byte offset $-8$ = \texttt{0xFFFFFFF8} = \texttt{0b11111111\_11111000}. As a 13-bit signed value with imm[0]=0, this is \texttt{0b1\_11111111\_1100} (12:1 = all 1s except trailing 0). RISC-V scrambles it: instr[31]=1 (sign), instr[7]=0, instr[30:25]=\texttt{111111}, instr[11:8]=\texttt{1100}. Concatenated and sign-extended with trailing 0 gives \texttt{0xFFFFFFF8} again. A positive offset $+8$ would be \texttt{0b0\_00000000\_0100} with sign 0. Testing both $+8$ and $-8$ in simulation catches the classic bug where sign-extension is forgotten and $-8$ becomes $+8184$.
+
+\section{Why the Datapath Shape Is Not Arbitrary}
+Every design choice serves regularity. Fixed opcode position lets instruction memory and register file start together; scattered immediates keep register fields fixed at the cost of ImmGen wiring, but wiring is cheap and mux delay is expensive. Harvard memories in the diagram are a pedagogical fiction: real cores have one memory but split L1 I/D caches present the same dual-port illusion. The trap is to treat the diagram as literally separate chips; in layout, instruction and data paths interleave, but the logical separation lets us reason about one instruction at a time before hazards exist.
+
+\section{Common Pitfalls and Why This Matters}
+Three bugs catch every cohort: (1) forgetting \texttt{x0} gating, so \texttt{SW x0,0(sp)} mysteriously writes zero into \texttt{x0} and later reads back zero anyway, masking the error until \texttt{JALR} misbehaves; (2) treating B-type immediate as contiguous bits, producing off-by-$2\times$ branch targets that pass simple tests but fail backward branches; (3) sizing the clock for the ALU path and then watching \texttt{LW} intermittently corrupt because data memory had not settled before the write-back edge. All three vanish once the datapath is viewed as timing-constrained combinational logic between state elements, not just a block diagram.
+
+
+\section{Datapath Verification and Lab Bring-Up}
+On an FPGA, the single-cycle datapath is the first milestone. Connect the PC and memories to block RAM, wire the register file to flip-flops, and expose every control signal to LEDs or an ILA. A minimal test program:
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule Addr & Assembly & Hex (RV32I) \\ \midrule
+0x00 & \texttt{ADDI x1,x0,10} & \texttt{0x00A00093} \\
+0x04 & \texttt{ADDI x2,x0,20} & \texttt{0x01400113} \\
+0x08 & \texttt{ADD  x3,x1,x2} & \texttt{0x002081B3} \\
+0x0C & \texttt{SW   x3,0(x0)} & \texttt{0x00302023} \\
+0x10 & \texttt{LW   x4,0(x0)} & \texttt{0x00002203} \\
+0x14 & \texttt{BEQ  x3,x4,8}  & \texttt{0x00418463} \\ \bottomrule
+\end{tabular}
+\end{center}
+Step one clock at a time. After cycle 1, \texttt{x1} must be 10; after cycle 3, \texttt{x3}=30; after cycle 4, DataMem[0]=30; after cycle 5, \texttt{x4}=30; after cycle 6, PC must have jumped to 0x1C if \texttt{x3==x4}, otherwise stayed at 0x18. Probing \texttt{Zero} and \texttt{ALUCtrl} on the ILA catches the SUB-vs-ADD bug instantly. Real bring-up also checks \texttt{x0}: after \texttt{ADDI x0,x0,99}, \texttt{x0} must remain 0 and \texttt{RegWrite} gating is verified.
+
+\section{Harvard Illusion and Why Two Memories Are Drawn}
+The diagram shows separate instruction and data memories so IF and MEM do not collide in one cycle. In a real chip there is one DRAM behind caches, and the Harvard view is created by split L1 I/D caches presenting two ports. For the single-cycle abstraction this detail is hidden; the invariant is that PC$\to$IMem and ALU$\to$DMem are independent combinational paths in the same clock. When we pipeline, the split matters: IF and MEM may access cache in the same cycle, so a unified cache would be a structural hazard and we need split L1.
+
+\section{Exam Checklist: Datapath}
+For any datapath question follow this order: (1) list stages IF/ID/EX/MEM/WB and what each block does; (2) state register-file ports (2R1W, \texttt{x0}=0, async read, sync write); (3) explain SUB as $A+\bar{B}+1$ and which \texttt{ALUCtrl} selects it; (4) walk one instruction through the full diagram naming each mux select; (5) write the ImmGen row for its format and note \texttt{imm[0]}=0 for B/J (half-word alignment); (6) name the critical path (PC$\to$IMem$\to$RF$\to$ALU$\to$DMem$\to$WB$\to$RF setup) and which instruction sets it (\texttt{LW}); (7) justify why single-cycle period wastes time for R-type and motivates pipelining.
+
+
+\section{Data Memory: Why Loads Set the Period}
+Data memory is the other slow block. Reads are combinational (address in, data out within $t_{\text{DMem}}$); writes are synchronous (data and address must be stable before the clock edge, write-enable gates the clock). For \texttt{LW}, the ALU result must settle at the address port, then memory reads, then the WB mux selects it, all before register setup. For \texttt{SW}, ReadData2 must be stable at the write-data port while the address is also stable; the write itself happens at the edge so it does not affect the current cycle's WB. A common error is to make data memory synchronous-read: then \texttt{LW} would need an extra cycle and the single-cycle abstraction breaks.
+
+\section{Shifts and SLT: Beyond the Adder}
+SRL/SRA/SLL are not done by the adder but by a barrel shifter: a tree of 2-to-1 muxes that shifts by 1,2,4,8,16 in stages, selected by \texttt{shamt}[4:0]. SLT is subtle: \texttt{SLT rd,rs1,rs2} sets \texttt{rd}=1 if \texttt{rs1}<\texttt{rs2} signed, else 0. Hardware does SUB and looks at sign and overflow: result is \texttt{Negative}$\oplus$\texttt{Overflow}. \texttt{SLTU} is unsigned, so it uses Carry instead. Both reuse the adder path; the ALU mux just selects the 1-bit result zero-extended to 32 bits instead of the 32-bit sum.
+
+\section{Two More Drills: AUIPC and JALR}
+\texttt{AUIPC x5,0x12345} forms \texttt{0x12345}$\ll$12 plus PC and writes it to \texttt{x5}. Datapath: ImmGen makes \texttt{0x12345000}, ALU adds PC+imm (a separate PC$\to$ALU mux when \texttt{ALUSrc}=1 and a PC-select bit is set), WB picks ALU. \texttt{JALR x1,0(x5)} computes \texttt{x5}+0 via ALU, clears bit 0, jumps there, and writes PC+4 to \texttt{x1}. The LSB clear is AND with \texttt{0xFFFFFFFE}; forgetting it misaligns the fetch and traps. Both instructions show why ImmGen's U-type (low 12 zero) and I-type share no hardware except sign-extension.
+
+
+\section{Reading the Waveform: What to Watch on the ILA}
+A correctly clocked single-cycle core shows a clean staircase: PC increments by 4 each cycle except when a taken branch or jump replaces it. Register write data appears one memory delay after the address. On the waveform, \texttt{LW}'s write-back pulse is late (after DMem), while \texttt{ADD}'s is earlier (after ALU). If \texttt{BEQ} is taken, the next PC is PC+imm, not PC+4; if not taken, PC+4. Capturing \texttt{Zero} and \texttt{Branch} at the rising edge proves the comparison landed in time. A failing setup shows as \texttt{Zero} still transitioning when PC latches, and the next fetch is from a phantom address.
+
+\section{Single-Cycle vs Multi-Cycle vs Pipeline}
+Single-cycle is the simplest abstraction: one long period, no pipeline registers. Multi-cycle reuses one ALU and one memory across states (fetch, decode, execute, memory, write-back) with a state machine, saving area but needing control sequencing. Pipeline keeps the single-cycle datapath blocks but inserts registers between stages so five instructions overlap. Learning single-cycle first makes the other two trivial: multi-cycle is time-division of the same blocks, pipeline is space-division. All three share ImmGen, register file, and ALU; only control and registers change.
+
+
+\section{Synthesis Reality: What Maps to LUTs}
+On an FPGA, each combinational block becomes LUTs. The 32-bit adder is ~32 LUTs with carry chain; the register file is 32$\times$32 flip-flops plus two 32:1 muxes (each ~160 LUTs); ImmGen is wiring plus a 12-bit sign-extender (a few LUTs). The whole single-cycle core fits in under 800 LUTs on an Artix-7, leaving room for the CSR file. Timing reports show the same critical path as the ASIC estimate: IMem (block RAM Tco 1.2\,ns) + RF (0.6\,ns) + ALU (1.1\,ns) + DMem (1.4\,ns) dominates. Closing timing means adding a pipeline register, not faster LUTs.
+
+\section{Why RISC-V Chose This Immediate Layout}
+MIPS kept immediates contiguous; RISC-V scatters them so opcode and register fields never move. The trade is one ImmGen mux versus a wider decode mux that would be on the critical path. Since wires are cheaper than mux delay, RISC-V wins. The choice also makes compressed (16-bit) extension easier: its immediates reuse the same scatter pattern. This is a lesson in ISA design: optimise the common hardware (decode) even if the rare instruction (branch) pays with wiring.
+
+
+
+\section{Forward-Look: What Changes When We Pipeline}
+The single-cycle datapath inserts no registers between stages. To pipeline, cut the wires between IF/ID, ID/EX, EX/MEM, MEM/WB and insert edge-triggered pipeline registers that hold instruction bits, control signals, and data for one extra cycle. The datapath blocks themselves do not change: the same ALU, same ImmGen, same memories. Only the clock period shrinks from $T_{\text{LW}}$ to $\max(t_{\text{IM}},t_{\text{RF}}+t_{\text{ALU}},t_{\text{DM}})$ plus register overhead. That shrinks from $\sim$8\,ns to $\sim$2\,ns, at the cost of hazards that Ch.~\ref{ch:pipeline} solves with forwarding and stalling.
+
+Single-cycle control is trivial (combinational) but the datapath itself is the foundation: every later optimisation (multi-cycle, pipeline, superscalar) is a scheduling of these same blocks.
+
+
+\section{Bonus Drill: Cycle-by-Cycle Table}
+Fill this table for three cycles executing \texttt{ADDI x1,x0,10; ADD x2,x1,x1; SW x2,0(x0)}:
+
+\begin{center}
+\scriptsize
+\begin{tabular}{c|c|c|c|c}
+\toprule Cycle & PC & Instruction & Key datapath action & RF change \\ \midrule
+1 & 0x00 & \texttt{ADDI x1,x0,10} & ImmGen 10 $\to$ ALU ADD $\to$ WB & \texttt{x1}=10 \\
+2 & 0x04 & \texttt{ADD x2,x1,x1} & \texttt{x1}+\texttt{x1} $\to$ ALU $\to$ WB & \texttt{x2}=20 \\
+3 & 0x08 & \texttt{SW x2,0(x0)} & \texttt{x0}+0 $\to$ ALU addr; \texttt{x2} $\to$ DMem & Mem[0]=20 \\ \bottomrule
+\end{tabular}
+\end{center}
+If any cycle shows Mem[0] still 0, the store's \texttt{MemWrite} was not asserted; if \texttt{x2} is 10, the second read port was wired to \texttt{rd} instead of \texttt{rs2}.
+
+
+\section{Glossary and Signals You Must Know}
+Quick reference: PC (program counter), IMem/DMem (instr/data memory), RF (register file), ImmGen (immediate generator), ALUCtrl/ALUOp (ALU control), MemRead/MemWrite (data enables), RegWrite (register write), MemToReg (WB mux), ALUSrc (ALU B mux), Branch/Jump (PC mux), Zero/Negative/Overflow (ALU flags), \texttt{shamt} (shift amount).
+
+\section{Exercises}
+\begin{exercise}For \texttt{LW x5,8(x6)}, trace data flow through the full datapath. Which muxes select which inputs at each stage, and what does data memory do?\end{exercise}
+\begin{exercise}For \texttt{AUIPC x5,0x12345} at PC 0x1000, what ImmGen immediate is produced and what value reaches \texttt{x5} after WB?\end{exercise}
+\begin{exercise}Why must the register file have two read ports? Could a single-port file with two cycles work? What would it cost in CPI and clock period?\end{exercise}
+\begin{exercise}The ALU does SUB by inverting $B$ and setting carry-in to 1. Show how \texttt{BEQ} uses this plus the Zero flag to test equality without a separate comparator; what ALUCtrl does it use?\end{exercise}
+\begin{exercise}If $t_{\text{IM}}=2$\,ns, $t_{\text{RF}}=1$\,ns, $t_{\text{ALU}}=2$\,ns, $t_{\text{DM}}=2$\,ns, estimate $T_{\text{clk}}$ for single-cycle. Which instruction determines it and why? How much would R-type alone need?\end{exercise}
+\begin{exercise}Design ImmGen for B-type: list which instruction bits map to \texttt{imm[12:1]}, explain why \texttt{imm[0]} is always 0, and compute the immediate for branch offset $-8$ bytes showing all scrambled fields.\end{exercise}

@@ -1,0 +1,260 @@
+\chapter{Control Unit: Orchestrating the Datapath}\label{ch:control}
+\begin{center}\small\textit{If the datapath is the body, control is the nervous system: every mux and enable has a signal.}\end{center}
+
+\section{What Control Does}
+The datapath has many choices each cycle: which register to read/write, ALU operation, whether to access memory, where the next PC comes from.
+The \textbf{control unit} examines the instruction word (opcode, funct3, funct7) and generates the select/enable signals that configure the datapath.
+In a single-cycle machine all decisions are combinational; in a pipelined machine they flow through pipeline registers (Ch.~\ref{ch:pipeline}).
+
+\section{Control Signals Inventory}
+For our RV32I single-cycle datapath:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule Signal & Width & Meaning \\ \midrule
+\texttt{RegWrite} & 1 & write register file when 1 \\
+\texttt{MemRead}/\texttt{MemWrite} & 1 each & data-memory read/write \\
+\texttt{MemToReg} & 1 & write-back source: 0=ALU, 1=memory \\
+\texttt{ALUSrc} & 1 & ALU input B: 0=register, 1=immediate \\
+\texttt{ALUOp}/\texttt{ALUCtrl} & 2 / 4 & selects ALU operation \\
+\texttt{Branch},\ \texttt{Jump} & 1 each & PC source selection \\
+\texttt{ImmSrc} & 2 & which immediate format \\ \bottomrule
+\end{tabular}
+\end{center}
+
+\section{ALU Control: From funct to Operation}
+The main control emits a 2-bit \texttt{ALUOp}; the ALU decoder combines it with funct fields to produce 4-bit \texttt{ALUCtrl}:
+
+\begin{center}
+\begin{tabular}{ccl}
+\toprule \texttt{ALUOp} & funct & \texttt{ALUCtrl} / operation \\ \midrule
+00 & --- & 0010 = ADD (address / ADDI) \\
+01 & --- & 0110 = SUB (branch compare) \\
+10 & funct3=000, funct7=0 & 0010 = ADD \\
+10 & funct3=000, funct7=0100000 & 0110 = SUB \\
+10 & funct3=111 & 0000 = AND \\
+10 & funct3=110 & 0001 = OR \\
+10 & funct3=100 & 0011 = XOR \\
+10 & funct3=010 & 0111 = SLT \\ \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.90]
+\node[draw, fill=blue!14, rounded corners, minimum width=2.2cm, minimum height=1.0cm, align=center] (main) at (0,0) {Main\\Control};
+\node[draw, fill=orange!16, rounded corners, minimum width=2.0cm, minimum height=1.0cm, align=center] (alu) at (4.2,0) {ALU\\Control};
+\node[draw, fill=green!14, trapezium, trapezium angle=75, minimum width=2.0cm, minimum height=1.0cm] (alublk) at (7.0,0) {ALU};
+\draw[-{Stealth}, thick, blue!60!black] (main.east) -- (alu.west) node[midway, above] {\texttt{ALUOp}};
+\draw[-{Stealth}, thick, violet!70!black] (alu.east) -- (alublk.west) node[midway, above] {\texttt{ALUCtrl}};
+\node[above=0.5cm of main, font=\tiny, align=center] {opcode\\funct3/7};
+\draw[-{Stealth}, thick, gray] (0,0.85) -- (main.north);
+\draw[-{Stealth}, thick, gray] (4.2,0.85) -- (alu.north) node[midway, right, font=\tiny] {funct};
+\end{tikzpicture}
+\end{center}
+
+\section{Main Control Truth Table}
+Each opcode maps to a control-word (combinational). Example rows:
+
+\begin{center}
+\begin{tabular}{lcccccccl}
+\toprule Instr & \texttt{ALUOp} & \texttt{ALUSrc} & \texttt{MemRead} & \texttt{MemWrite} & \texttt{RegWrite} & \texttt{MemToReg} & \texttt{Branch} & \texttt{Jump}\\ \midrule
+R-type (0110011) & 10 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+\texttt{LW} (0000011) & 00 & 1 & 1 & 0 & 1 & 1 & 0 & 0 \\
+\texttt{SW} (0100011) & 00 & 1 & 0 & 1 & 0 & --- & 0 & 0 \\
+\texttt{BEQ} (1100011) & 01 & 0 & 0 & 0 & 0 & --- & 1 & 0 \\
+\texttt{JAL} (1101111) & --- & --- & 0 & 0 & 1 & --- & 0 & 1 \\ \bottomrule
+\end{tabular}
+\end{center}
+
+\texttt{``---''} means don't-care; logic minimisation (Karnaugh / espresso) exploits them to reduce gate count.
+Branches use SUB and check the Zero flag; \texttt{JAL} writes PC+4 to \texttt{rd} and jumps.
+
+\section{Hardwired versus Microcoded Control}
+\textbf{Hardwired}: control truth table synthesised directly into gates (PLA / random logic). Fast, used in RISC single-cycle and pipelined designs.
+
+\textbf{Microcoded}: instructions as sequences of micro-ops stored in a control ROM; micro-PC steps through them (CISC style). More regular but slower; modern x86 decodes to hardwired micro-ops internally --- a hybrid.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, rounded corners, minimum width=2.8cm, minimum height=1.2cm, align=center] (hw) at (0,0) {\textbf{Hardwired}\\{\tiny gates / PLA}\\{\tiny one level}};
+\node[draw, fill=orange!16, rounded corners, minimum width=2.8cm, minimum height=1.2cm, align=center] (uc) at (6,0) {\textbf{Microcoded}\\{\tiny control store ROM}\\{\tiny micro-PC + sequencer}};
+\draw[{Stealth}-{Stealth}, thick, violet!70!black] (hw) -- (uc) node[midway, above, fill=white, inner sep=2pt] {trade-off};
+\node[below=0.4cm of hw, font=\tiny, text=gray!60!black] {Fast, less flexible};
+\node[below=0.4cm of uc, font=\tiny, text=gray!60!black] {Slower, easy to change};
+\end{tikzpicture}
+\end{center}
+
+\section{Single-Cycle Control Datapath Integration}
+All control outputs fan out to muxes and enables. The PC logic is itself controlled: next PC is PC+4 normally, branch target if \texttt{Branch}$\land$\texttt{Zero}, or jump target if \texttt{Jump}. The beauty of RISC: because formats are regular, main control is a small truth table ($\approx 7$ opcodes $\times$ 8 signals) and easily pipelined.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.82]
+\node[draw, fill=yellow!16, minimum width=1.6cm, minimum height=0.8cm, align=center] (ctrl) at (0,0) {Control\\Unit};
+\node[draw, fill=blue!10, minimum width=1.2cm, minimum height=0.6cm] (pc2) at (3.0,1.0) {PC mux};
+\node[draw, fill=green!12, minimum width=1.4cm, minimum height=0.6cm] (alu2) at (3.0,0.0) {ALU mux};
+\node[draw, fill=red!12, minimum width=1.4cm, minimum height=0.6cm] (wb2) at (3.0,-1.0) {WB mux};
+\draw[-{Stealth}, thick, blue!60!black] (ctrl.east |- pc2.west) -- (pc2.west) node[midway, above, font=\tiny] {Branch/Jump};
+\draw[-{Stealth}, thick, green!60!black] (ctrl.east |- alu2.west) -- (alu2.west) node[midway, above, font=\tiny] {ALUSrc/ALUCtrl};
+\draw[-{Stealth}, thick, red!60!black] (ctrl.east |- wb2.west) -- (wb2.west) node[midway, above, font=\tiny] {MemToReg};
+\node[above=0.6cm of ctrl, font=\tiny] {instr[6:0], funct};
+\draw[-{Stealth}, thick, gray] (0,1.0) -- (ctrl.north);
+\end{tikzpicture}
+\end{center}
+
+\section{Exceptions and Interrupts (Preview)}
+Real control also handles traps: illegal opcode, misaligned access, \texttt{ECALL}/\texttt{EBREAK}, and external interrupts.
+On trap, control saves PC to \texttt{mepc}, cause to \texttt{mcause}, and jumps to a handler address in \texttt{mtvec} (RISC-V privileged spec). Pipelined control must flush in-flight instructions and suppress their writes --- a control hazard handled by injecting bubbles.
+
+\section{Hardwired Control in Detail}
+Hardwired means a PLA or random gates directly implement the truth table. Inputs are opcode[6:0], funct3, funct7[5]; outputs are the 8 control lines. Synthesis tools minimise with espresso, exploiting don't-cares to merge product terms. The result is two-level logic (AND-OR) or multi-level gates, settling in under 0.5\,ns in 45\,nm. Changing the ISA means re-synthesising, but RISC's small table makes this trivial. This is why every high-performance RISC core is hardwired.
+
+\section{Microcoded Control in Detail}
+Microcoded machines store control words in a ROM. A sequencer steps through micro-ops: fetch, decode, execute, memory, write-back each become one or more micro-cycles. The micro-PC increments or branches on opcode. Adding a new instruction means writing a new micro-routine, not rewiring gates. Cost is time: each micro-step is a clock, so an R-type that was one cycle now takes 4. CISC used this when transistors were scarce; modern x86 still microcodes complex ops (e.g., \texttt{REP MOVS}) but cracks simple ops into hardwired micro-ops.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.85]
+\node[draw, fill=blue!12, minimum width=2.2cm, minimum height=0.8cm, align=center] (rom) at (0,0) {Control Store\\{\scriptsize ROM 64$\times$12b}};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.8cm, align=center] (seq) at (3.4,0) {$\mu$PC + Seq};
+\node[draw, fill=orange!16, minimum width=1.8cm, minimum height=0.8cm, align=center] (reg) at (6.4,0) {$\mu$IR$\to$signals};
+\draw[-{Stealth}, thick, blue!60!black] (seq.west) -- (rom.east);
+\draw[-{Stealth}, thick, green!60!black] (rom.west) -- ++(-0.8,0) |- (seq.south);
+\draw[-{Stealth}, thick, violet!70!black] (rom.east) -- (reg.west);
+\node[below=0.35cm of rom, font=\tiny, text=gray!60!black] {one row per micro-step};
+\end{tikzpicture}
+\end{center}
+
+\section{Trap Handling: When Control Must Abort}
+Illegal opcode (no matching truth-table row), misaligned load/store (address[1:0]$\neq$0 for LW), \texttt{ECALL}/\texttt{EBREAK}, and external interrupts all trap. Hardware does atomically: save PC to \texttt{mepc}, cause code to \texttt{mcause}, privilege to \texttt{mstatus.MPP}, then jump to \texttt{mtvec}. Control must suppress \texttt{RegWrite} and \texttt{MemWrite} for the faulting instruction and flush the next fetch. In single-cycle this is just a mux forcing next PC to \texttt{mtvec} and gating writes with \texttt{trap}$=0$. In pipelined machines it becomes a flush and bubble, covered in Ch.~\ref{ch:pipeline}. Forgetting to gate \texttt{RegWrite} on trap lets a faulting \texttt{LW} with \texttt{rd}$=$\texttt{rs1} corrupt the base register even though the load never completed.
+
+\section{Don't-Care Optimisation and Truth-Table Minimisation}
+Rows marked ``---'' are don't-cares the synthesiser exploits. \texttt{MemToReg} for \texttt{SW} is irrelevant because \texttt{RegWrite}$=0$, so \texttt{MemToReg} never reaches a register; the minimiser ties it to 0 to save a gate. \texttt{ALUSrc} for jumps is don't-care because the ALU result is discarded. Branch uses \texttt{ALUOp}$=01$ which forces ALUCtrl to SUB regardless of funct, so funct bits are don't-cares for \texttt{BEQ}. Karnaugh maps for \texttt{RegWrite} show it is 1 only for R, LW, JAL/JALR: \texttt{RegWrite}$=$(R$\lor$LW$\lor$JAL), two OR gates. This is why clean don't-cares shrink area and power.
+
+\section{From Single-Cycle to Pipelined Control}
+Single-cycle control is combinational; pipelined control must ride along with the instruction. Each control signal is generated in ID but used in EX/MEM/WB, so it is latched into pipeline registers (ID/EX, EX/MEM, MEM/WB). The same truth table drives the pipeline, just delayed. This reveals why control hazards exist: a branch decision needs the Zero flag from EX, but the next fetch has already entered IF. Solutions are stalling, forwarding the flag, or predicting. Understanding the single-cycle truth table first makes these pipeline fixes obvious rather than mysterious.
+
+\section{Design Methodology}
+Steps: (1) list datapath points needing control, (2) decide instruction $\to$ signal mapping, (3) build truth tables, (4) minimise with Karnaugh or synthesis tool, (5) verify with exhaustive simulation. A single bug (e.g., enabling \texttt{RegWrite} during \texttt{SW} when \texttt{rd} overlaps \texttt{rs2}) silently corrupts state --- formal verification of control is standard practice.
+
+
+\section{Worked Control Words: From Assembly to Signals}
+Derive the word for each of the five base opcodes, showing how don't-cares are chosen for minimal logic.
+
+\texttt{ADD x5,x6,x7} (R, \texttt{0110011}): \texttt{RegWrite}=1, \texttt{ALUSrc}=0, \texttt{MemRead}=0, \texttt{MemWrite}=0. \texttt{MemToReg}=0, \texttt{Branch}=0, \texttt{Jump}=0, \texttt{ALUOp}=10, \texttt{ALUCtrl}=0010 (ADD). \texttt{ImmSrc} don't-care; tie to 00.
+
+\texttt{LW x5,8(x6)} (I-load, \texttt{0000011}): \texttt{ALUSrc}=1 (imm), \texttt{MemRead}=1, \texttt{RegWrite}=1, \texttt{MemToReg}=1 (memory to register), \texttt{MemWrite}=0, \texttt{Branch}=\texttt{Jump}=0, \texttt{ALUOp}=00 (forces ADD for address), \texttt{ImmSrc}=00.
+
+\texttt{SW x5,8(x6)} (S, \texttt{0100011}): \texttt{ALUSrc}=1, \texttt{MemWrite}=1, \texttt{MemRead}=0, \texttt{RegWrite}=0 (critical: if 1, \texttt{rd} field overlaps \texttt{rs2} encoding and would corrupt a register), \texttt{Branch}=\texttt{Jump}=0, \texttt{ALUOp}=00, \texttt{MemToReg}=$-$.
+
+\texttt{BEQ x5,x6,off} (B, \texttt{1100011}): \texttt{ALUSrc}=0, \texttt{Branch}=1, \texttt{MemRead}=\texttt{MemWrite}=\texttt{RegWrite}=0, \texttt{ALUOp}=01 (forces SUB), \texttt{ImmSrc}=10 (B-type, imm[0]=0). \texttt{MemToReg}=$-$, \texttt{Jump}=0. Zero flag from ALU decides PC mux late.
+
+\texttt{JAL x1,off} (J, \texttt{1101111}): \texttt{Jump}=1, \texttt{RegWrite}=1 (writes PC+4 to \texttt{rd}), \texttt{MemRead}=\texttt{MemWrite}=\texttt{Branch}=0, \texttt{ALUSrc}=$-$, \texttt{MemToReg}=$-$ (actually selects PC+4 path, often encoded as 10 in 2-bit \texttt{MemToReg}), \texttt{ImmSrc}=11.
+
+\section{Control Timing and Why Branch Is Late}
+All control is combinational, so signals settle after opcode$\to$PLA$\to$mux. The PC mux is the last to settle because it waits for \texttt{Branch}$\land$\texttt{Zero}. Zero itself comes from the 32-bit ALU comparator ($R==0$), a wide AND of NORs, so the path opcode$\to$\texttt{ALUOp}$\to$\texttt{ALUCtrl}$\to$ALU$\to$Zero$\to$PC mux is one of the longest nets. If it violates setup at the PC register, branches jump to random addresses while loads still work, a confusing lab symptom.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.84]
+\node[draw, fill=blue!14, minimum width=1.6cm, minimum height=0.6cm] (op) at (0,0) {opcode};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.6cm] (aluop) at (2.6,0) {ALUOp};
+\node[draw, fill=orange!16, minimum width=1.6cm, minimum height=0.6cm] (aluctrl) at (5.2,0) {ALUCtrl};
+\node[draw, fill=red!12, minimum width=1.6cm, minimum height=0.6cm] (alu) at (7.8,0) {ALU$\to$Zero};
+\node[draw, fill=violet!12, minimum width=1.4cm, minimum height=0.6cm] (pc) at (7.8,-1.2) {PC mux};
+\draw[-{Stealth}, thick, blue!60!black] (op.east) -- (aluop.west);
+\draw[-{Stealth}, thick, green!60!black] (aluop.east) -- (aluctrl.west);
+\draw[-{Stealth}, thick, orange!60!black] (aluctrl.east) -- (alu.west);
+\draw[-{Stealth}, thick, red!60!black] (alu.south) -- (pc.north) node[midway, right, font=\tiny] {Zero};
+\node[below=0.2cm of pc, font=\tiny, text=gray!60!black] {critical control path};
+\end{tikzpicture}
+\end{center}
+
+\section{Expanding the Truth Table: ADDI, LUI, AUIPC}
+The five-row table in the overview omits three common opcodes. \texttt{ADDI} (\texttt{0010011}, I-type) is like LW without memory: \texttt{ALUSrc}=1, \texttt{RegWrite}=1, \texttt{ALUOp}=00 (ADD), \texttt{MemRead}=0, \texttt{MemToReg}=0. \texttt{LUI} (\texttt{0110111}, U-type) writes \texttt{imm[31:12]}$\ll$12 directly to \texttt{rd}: \texttt{RegWrite}=1, \texttt{ALUSrc}=$-$, \texttt{ALUOp}=11 (pass-through), \texttt{ImmSrc}=01. \texttt{AUIPC} (\texttt{0010111}) adds PC+U-imm: ALU does ADD with PC as one input, a separate PC$\to$ALU mux controlled by \texttt{ALUSrcB}. The pattern is that every instruction is a row; synthesis merges rows with shared outputs.
+
+\section{Exam Checklist: Control}
+(1) list every signal and its width/meaning; (2) draw ALUOp$\to$ALUCtrl decode table (00$\to$ADD, 01$\to$SUB, 10+funct$\to$R-type); (3) write the main truth table for R/LW/SW/BEQ/JAL and mark don't-cares, explaining why each $-$ is safe; (4) state hardwired = gates/PLA (fast) vs microcoded = ROM+$\mu$PC (flexible, multi-cycle); (5) describe trap: save \texttt{mepc}/\texttt{mcause}, jump \texttt{mtvec}, gate \texttt{RegWrite}/\texttt{MemWrite}, flush fetch.
+
+
+\section{Control Optimisation: Two-Level Decode}
+Why two levels (Main$\to$ALUOp$\to$ALUCtrl) instead of one flat table from opcode+funct to ALUCtrl? Because R-type is the only format that needs funct, and \texttt{ALUOp} compresses the choice: 00 means ``always ADD'' (loads/stores/ADDI), 01 means ``always SUB'' (branches), 10 means ``look at funct''. The second level is then only 4 rows. A flat table would be $7\times8=56$ product terms; the two-level version is $7+8=15$, smaller and faster. The synthesiser would discover the same factorisation, but writing it hierarchically makes the Verilog readable and the timing easier to close.
+
+\section{Jump Control: JAL vs JALR vs Branch}
+Branches are conditional and PC-relative; \texttt{JAL} is unconditional PC-relative; \texttt{JALR} is unconditional register-indirect. Control distinguishes them: \texttt{Branch}=1 means ``use Zero'', \texttt{Jump}=1 means ``always take'', \texttt{JumpReg}=1 means ``target is ALU output not PC+imm''. In single-cycle these three bits drive one 3-to-1 PC mux; in pipelined they become separate pipeline stages. Mixing up \texttt{JAL} and \texttt{JALR} targets is a frequent ISA exam trap: \texttt{JAL} offset is $\pm$1\,MB (J-imm, imm[0]=0), \texttt{JALR} offset is $\pm$2\,KB (I-imm) added to \texttt{rs1}.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.85]
+\node[draw, fill=blue!14, minimum width=1.5cm, minimum height=0.6cm] (b) at (0,0) {BEQ: PC+imm if Zero};
+\node[draw, fill=green!14, minimum width=1.5cm, minimum height=0.6cm] (j) at (3.2,0) {JAL: PC+imm always};
+\node[draw, fill=orange!16, minimum width=1.5cm, minimum height=0.6cm] (jr) at (6.4,0) {JALR: rs1+imm \& $\sim$1};
+\draw[-{Stealth}, thick, blue!60!black] (b.east) -- (j.west);
+\draw[-{Stealth}, thick, green!60!black] (j.east) -- (jr.west);
+\node[below=0.35cm of j, font=\tiny, text=gray!60!black] {three PC sources, one mux};
+\end{tikzpicture}
+\end{center}
+
+\section{Control Verification: Exhaustive Simulation}
+Control is small enough to verify exhaustively. Enumerate all $2^{10}$ combinations of opcode[6:0]+funct3, simulate the truth table, and compare to a golden reference from Spike. A Python checker does this in milliseconds. The most valuable test is the don't-care check: for any input where the spec says ``$-$'', assert that neither \texttt{RegWrite} nor \texttt{MemWrite} is spuriously asserted for opcodes that should not write. One stray \texttt{RegWrite}=1 on \texttt{SW} writes \texttt{rd}=imm[11:7] with memory data and silently corrupts the register file, a bug that passes \texttt{ADD} tests but fails \texttt{memcpy}.
+
+\section{X vs Don't-Care and Power}
+Don't-care is not ``any value is fine in hardware'' but ``the synthesiser may pick whichever value minimises gates''. Tying \texttt{MemToReg} to 0 for branches saves a mux input; tying \texttt{ALUSrc} to 0 for jumps saves a wire. Power also benefits: gating the ALU clock when \texttt{ALUOp}=11 (LUI pass-through) avoids toggling the adder. These micro-optimisations matter in a 32-bit MCU where the datapath is a large fraction of area.
+
+\section{Privileged Control and Trap Preview}
+User code is not the whole picture. The privileged ISA adds CSRs (\texttt{mstatus}, \texttt{mtvec}, \texttt{mepc}, \texttt{mcause}) and instructions \texttt{ECALL}, \texttt{EBREAK}, \texttt{MRET}, \texttt{CSRRW}. Control must now decode these opcodes, route CSR read/write data through the WB mux, and handle traps atomically as described above. A trap is a control-flow event that overrides the normal PC mux and write enables in the same cycle it is detected; failing to suppress \texttt{MemWrite} on a misaligned store that traps would corrupt memory at the faulting address. Pipelined control adds a trap pipeline register and a flush signal that turns later stages into NOPs.
+
+
+\section{ALU Decoder Truth in Full}
+The textbook 8-row ALUCtrl table compresses to: if \texttt{ALUOp}=00 output 0010 (ADD); if 01 output 0110 (SUB); if 10 decode funct3/funct7: 000+0$\to$0010 ADD, 000+1$\to$0110 SUB, 111$\to$0000 AND, 110$\to$0001 OR, 100$\to$0011 XOR, 010$\to$0111 SLT, 011$\to$1000 SLTU, shifts map to 1001--1011. Don't-care for non-R opcodes; the decoder ignores funct there so a load with stray funct bits still adds correctly. Verilog is a single \texttt{case} on \{\texttt{ALUOp},funct3,funct7[5]\}.
+
+\section{Control and the Assembler: Pseudo-Instructions}
+\texttt{NOP} is \texttt{ADDI x0,x0,0}: control word is like ADDI but \texttt{RegWrite} is gated by \texttt{rd}$\neq$0 so no write occurs, and the ALU does $0+0$. \texttt{MV rd,rs} is \texttt{ADDI rd,rs,0} with same word. \texttt{LI rd,imm} expands to \texttt{LUI+ADDI} when imm needs 32 bits, so control sees two real instructions. \texttt{CALL offset} is \texttt{AUIPC+JALR}. The control unit never sees pseudos; the assembler has already lowered them, so no extra rows are needed.
+
+\section{Putting It All Together: One Cycle, End to End}
+Follow \texttt{BEQ x5,x6,loop} at PC 0x1000 with offset $-16$ (loop at 0x0FF0). IF fetches \texttt{0xFE628AE3} (encoded B-imm $-16$); ID reads \texttt{x5},\texttt{x6} and ImmGen makes \texttt{0xFFFFFFF0}; EX does SUB and Zero is 1 if equal; branch-adder made 0x0FF0 early; MEM does nothing; WB does nothing; at the next rising edge PC latches 0x0FF0 if Zero else 0x1004. Control asserted \texttt{Branch}=1, \texttt{ALUOp}=01, \texttt{RegWrite}=0, \texttt{MemRead}=0 the whole cycle. Every signal's purpose is visible in this one instruction.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.80]
+\node[draw, fill=blue!12, minimum width=1.4cm, minimum height=0.6cm] (if) at (0,0) {IF: PC$\to$IMem};
+\node[draw, fill=green!14, minimum width=1.4cm, minimum height=0.6cm] (id) at (2.8,0) {ID: RF+ImmGen};
+\node[draw, fill=orange!16, minimum width=1.4cm, minimum height=0.6cm] (ex) at (5.6,0) {EX: SUB$\to$Zero};
+\node[draw, fill=red!12, minimum width=1.4cm, minimum height=0.6cm] (wb) at (8.4,0) {WB: no write};
+\draw[-{Stealth}, thick, blue!60!black] (if.east)--(id.west);
+\draw[-{Stealth}, thick, green!60!black] (id.east)--(ex.west);
+\draw[-{Stealth}, thick, orange!60!black] (ex.east)--(wb.west);
+\node[below=0.4cm of id, font=\tiny, text=violet!70!black] {Branch=1, ALUOp=01};
+\end{tikzpicture}
+\end{center}
+
+
+\section{Control Hazards Preview: Why Branches Hurt Pipelines}
+In single-cycle, the branch target and Zero are ready before the next PC latch, so no hazard exists. In a 5-stage pipeline, IF fetches the next instruction before ID even decodes the branch, and EX knows Zero two cycles later. Without forwarding or prediction, the pipeline must stall two cycles per branch, losing 15--20\% throughput. Solutions (branch prediction, early Zero in ID, delay slots) are all patches on the control timing we just derived. Mastering the single-cycle control word makes the pipeline fix obvious: move the comparison earlier or speculate and flush on mispredict.
+
+\section{Area and Power of Control}
+Control is tiny: the main PLA is $\approx$7 rows$\times$8 columns, a few dozen gates. The ALU decoder is similar. Total control area is under 5\% of the core; the datapath (memories, RF, ALU) dominates area and power. This is why RISC is efficient: simple truth tables need negligible energy compared to the SRAM arrays they steer. Adding microcode ROM would actually grow area for RV32I and slow it, so no one does it except for the rare complex CSR atomics.
+
+
+
+\section{Forward-Look: What Changes When We Pipeline}
+Single-cycle control is combinational; pipelined control latches ID's signals into ID/EX, EX/MEM, MEM/WB so they emerge alongside the data they steer. Branch's \texttt{Branch} and Zero meet at EX/MEM, not ID. Same truth table, only timing shifts, so Ch.~\ref{ch:pipeline} reuses every row.
+
+The control unit is under 200 gates in a minimal RV32I; the datapath SRAM dominates area by 10$\times$. Optimising control is about correctness, not area.
+
+
+\section{Bonus Drill: Control Word Table}
+For \texttt{ADDI x1,x0,10}; \texttt{ADD x2,x1,x1}; \texttt{SW x2,0(x0)}; \texttt{LW x3,0(x0)}; \texttt{BEQ x2,x3,done} the words (RegW, ALUSrc, MemR, MemW, M2R, Br, J, ALUOp) are: \texttt{ADDI}(1,1,0,0,0,0,0,00), \texttt{ADD}(1,0,0,0,0,0,0,10), \texttt{SW}(0,1,0,1,$-$,0,0,00), \texttt{LW}(1,1,1,0,1,0,0,00), \texttt{BEQ}(0,0,0,0,$-$,1,0,01). \texttt{SW} needs \texttt{RegWrite}=0 (else \texttt{rd}=imm[11:7] corrupts); \texttt{BEQ} needs \texttt{ALUOp}=01 for SUB.
+
+
+
+\section{Synthesis: How Small Control Really Is}
+Main control synthesises to a 7-row PLA of about 40 product terms; the ALU decoder is 8 rows. Together they are under 150 gates, versus $>$10k for the SRAM arrays. This is why RISC control is often drawn as a tiny box: it steers 10$\times$ its area in datapath. Verification is exhaustive: enumerate all $2^{10}$ opcode+funct combos against a Spike golden model.
+
+Control's correctness is proved by exhaustive enumeration, not random testing, because the input space is only 10 bits.
+
+\section{Glossary and Signals You Must Know}
+Quick reference: Main Control (opcode\,$\to$\,word), ALU Control (ALUOp+funct\,$\to$\,ALUCtrl), \texttt{RegWrite}, \texttt{MemRead}, \texttt{MemWrite}, \texttt{MemToReg}, \texttt{ALUSrc}, \texttt{Branch}, \texttt{Jump} (see inventory), \texttt{ImmSrc} (format). Don't-care ``$-$'' lets synthesiser minimise; PLA is hardwired logic; $\mu$PC/$\mu$IR are micro sequencer; \texttt{mepc}/\texttt{mcause}/\texttt{mtvec} are trap CSRs.
+
+\section{Exercises}
+\begin{exercise}Write the control-word for \texttt{ADDI x5,x6,42} and for \texttt{SW x5,8(x6)}. Which signals differ and why?\end{exercise}
+\begin{exercise}Show that \texttt{RegWrite} for RV32I is 1 only for R, I-load, I-arith, JAL, JALR, LUI, AUIPC. Write its sum-of-products and minimise with don't-cares.\end{exercise}
+\begin{exercise}Derive \texttt{ALUCtrl} for \texttt{SUB} vs.\ \texttt{ADD}: which funct bit distinguishes them and how does the decoder use it?\end{exercise}
+\begin{exercise}Why is \texttt{MemToReg} a don't-care for branches and jumps? What would happen if it were set to 1 during \texttt{BEQ}?\end{exercise}
+\begin{exercise}Compare hardwired and microcoded control for a new instruction that needs 4 micro-steps. Which is faster? Which is easier to patch post-silicon?\end{exercise}
+\begin{exercise}Explain why control must suppress \texttt{RegWrite} when an exception is detected in MEM. What goes wrong if it does not?\end{exercise}

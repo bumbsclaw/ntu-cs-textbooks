@@ -1,0 +1,211 @@
+\chapter{Performance \& Benchmarking}\label{ch:perf}
+\begin{center}\small\textit{What makes a computer fast? How we measure matters as much as how we build.}\end{center}
+
+\section{Defining Performance: Latency, Throughput, and the Iron Law}
+For a user, \textbf{latency} is time per task, \textbf{throughput} is tasks per unit time. Speedup of $B$ over $A$ is $S=T_A/T_B$. ``$B$ is $30\%$ faster than $A$'' means $S=1.30$ (so $T_B=T_A/1.30\approx0.77\,T_A$), not $T_B=0.70\,T_A$---precision matters when reporting results.
+
+The \textbf{Iron Law} ties every optimisation to wall time:
+\[ \text{CPU time} = \text{IC}\times\text{CPI}\times T_{\text{clk}},\qquad T_{\text{clk}}=1/f. \]
+IC $=$ instruction count (ISA + compiler), CPI $=$ cycles per instruction (microarchitecture---pipeline, hazards, caches), $T_{\text{clk}}=$ clock period (technology + pipeline depth). No optimisation helps unless it reduces the \emph{product} of the three.
+
+Worked Iron Law: program $P$ has $\text{IC}=10^9$, $\text{CPI}=1.5$, $f=3$\,GHz so $T_{\text{clk}}=0.333$\,ns:
+\[ \text{CPU time}=10^9\times1.5\times\frac{1}{3\times10^9}=0.50\text{\,s}. \]
+Halve CPI to $0.75$ (superscalar) $\to0.25$\,s. Double $f$ to 6\,GHz but CPI rises to $2.0$ (deeper pipeline, more hazards) $\to10^9\times2.0/6\times10^9=0.33$\,s---frequency alone can hurt if CPI degrades. Chapter~4's pipeline trades $T_{\text{clk}}$ for CPI; chapter~5's caches trade CPI for IC (prefetch adds instructions).
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, minimum width=2.0cm, minimum height=0.85cm, align=center, rounded corners=2pt] (ic) at (0,0) {IC\\ISA, compiler};
+\node[draw, fill=green!16, minimum width=2.0cm, minimum height=0.85cm, align=center, rounded corners=2pt] (cpi) at (3.4,0) {CPI\\pipeline, cache};
+\node[draw, fill=orange!18, minimum width=2.0cm, minimum height=0.85cm, align=center, rounded corners=2pt] (tclk) at (6.8,0) {$T_{\text{clk}}$\\technology};
+\node[draw, fill=red!14, minimum width=2.2cm, minimum height=0.85cm, align=center, rounded corners=2pt] (time) at (3.4,-1.6) {CPU time $=$ IC$\cdot$CPI$\cdot T_{\text{clk}}$};
+\draw[-{Stealth}, thick, blue!60!black] (ic.south) |- (time.west);
+\draw[-{Stealth}, thick, green!60!black] (cpi.south) -- (time.north);
+\draw[-{Stealth}, thick, orange!60!black] (tclk.south) |- (time.east);
+\node[below=0.35cm of time, font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt, align=center] {Ch.1 sets IC, Ch.2--4 set CPI and $T_{\text{clk}}$, Ch.5--7 set CPI via AMAT and stalls; Iron Law decides if product wins};
+\end{tikzpicture}
+\end{center}
+
+\section{Amdahl's Law: Fixed Work, Faster Part}
+If fraction $p$ of work is accelerated by $s\times$, the rest $(1-p)$ is unchanged:
+\[ S = \frac{1}{(1-p)+p/s}\;\;\le\;\;\frac{1}{1-p}\quad\text{as }s\to\infty. \]
+Lesson: the unaccelerated fraction dominates. Optimising the common case helps, but the uncommon case caps speedup. This is why parallelising 90\% still leaves a $10\times$ ceiling.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\draw[-{Stealth}, thick] (0,0) -- (6.2,0) node[below, font=\tiny] {$p$ (parallel fraction)};
+\draw[-{Stealth}, thick] (0,0) -- (0,3.4) node[left, font=\tiny] {Speedup $S$};
+\draw[thick, blue!60!black] plot[smooth] coordinates {(0,0) (1.2,1.4) (2.4,2.1) (3.6,2.7) (4.8,3.0) (6.0,3.3)};
+\draw[dashed, red!60!black] (0,2.86) -- (6.2,2.86) node[right, font=\tiny, text=red!60!black] {$1/(1-p)=5$ for $p=0.8$};
+\node[font=\tiny, fill=yellow!10, draw=orange!40, rounded corners=2pt, align=center] at (3.0,1.0) {diminishing returns\\as $s$ grows};
+\node[font=\tiny, text=gray!60!black] at (3.0,-0.55) {Amdahl: fixed problem size};
+\end{tikzpicture}
+\end{center}
+
+Boxed exam drill: $p=0.80$, $s=10$.
+\[ S = \frac{1}{(1-0.80)+0.80/10}=\frac{1}{0.20+0.08}=\frac{1}{0.28}\approx\boxed{3.57},\quad\text{not }10. \]
+Upper bound as $s\to\infty$: $1/(1-0.80)=5.00$. Even infinite acceleration of 80\% leaves a $5\times$ ceiling. To reach $S=8$ with $p=0.80$: need $1/(0.20+0.80/s)=8\Rightarrow0.20+0.80/s=0.125$ impossible---no finite $s$ suffices; must increase $p$ (more of the work must be parallelised).
+
+Two more drills: (a) $p=0.90$, $s=4$: $S=1/(0.10+0.225)=1/0.325\approx3.08$. (b) $p=0.50$, $s=100$: $S=1/(0.50+0.005)\approx1.98$---barely $2\times$ even with $100\times$ on half the work. The intuition: $S$ is the harmonic mean of $1$ and $s$ weighted by $(1-p)$ and $p$. Designing a $10\times$ accelerator for 50\% of the work is rarely worth it; widening $p$ (parallelising more code) usually beats raising $s$.
+
+\section{Gustafson: Scaled Work, Fixed Time}
+Amdahl fixes problem size; real users scale the problem to fill a faster machine (larger images, finer simulations). Let $p$ be the parallel fraction \emph{in the scaled workload} and $N$ processor count:
+\[ S_{\text{scaled}} = p\cdot N + (1-p) = N - p(N-1). \]
+For $p=0.80$, $N=16$: $S_{\text{scaled}}=0.80\times16+0.20=13.0$, far above Amdahl's $3.57$. Gustafson argues parallel computing enables \emph{bigger} problems, not just faster fixed problems. Both laws are true under different scaling assumptions: Amdahl for fixed-size speedup, Gustafson for scaled-size throughput. Report which you assume; many benchmark disputes reduce to this.
+
+\section{Benchmarking and Pitfalls}
+A benchmark is a workload representing real use. Suites: \textbf{SPEC CPU 2017} (real C/C++/Fortran programs), \textbf{SPECjbb}, \textbf{TPC-C}, \textbf{PARSEC}, \textbf{MLPerf}. Hierarchy of fidelity:
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=red!16, minimum width=1.85cm, minimum height=0.85cm, align=center, rounded corners=2pt] (peak) at (0,0) {Peak\\FLOPS};
+\node[draw, fill=orange!16, minimum width=1.85cm, minimum height=0.85cm, align=center, rounded corners=2pt] (kernel) at (3.2,0) {Kernel\\(DGEMM)};
+\node[draw, fill=green!16, minimum width=1.85cm, minimum height=0.85cm, align=center, rounded corners=2pt] (spec) at (6.4,0) {SPEC CPU};
+\node[draw, fill=blue!16, minimum width=1.85cm, minimum height=0.85cm, align=center, rounded corners=2pt] (real) at (9.6,0) {Real app};
+\draw[-{Stealth}, thick, violet!70!black] (peak.east) -- (kernel.west);
+\draw[-{Stealth}, thick, violet!70!black] (kernel.east) -- (spec.west);
+\draw[-{Stealth}, thick, violet!70!black] (spec.east) -- (real.west);
+\node[below=0.50cm of peak, font=\tiny] {optimistic};
+\node[below=0.50cm of real, font=\tiny] {realistic};
+\node[above=0.55cm of spec, font=\tiny, fill=yellow!10, draw=violet!30, rounded corners=2pt] {fidelity $\to$};
+\end{tikzpicture}
+\end{center}
+
+Pitfalls that invalidate comparisons:
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Cherry-picking} benchmarks or inputs that favour your machine.
+\item Reporting \textbf{peak} not sustained (DGEMM peak vs.\ SPEC average---often $3\times$ apart).
+\item \textbf{Small inputs} that fit in cache and hide the memory system.
+\item \textbf{Warm-up/cool-down}: JIT compilation, DVFS ramp, cache warm-up---discard first iterations.
+\item Different \textbf{compilers/flags} (\texttt{-O3 -march=native} vs.\ \texttt{-O0} can be $4\times$).
+\item \textbf{Arithmetic vs.\ geometric mean} for ratios (see below).
+\end{enumerate}
+
+Geometric mean for ratios: SPEC reports \emph{ratios} (time$_{\text{ref}}$/time$_{\text{SUT}}$). Arithmetic mean of ratios is biased (a $2\times$ speedup and $0.5\times$ slowdown average to $1.25$ arithmetically but $1.0$ geometrically). So: \textbf{geometric mean for ratios, arithmetic mean for raw times}, plus variance/confidence intervals. Example: programs A and B score ratios $2.0$ and $0.5$---arithmetic mean $1.25$ claims a win, geometric mean $\sqrt{1.0}=1.0$ correctly shows no win. Always report the full distribution and sample size; a single run hiding $\pm15\%$ jitter is not a result.
+
+\section{Quantitative SPEC Drill}
+Suppose workload has three programs with baseline times $10$\,s, $20$\,s, $40$\,s and optimised times $8$\,s, $18$\,s, $30$\,s. Speedups are $1.25$, $1.11$, $1.33$. Arithmetic mean of speedups $=1.23$ overstates the long program's weight differently than time-weighted average. Geometric mean $=(1.25\times1.11\times1.33)^{1/3}\approx1.23$ (similar here because ratios are close). When ratios diverge---e.g.\ $4.0$ and $0.5$---arithmetic says $2.25\times$, geometric says $1.41\times$; the latter matches total-time speedup $(10+40)/(2.5+80)=0.61\times$ more honestly when programs are equally important. SPEC's choice of geometric mean encodes the judgment that each program matters equally regardless of absolute runtime.
+
+\section{Roofline Model: Compute versus Memory Bound}
+Attainable performance is limited by either peak compute or memory bandwidth $\times$ arithmetic intensity (AI $=$ FLOPs per byte moved):
+\[ \text{GFLOP/s} \le \min\big(\text{peak GFLOP/s},\; \text{bandwidth}\times\text{AI}\big). \]
+On a log-log plot the slanted memory roof and flat compute ceiling meet at the \textbf{ridge point} $\text{AI}_{\text{ridge}}=\text{peak}/\text{bandwidth}$.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.92]
+\draw[-{Stealth}, thick] (0,0) -- (6.8,0) node[below, font=\tiny] {Arithmetic intensity (FLOP/byte) -- log scale};
+\draw[-{Stealth}, thick] (0,0) -- (0,3.6) node[left, font=\tiny, align=center] {Attainable\\GFLOP/s};
+\draw[thick, blue!60!black] (0,2.6) -- (2.7,2.6);
+\draw[thick, green!60!black] (0,0.35) -- (2.7,2.6) -- (6.2,1.0);
+\draw[dashed, gray] (2.7,0) -- (2.7,2.6) node[below, font=\tiny, yshift=-0.10cm, fill=yellow!10, draw=gray!40, rounded corners=1pt] {ridge AI};
+\node[font=\tiny, fill=blue!8, draw=blue!30, rounded corners=2pt, align=center] at (1.25,1.55) {Memory\\bound};
+\node[font=\tiny, fill=orange!10, draw=orange!40, rounded corners=2pt, align=center] at (4.7,1.85) {Compute\\bound};
+\node[font=\tiny, text=blue!60!black] at (1.35,2.85) {peak FLOPS};
+\node[font=\tiny, text=green!60!black, rotate=27] at (1.35,1.15) {BW $\times$ AI};
+\node[font=\tiny, text=gray!50!black] at (5.2,0.35) {optimise: move right (reuse) or up (ILP)};
+\end{tikzpicture}
+\end{center}
+
+Example: peak $100$\,GFLOP/s, bandwidth $20$\,GB/s $\Rightarrow$ ridge at $\text{AI}=5$\,FLOP/B. Kernel with $\text{AI}=2$ attains at most $20\times2=40$\,GFLOP/s (memory-bound); needs $\text{AI}>5$ to hit the compute ceiling. Optimisation moves the point rightward (better cache reuse via blocking) or upward (more ILP/vectorisation). A dot-product at $\text{AI}=0.25$ is hopelessly memory-bound; a blocked matrix multiply at $\text{AI}=10$ is compute-bound---same machine, opposite bottlenecks.
+
+\section{MIPS, FLOPS, and Energy}
+\textbf{MIPS} $=\text{IC}/10^6/\text{time}$; \textbf{FLOPS} sustains for scientific code.
+Both are flawed cross-ISA: a RISC ISA needs more instructions than CISC for the same
+work, so higher MIPS can mean slower time; peak FLOPS ignores the roofline limit.
+Quote them only with ISA, compiler, and dataset context.
+
+MIPS example: RISC needs 2\,instrs for \texttt{MUL} that CISC does in 1, so for a
+loop of 100 MULs, RISC IC$=200$, CISC IC$=100$. At equal CPI and $f$, RISC MIPS is
+higher but time is longer---MIPS counted the extra instructions as progress.
+
+Modern metric is \textbf{performance per watt} (GFLOP/W or SPEC/W).
+Energy $=$ Power $\times$ Time; dynamic power $\approx C V^2 f$ plus leakage.
+At fixed power budget (phone $5$\,W, server $300$\,W), lower $f$ and smarter
+microarchitecture beat brute frequency.
+Two machines: A does $100$\,GFLOP at $200$\,W ($0.50$\,GFLOP/W),
+B does $80$\,GFLOP at $100$\,W ($0.80$\,GFLOP/W)---B is more efficient;
+at data-centre scale B halves electricity for 20\% less throughput, often the
+right trade. DVFS exploits this by lowering $V$ and $f$ together for cubic
+power savings. Dark silicon at sub-10\,nm forces this trade: not all transistors
+can switch at once within the thermal envelope.
+
+\section{Measurement Methodology}
+Reliable benchmarking needs: (1) pin frequency (disable Turbo/DVFS or report it),
+(2) warm caches and TLBs (3--5 warmup iterations), (3) isolate cores
+(\texttt{isolcpus}, disable hyperthreading noise), (4) report median $\pm$ IQR
+over $\ge 10$ runs, (5) fix compiler and flags (\texttt{-O2} vs.\ \texttt{-O3}
+can be $30\%$). Without this, a $10\%$ ``speedup'' may be noise.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.85]
+\node[draw, fill=blue!12, minimum width=1.7cm, minimum height=0.7cm, rounded corners=2pt] (m1) at (0,0) {Warmup};
+\node[draw, fill=green!14, minimum width=1.7cm, minimum height=0.7cm, rounded corners=2pt] (m2) at (2.6,0) {Measure};
+\node[draw, fill=orange!16, minimum width=1.8cm, minimum height=0.7cm, rounded corners=2pt] (m3) at (5.3,0) {Median $\pm$ IQR};
+\node[draw, fill=red!12, minimum width=1.6cm, minimum height=0.7cm, rounded corners=2pt] (m4) at (7.9,0) {Report};
+\draw[-{Stealth}, thick, blue!60!black] (m1.east) -- (m2.west);
+\draw[-{Stealth}, thick, green!60!black] (m2.east) -- (m3.west);
+\draw[-{Stealth}, thick, orange!60!black] (m3.east) -- (m4.west);
+\node[below=0.35cm of m2, font=\tiny, text=gray!60!black] {pin $f$, isolate core};
+\end{tikzpicture}
+\end{center}
+
+\section{Common Benchmark Pitfalls Drill}
+Pitfall examples with numbers: (a) \textbf{Peak vs.\ sustained}: DGEMM on a
+100\,GFLOP/s chip hits 95\,GFLOP/s, but \texttt{gcc} in SPEC averages
+15\,GFLOP/s---quoting peak overstates real code by $6\times$. (b) \textbf{Input
+size}: a 4\,KB input fits in L1 and shows 1\,ns AMAT; a 4\,MB input misses to
+DRAM at 80\,ns---$80\times$ difference hidden by a tiny dataset. (c) \textbf{Compiler
+flags}: \texttt{-O0} vs.\ \texttt{-O3 -march=native -flto} can be $3$--$5\times$
+on SPEC; comparing across flag sets is meaningless. (d) \textbf{JIT warmup}:
+first iteration includes compilation time; steady-state throughput after 5
+warmup runs may be $10\times$ higher. Always report the methodology appendix
+so results are reproducible.
+
+\section{CPI Stack and Top-Down Analysis}
+Real CPI decomposes:
+\[ \text{CPI}=1 + s_{\text{frontend}} + s_{\text{bad-spec}} + s_{\text{backend-bound}} + s_{\text{retiring}}. \]
+Intel's Top-Down method attributes every cycle to one bucket: frontend bound
+(I-cache/TLB misses), bad speculation (branch mispredicts), backend bound
+(data-cache/DRAM stalls, execution-port contention), or retiring (useful work).
+A memory-bound workload shows large backend-memory; a branch-heavy workload
+shows bad-speculation. This guides optimisation: if retiring already exceeds $60\%$,
+further tweaks yield little; if bad-speculation dominates, fix the predictor
+or layout. Tools like \texttt{perf stat} report these buckets on modern x86/ARM.
+
+Stall accounting example: 1\,B instructions, measured CPI $=2.1$ on a 4-wide
+machine (ideal CPI $=0.25$). So $s=1.85$. Top-Down says $0.70$ frontend,
+$0.45$ bad-spec, $0.60$ backend, $0.10$ retiring overhead. Biggest bucket is
+frontend---optimise I-cache or code layout first, not the data path.
+
+\section{Putting It Together Through the Iron Law}
+Each chapter optimised one Iron-Law term: ch1 ISA sets IC, ch2--4
+microarchitecture sets CPI/$T_{\text{clk}}$, ch5--7 memory and I/O set CPI via
+AMAT and stalls. Always report an optimisation by its effect on \emph{all three}.
+Example: deeper pipeline halves $T_{\text{clk}}$ $0.50$\,ns$\to0.30$\,ns but adds
+a load-use bubble ($s=0.15$) raising CPI $1.2\to1.5$.
+Time goes $1.2\times0.50=0.60\to1.5\times0.30=0.45$ (speedup $1.33\times$)---worth it.
+If CPI rises to $2.0$, time stays $0.60$ (no gain).
+This is the Iron Law check every proposal must pass.
+
+Exam strategy: for any ``which optimisation is better'' question, compute
+$\Delta\text{IC}\times\Delta\text{CPI}\times\Delta T_{\text{clk}}$ for each
+option and compare products. Never judge by one term alone.
+
+\section{Quick Reference: Which Law When?}
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule Question & Law & Formula\\ \midrule
+Fixed work, part faster & Amdahl & $S=1/((1-p)+p/s)$\\
+Scaled work, more CPUs & Gustafson & $S=pN+(1-p)$\\
+Memory vs.\ compute limit & Roofline & $\min(\text{peak},\text{BW}\times\text{AI})$\\
+Overall time & Iron Law & $\text{IC}\cdot\text{CPI}\cdot T_{\text{clk}}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Exercises}
+\begin{exercise}Program A runs in $2.0$\,s, B in $1.6$\,s. What is speedup of B over A? If B's clock is $20\%$ faster but CPI is $10\%$ higher than A's (same IC), what is net time? Which Iron-Law terms changed?\end{exercise}
+\begin{exercise}For $p=0.90$, $s=10$, compute Amdahl speedup and the $s\to\infty$ ceiling. Repeat for Gustafson with $N=16$ and explain why Gustafson gives a larger number.\end{exercise}
+\begin{exercise}Kernel has AI $=2$\,FLOP/B, peak $100$\,GFLOP/s, bandwidth $20$\,GB/s. Is it memory or compute bound? What bandwidth or AI increase makes it compute-bound?\end{exercise}
+\begin{exercise}Why report SPEC ratios as geometric mean, not arithmetic? Give a two-program example where arithmetic mean flips the winner.\end{exercise}
+\begin{exercise}Explain why MIPS is a poor cross-ISA metric. Give a concrete RISC vs.\ CISC example where higher MIPS means lower performance using the Iron Law.\end{exercise}
+

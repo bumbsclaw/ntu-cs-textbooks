@@ -1,0 +1,221 @@
+\chapter{I/O \& Buses}\label{ch:io}
+\begin{center}\small\textit{The processor talks to the world: disks, networks, screens, and sensors, all through buses and controllers.}\end{center}
+
+\section{How I/O Fits: Memory-Mapped I/O}
+Every I/O device exposes \textbf{control}, \textbf{status}, and \textbf{data} registers. Two models connect them to the CPU. \textbf{Memory-mapped I/O (MMIO)} maps each device register to a physical address; ordinary \texttt{LW}/\texttt{SW} access the device. \textbf{Port-mapped I/O} (x86 \texttt{IN}/\texttt{OUT}) uses a separate address space and special instructions. RISC-V uses MMIO exclusively---simpler ISA, unified virtual-memory protection (page-table R/W/X already guards devices), and no extra instructions.
+
+Why MMIO wins on RISC-V: one address space means page tables already protect devices (user vs.\ supervisor pages), caches and TLBs apply uniformly, and \texttt{mmap} can expose a framebuffer directly to user space. The OS marks MMIO pages \emph{uncached} or strongly ordered so loads/stores are not coalesced or reordered.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\draw[fill=blue!12, draw=blue!40!black] (0,0) rectangle (7.5,0.75) node[midway, align=center] {Physical address space};
+\draw[fill=green!14, draw=green!40!black] (0.15,0.12) rectangle (4.5,0.63) node[midway, font=\tiny] {DRAM \texttt{0x0000\_0000 -- 0x7FFF\_FFFF}};
+\draw[fill=orange!18, draw=orange!50!black] (4.75,0.12) rectangle (6.0,0.63) node[midway, font=\tiny, align=center] {MMIO\\devices};
+\draw[fill=red!12, draw=red!40!black] (6.2,0.12) rectangle (7.35,0.63) node[midway, font=\tiny] {ROM/regs};
+\node[below=0.12cm of {(2.3,0.12)}, font=\tiny, text=green!50!black] {cached, normal memory};
+\node[below=0.12cm of {(5.35,0.12)}, font=\tiny, text=orange!60!black] {uncached, ordered};
+\draw[-{Stealth}, thick, violet!70!black] (5.35,0.63) -- ++(0,0.55) node[above, font=\tiny, fill=yellow!12, draw=gray!40, rounded corners=2pt] {\texttt{0x8000\_0000} UART status, \texttt{0x8000\_0004} data, \texttt{0x8000\_1000} SSD ctrl};
+\end{tikzpicture}
+\end{center}
+
+Minimal I/O read sequence: CPU writes control register $\to$ device acts (e.g., start ADC) $\to$ device sets status \texttt{DONE} bit $\to$ CPU detects completion (poll/interrupt) $\to$ CPU reads data register. Status bits include \texttt{READY}, \texttt{BUSY}, \texttt{ERROR}, \texttt{DONE}; the CPU must not read data before \texttt{DONE}=1, and must clear \texttt{DONE} after.
+
+\section{Buses: Hierarchy and Arbitration}
+A bus is a shared set of wires plus an arbitration protocol (who drives next). Modern machines use a hierarchy: fast CPU$\leftrightarrow$DRAM memory bus, CPU$\leftrightarrow$GPU via PCIe $\times16$, peripherals via PCIe/USB/SATA bridges through a chipset.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!16, minimum width=1.65cm, minimum height=0.85cm, rounded corners=2pt] (cpu) at (0,2.15) {\textbf{CPU}};
+\node[draw, fill=orange!18, minimum width=1.65cm, minimum height=0.85cm, rounded corners=2pt] (mem) at (4.2,2.15) {DRAM};
+\node[draw, fill=green!16, minimum width=2.3cm, minimum height=0.7cm, rounded corners=2pt] (bridge) at (2.1,0.85) {Chipset / Bridge};
+\node[draw, fill=red!16, minimum width=1.5cm, minimum height=0.75cm, rounded corners=2pt] (gpu) at (0,-0.55) {GPU (PCIe $\times16$)};
+\node[draw, fill=yellow!18, minimum width=1.5cm, minimum height=0.75cm, rounded corners=2pt] (ssd) at (2.5,-0.55) {SSD (NVMe)};
+\node[draw, fill=violet!14, minimum width=1.5cm, minimum height=0.75cm, rounded corners=2pt] (usb) at (5.0,-0.55) {USB / NIC};
+\draw[thick, blue!60!black] (cpu.east) -- (mem.west) node[midway, above, font=\tiny, fill=blue!6, rounded corners=1pt] {memory bus 25\,GB/s};
+\draw[thick, green!60!black] (cpu.south) -- (bridge.north);
+\draw[thick, green!60!black] (mem.south) -- (bridge.north);
+\draw[thick, orange!60!black] (bridge.south) -- (gpu.north) node[pos=0.55, left, font=\tiny] {PCIe};
+\draw[thick, orange!60!black] (bridge.south) -- (ssd.north);
+\draw[thick, violet!60!black] (bridge.south) -- (usb.north);
+\node[right=0.25cm of mem, font=\tiny, text=gray!60!black] {high BW};
+\node[right=0.25cm of usb, font=\tiny, text=gray!60!black] {lower BW, many devices};
+\node[below=0.35cm of bridge, font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt, align=center] {Arbitration: central arbiter or distributed; modern PCIe is point-to-point, no shared contention};
+\end{tikzpicture}
+\end{center}
+
+\textit{Arbitration} decides who transmits next. Centralised (arbiter grants token), distributed (each device requests), priority-based or round-robin. Shared parallel buses (old PCI) suffer contention and signal skew; point-to-point serial links (PCIe) give each device dedicated lane pairs, scaling bandwidth linearly with lanes and removing bus contention.
+
+\section{Polling, Interrupts, and DMA: Three Ways to Move Data}
+\subsection{Polling (Programmed I/O)}
+CPU loops reading the status register until \texttt{READY}:
+\begin{lstlisting}[language=C]
+while ((*(volatile uint32_t*)STATUS & READY)==0) ; // spin
+data = *(volatile uint32_t*)DATA_REG;
+\end{lstlisting}
+Simple, no extra hardware, but wastes every cycle spinning. Suitable only for fast, predictable devices (on-chip timers) or early boot before interrupts are enabled. The \texttt{volatile} qualifier prevents the compiler from hoisting the load.
+
+\subsection{Interrupt-Driven I/O}
+Device asserts an IRQ line when done. Steps: (1) finish current instruction, (2) save PC to \texttt{mepc}/\texttt{sepc}, cause to \texttt{mcause}, (3) disable further interrupts, (4) jump to handler via \texttt{mtvec} (vectored or direct), (5) handler saves context, reads status to identify source (PLIC on RISC-V multiplexes many IRQs), services device, clears IRQ at the controller, restores context, executes \texttt{mret}. CPU can sleep (\texttt{WFI}) instead of spinning, saving power. Cost is per-transfer interrupt overhead: context save/restore $\approx 50$--$200$\,cycles plus handler body, so bulk transfers at $>10$\,kHz saturate the core. Nested interrupts need a priority controller (PLIC/CLINT).
+
+\subsection{DMA (Direct Memory Access)}
+CPU programs a DMA controller with \texttt{\{src, dst, length, control\}}; DMA moves blocks between device and DRAM while the CPU does other work; DMA interrupts only once on completion.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!16, minimum width=1.8cm, minimum height=0.9cm, align=center, rounded corners=2pt] (cpu2) at (0,0) {CPU};
+\node[draw, fill=green!16, minimum width=1.9cm, minimum height=0.9cm, align=center, rounded corners=2pt] (dma) at (3.4,0) {DMA\\Controller};
+\node[draw, fill=orange!18, minimum width=1.5cm, minimum height=0.9cm, align=center, rounded corners=2pt] (dev) at (6.7,0) {SSD/NIC};
+\node[draw, fill=red!14, minimum width=1.5cm, minimum height=0.9cm, rounded corners=2pt] (mem2) at (3.4,-1.85) {DRAM};
+\draw[-{Stealth}, thick, blue!60!black] (cpu2.east) -- (dma.west) node[midway, above, font=\tiny] {1. program};
+\draw[-{Stealth}, thick, green!60!black] (dma.east) -- (dev.west) node[midway, above, font=\tiny] {2. control};
+\draw[{Stealth}-{Stealth}, thick, orange!60!black] (dev.south) |- (mem2.east) node[pos=0.25, right, font=\tiny] {3. data bursts};
+\draw[{Stealth}-{Stealth}, thick, red!60!black] (dma.south) -- (mem2.north) node[midway, right, font=\tiny] {blocks};
+\draw[-{Stealth}, thick, violet!70!black, dashed] (dma.west) -- ++(-1.2,0) |- (cpu2.south) node[pos=0.20, below, font=\tiny] {4. done IRQ};
+\node[below=0.45cm of mem2, font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt] {CPU free during transfer; one IRQ per block, not per byte};
+\end{tikzpicture}
+\end{center}
+
+Steps in order: CPU writes DMA registers (source device addr, dest DRAM addr, length, direction) $\to$ DMA arbitrates for bus and issues bursts $\to$ device streams to/from DRAM without CPU $\to$ DMA raises completion interrupt $\to$ handler checks status and wakes the thread. Descriptor chains (scatter-gather) let DMA walk a linked list of \texttt{\{addr,len\}} buffers for non-contiguous transfers without CPU per-buffer work.
+
+\section{DMA Coherence: The Hidden Hazard}
+DMA writes DRAM directly, bypassing caches. If the cache holds a dirty copy of the target buffer, DMA's new data is invisible; if the cache holds a stale clean copy, the core later reads pre-DMA data.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.85]
+\node[draw, fill=blue!14, minimum width=1.7cm, minimum height=0.8cm, align=center, rounded corners=2pt] (core) at (0,1.6) {Core + L1};
+\node[draw, fill=orange!18, minimum width=1.7cm, minimum height=0.8cm, align=center, rounded corners=2pt] (dram) at (4.7,1.6) {DRAM\\buffer at 0x1000};
+\node[draw, fill=green!16, minimum width=1.7cm, minimum height=0.8cm, align=center, rounded corners=2pt] (dma2) at (4.7,0) {DMA from SSD};
+\node[draw, fill=red!16, minimum width=3.2cm, minimum height=0.75cm, align=center, rounded corners=2pt] (haz) at (2.35,-1.25) {Hazard: L1 has dirty or stale copy of 0x1000};
+\draw[-{Stealth}, thick, blue!60!black] (core.east) -- (dram.west) node[midway, above, font=\tiny] {cached copy};
+\draw[-{Stealth}, thick, green!60!black] (dma2.north) -- (dram.south) node[midway, right, font=\tiny] {DMA overwrites};
+\draw[-{Stealth}, thick, red!60!black, dashed] (haz.north) -- (core.south);
+\draw[-{Stealth}, thick, red!60!black, dashed] (haz.north) -- (dma2.south) node[midway, right, font=\tiny] {stale read};
+\node[below=0.40cm of haz, font=\tiny, fill=yellow!10, draw=orange!40, rounded corners=2pt, align=center] {Fix: flush (write-back) dirty lines before DMA reads DRAM; invalidate lines before CPU reads DMA buffer.\\Coherent DMA snoops caches via the interconnect; non-coherent needs explicit cache ops.};
+\end{tikzpicture}
+\end{center}
+
+Solutions: (a) software-managed: \texttt{flush} before DMA reads DRAM, \texttt{invalidate} after DMA writes DRAM; (b) hardware-coherent DMA that snoops the cache or routes through the cache hierarchy (modern SoCs: DMA is coherent via the interconnect/NoC); (c) mark DMA buffers uncached (simple but every CPU access pays DRAM latency). Getting this wrong causes silent corruption---the classic ``DMA completed but buffer still old'' bug that passes tests with small buffers and fails in production.
+
+\section{Quantitative Comparison: 1\,MB SSD $\to$ DRAM at 500\,MB/s}
+Transfer time is $1\,\text{MB}/500\,\text{MB/s}=2.0$\,ms regardless. Assume 4-byte PIO, 3\,GHz core, handler $100$\,cycles, poll loop $5$\,cycles/iter.
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule Method & CPU cycles for 1\,MB & IRQs or polls & CPU share\\ \midrule
+Polling (word at a time) & $262$k loads $\times5 =1.31$M $=0.44$\,ms & $262$k polls (spin) & $\approx100\%$ blocked\\
+Interrupt per word & $262$k $\times100 =26.2$M $=8.7$\,ms & $262$k IRQs & $>100\%$ (storm)\\
+Interrupt per 4\,KB block & $256\times100 =25.6$k $=8.5\,\mu$s & $256$ IRQs & $\approx4\%$\\
+DMA (program once) & $\sim20$ setup $+1\times100\approx120$ cyc & $1$ IRQ & $<0.1\%$\\ \bottomrule
+\end{tabular}
+\end{center}
+Polling burns the whole $2.0$\,ms spinning; per-word interrupts burn $8.7$\,ms---longer than the transfer itself (interrupt storm). DMA burns $0.04\,\mu$s. Crossover: interrupts beat polling only when block size exceeds handler cost ($\approx 20$ words); DMA wins for any bulk $\gg1$\,KB. This is why SSDs and NICs are always DMA while a UART byte may be interrupt-driven. Interrupt coalescing (one IRQ per $N$ completions) bridges the middle.
+
+\section{Reliability: RAID, ECC, and Bus Protection}
+Disks fail; bits flip. Three layers protect at different granularities.
+\textbf{RAID}: 0 striped (fast, no redundancy), 1 mirrored ($2\times$ cost, tolerates 1
+failure), 5 single parity ($1$-disk overhead, tolerates 1), 6 double parity
+($2$-disk overhead, tolerates 2). RAID is not backup---it tolerates device
+failure, not deletion or site loss.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.84]
+\node[draw, fill=blue!12, minimum width=1.65cm, minimum height=0.85cm, align=center, rounded corners=2pt] (r0) at (0,0) {RAID 0\\striped};
+\node[draw, fill=green!16, minimum width=1.65cm, minimum height=0.85cm, align=center, rounded corners=2pt] (r1) at (2.85,0) {RAID 1\\mirrored};
+\node[draw, fill=orange!18, minimum width=1.65cm, minimum height=0.85cm, align=center, rounded corners=2pt] (r5) at (5.7,0) {RAID 5\\parity};
+\node[draw, fill=red!14, minimum width=1.65cm, minimum height=0.85cm, align=center, rounded corners=2pt] (r6) at (8.55,0) {RAID 6\\2-parity};
+\node[below=0.50cm of r0, font=\tiny, align=center] {fast\\no redundancy};
+\node[below=0.50cm of r1, font=\tiny, align=center] {$2\times$ cost\\tolerates 1};
+\node[below=0.50cm of r5, font=\tiny, align=center] {$1$-disk cost\\tolerates 1};
+\node[below=0.50cm of r6, font=\tiny, align=center] {$2$-disk cost\\tolerates 2};
+\end{tikzpicture}
+\end{center}
+
+DRAM and disk blocks add \textbf{ECC}: SEC-DED Hamming protects
+64\,B with $\approx8$\,B parity (single-bit correct, double-bit detect); stronger
+BCH/Reed-Solomon for SSD pages that suffer multi-bit retention errors. Buses add
+CRC and link-layer retransmit (PCIe replays corrupted TLPs). End-to-end checksums
+(ZFS, dm-integrity) catch what RAID/ECC miss.
+
+\section{IOMMU: DMA with Virtual Memory}
+Without protection, any bus-master device can read/write any physical frame---a compromised NIC owns the machine. An \textbf{IOMMU} (Intel VT-d, AMD-Vi, RISC-V IOMMU) interposes translation: the device issues DMA to an \emph{I/O virtual address} (IOVA), the IOMMU translates via its own page tables and checks permissions, faulting on illegal access.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=orange!18, minimum width=1.5cm, minimum height=0.8cm, rounded corners=2pt] (dev2) at (0,0) {Device};
+\node[draw, fill=violet!14, minimum width=1.7cm, minimum height=0.8cm, align=center, rounded corners=2pt] (iommu) at (3.2,0) {IOMMU\\page tables};
+\node[draw, fill=green!14, minimum width=1.5cm, minimum height=0.8cm, rounded corners=2pt] (dram3) at (6.4,0) {DRAM};
+\draw[-{Stealth}, thick, orange!60!black] (dev2.east) -- (iommu.west) node[midway, above, font=\tiny] {IOVA};
+\draw[-{Stealth}, thick, green!60!black] (iommu.east) -- (dram3.west) node[midway, above, font=\tiny] {PA (checked)};
+\draw[-{Stealth}, thick, red!60!black, dashed] (iommu.south) -- ++(0,-0.7) node[below, font=\tiny, fill=red!6, draw=red!30, rounded corners=2pt] {fault if IOVA not mapped};
+\node[above=0.55cm of iommu, font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt] {Per-device tables; also remaps interrupts (IR)};
+\end{tikzpicture}
+\end{center}
+
+Benefits: (1) safety---each device is isolated to its buffers, (2) virtualisation---guest programs DMA with guest-physical addresses, hypervisor maps to host-physical, (3) scatter-gather without physical contiguity---a single IOVA range maps to scattered frames so the device sees one contiguous buffer while DRAM is fragmented. (4) User-space drivers: with an IOMMU, a user process can be given a device and its IOVA window without kernel mediation per transfer (VFIO/UIO). The OS must still handle IOTLB flushes and IOMMU faults, and DMA coherence still applies through the IOMMU path; the IOMMU does not fix stale cache copies.
+
+\section{DMA Programming Walkthrough}
+Concrete steps for an SSD read of 1\,MB to DRAM at \texttt{0x8000\_0000}:
+
+\begin{lstlisting}[language=C]
+// 1. Flush dirty cache lines covering [0x8000_0000, 0x8010_0000)
+cache_flush(0x80000000, 1<<20);
+// 2. Program DMA engine
+*DMA_SRC  = SSD_LBA_ADDR;   // device side
+*DMA_DST  = 0x80000000;     // DRAM destination (IOVA if IOMMU)
+*DMA_LEN  = 1<<20;          // 1 MB
+*DMA_CTRL = DMA_START | DMA_IRQ_ON_DONE;
+// 3. CPU does other work or sleeps (WFI)
+// 4. IRQ fires -> handler:
+if (*DMA_STATUS & DMA_DONE) {
+    cache_invalidate(0x80000000, 1<<20); // discard stale L1 copies
+    wake(thread);
+}
+\end{lstlisting}
+If step 1 is skipped, the SSD data lands in DRAM but the core may later
+read a stale dirty L1 copy. If step 4 invalidate is skipped, the core reads
+pre-DMA cached data and sees zeros. Coherent interconnects perform both
+operations in hardware by snooping.
+
+Scatter-gather generalises this: the OS builds an array of
+\texttt{\{IOVA,len\}} descriptors (each 16\,B) linked by \texttt{next};
+the DMA walks the list without CPU intervention. One descriptor per 4\,KB page
+means 256 descriptors for 1\,MB---still one IRQ.
+
+\section{Interrupt Controller and Priority}
+RISC-V PLIC multiplexes hundreds of device IRQs into one external interrupt
+per hart, with per-source priority and per-hart enable/threshold. CLINT
+handles timer and software IPIs.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.85]
+\node[draw, fill=orange!18, minimum width=1.4cm, minimum height=0.7cm, rounded corners=2pt] (d1) at (0,0.9) {UART IRQ};
+\node[draw, fill=red!14, minimum width=1.4cm, minimum height=0.7cm, rounded corners=2pt] (d2) at (0,0) {SSD IRQ};
+\node[draw, fill=violet!14, minimum width=1.4cm, minimum height=0.7cm, rounded corners=2pt] (d3) at (0,-0.9) {NIC IRQ};
+\node[draw, fill=green!16, minimum width=1.9cm, minimum height=1.2cm, align=center, rounded corners=2pt] (plic) at (3.2,0) {PLIC\\priority + enable};
+\node[draw, fill=blue!16, minimum width=1.6cm, minimum height=0.8cm, rounded corners=2pt] (core2) at (6.2,0) {Core (mip.meip)};
+\draw[-{Stealth}, thick, orange!60!black] (d1.east) -- (plic.west |- d1.east);
+\draw[-{Stealth}, thick, red!60!black] (d2.east) -- (plic.west);
+\draw[-{Stealth}, thick, violet!60!black] (d3.east) -- (plic.west |- d3.east);
+\draw[-{Stealth}, thick, blue!60!black] (plic.east) -- (core2.west) node[midway, above, font=\tiny] {highest wins};
+\node[below=0.35cm of plic, font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt] {Threshold masks low-priority IRQs};
+\end{tikzpicture}
+\end{center}
+
+\section{Error Recovery and Throughput Tuning}
+For unreliable links (disk sectors, PCIe, Ethernet), the stack uses layered
+recovery: ECC corrects single-bit errors in place, CRC detects multi-bit
+errors and triggers link-layer retransmit, and a higher layer (filesystem or
+TCP) retries or reconstructs from RAID/parity. Tuning for throughput means
+choosing transfer size to amortise per-transfer overhead: too small wastes IRQ
+and descriptor cost; too large hurts latency and head-of-line blocking.
+Modern NICs use interrupt coalescing and adaptive batch sizes to stay near
+the knee of the latency--throughput curve.
+
+\section{Exercises}
+\begin{exercise}Why does RISC-V use MMIO exclusively? Contrast with x86 port-mapped I/O: what does MMIO simplify in the ISA and virtual memory, and what cache/TLB issue must the OS handle?\end{exercise}
+\begin{exercise}A device DMAs 1\,MB to DRAM while L1 holds dirty lines for part of the buffer. Describe the two coherence failures (DMA read vs.\ write) and the flush/invalidate sequence fixing each.\end{exercise}
+\begin{exercise}Estimate CPU cycles to move 1\,MB via polling (4\,B/iter, 5 cyc/iter), per-word interrupts (100 cyc/IRQ), and single-block DMA (20+100 cyc). At what block size do interrupts beat polling?\end{exercise}
+\begin{exercise}An 8-data-disk array must tolerate 2 concurrent disk failures with minimal capacity overhead. Which RAID level, what parity overhead, and what usable capacity?\end{exercise}
+\begin{exercise}Explain how an IOMMU stops a malicious device from reading arbitrary DRAM. What page-table structure does it use and when does it fault?\end{exercise}
+

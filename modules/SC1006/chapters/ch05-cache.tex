@@ -1,0 +1,256 @@
+\chapter{Memory Hierarchy \& Caches}\label{ch:cache}
+\begin{center}\small\textit{Bridging the processor--memory gap: keep what you use close, and you rarely wait.}\end{center}
+
+\section{The Memory Hierarchy}
+Processor speed doubles every $\approx 2$ years; DRAM latency improves $\approx 7\%$ per year. Without intervention, the CPU idles waiting for memory.
+The hierarchy exploits \textbf{locality}: temporal (reuse soon) and spatial (neighbours soon) to keep hot data in small, fast memories.
+This is why a 3\,GHz core can sustain several instructions per cycle even though DRAM is $\sim 80$\,ns away: over 95\% of accesses hit in L1/L2.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=red!16, minimum width=3.0cm, minimum height=0.7cm] (cpu) at (0,3.2) {CPU / Registers};
+\node[draw, fill=orange!18, minimum width=3.0cm, minimum height=0.7cm] (l1) at (0,2.2) {L1 cache (32\,KB, 1\,ns)};
+\node[draw, fill=yellow!18, minimum width=3.0cm, minimum height=0.7cm] (l2) at (0,1.4) {L2 cache (256\,KB, 4\,ns)};
+\node[draw, fill=green!14, minimum width=3.0cm, minimum height=0.7cm] (l3) at (0,0.6) {L3 / LLC (8\,MB, 12\,ns)};
+\node[draw, fill=blue!12, minimum width=3.0cm, minimum height=0.7cm] (dram) at (0,-0.35) {DRAM (16\,GB, 80\,ns)};
+\node[draw, fill=gray!14, minimum width=3.0cm, minimum height=0.7cm] (disk) at (0,-1.3) {SSD / Disk (1\,TB, 80\,$\mu$s)};
+\foreach \a/\b in {cpu/l1, l1/l2, l2/l3, l3/dram, dram/disk} {\draw[-{Stealth}, thick, blue!50!black] (\a.south) -- (\b.north);}
+\node[right=0.6cm of cpu, font=\tiny, text=gray!60!black] {fast, tiny};
+\node[right=0.6cm of disk, font=\tiny, text=gray!60!black] {slow, huge};
+\draw[decorate, decoration={brace, amplitude=4pt}, thick, violet!70!black] (3.2,3.55) -- (3.2,-1.65) node[midway, right, xshift=0.4cm, font=\tiny, align=left] {Cost/bit\\decreases\\downward};
+\end{tikzpicture}
+\end{center}
+Inclusive caches duplicate; exclusive do not. Modern chips have split L1 I/D caches to avoid structural hazards.
+\textbf{Temporal locality} examples: loop variables, stack data, recently called functions. \textbf{Spatial}: sequential instruction fetch, array traversal, next struct field. A 64\,B block captures the next 15 words spatially for free once one word misses.
+
+\section{Cache Fundamentals}
+A cache holds \textbf{blocks} (lines) of $B$ bytes (typically 64\,B), each with a \textbf{tag}, \textbf{valid} bit, and optionally \textbf{dirty} bit.
+On access, address splits into \texttt{[tag | index | offset]}. Index selects a set; tag is compared; offset selects byte within block.
+Hit: data returned in cache latency. Miss: block fetched from next level, possibly evicting another.
+
+Miss types (3\,Cs): \textbf{compulsory} (first touch), \textbf{capacity} (cache too small), \textbf{conflict} (associativity too low). Miss rate $m$, hit time $h$, miss penalty $p$: $\text{AMAT}=h+m\cdot p$ (average memory access time).
+
+Choosing $B$: larger $B$ exploits spatial locality and amortises tag overhead but increases miss penalty (more bytes moved) and false sharing. 32--128\,B is the sweet spot; 64\,B dominates today because it matches DRAM burst length (8 $\times$ 8\,B).
+
+\section{Direct-Mapped Cache}
+One block per set; index $= (\text{block address}) \bmod (\text{\#sets})$. Simplest, but conflict-heavy.
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.84]
+\draw[fill=blue!12] (0,0) rectangle (2.4,1.6) node[midway, align=center] {Address\\{\tiny tag | index | offset}};
+\draw[-{Stealth}, thick, violet!70!black] (1.2,0) -- (1.2,-0.6) node[midway, right, font=\tiny] {index};
+\node[draw, fill=orange!16, minimum width=2.2cm, minimum height=2.0cm, align=center] (sets) at (4,0) {Cache sets\\{\tiny one line/set}\\ valid | tag | data[64\,B]};
+\draw[-{Stealth}, thick, blue!60!black] (1.2,-0.6) -- (2.9,-0.6) -- (2.9,0);
+\node[draw, circle, fill=green!18, minimum size=0.6cm] (cmp) at (6.2,0.4) {=};
+\draw[-{Stealth}, thick, green!60!black] (sets.east |- cmp.west) -- (cmp.west);
+\node[font=\tiny, fill=red!12, draw, rounded corners] at (6.2,-0.7) {hit / miss};
+\draw[-{Stealth}, thick, red!50!black] (cmp.south) -- (6.2,-0.5);
+\end{tikzpicture}
+\end{center}
+
+Example: 32\,KB direct, 64\,B blocks $\Rightarrow$ 512 sets, 9 index bits, 6 offset bits, tag $=32-9-6=17$ bits.
+
+\section{Set-Associative \& Fully Associative}
+\textbf{$k$-way set-associative}: index selects a set containing $k$ lines; all $k$ tags compared in parallel; any block maps to one set but any line within it. $k=4$ or $8$ is typical; higher $k$ reduces conflicts with diminishing returns and higher power.
+
+\textbf{Fully associative}: one set with all lines --- no index, any block anywhere; needs parallel tag compare across all lines (content-addressable). Rare except for small TLBs or victim caches.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.84]
+% Direct
+\node[draw, fill=blue!12, minimum width=1.8cm, minimum height=2.0cm, align=center] (d) at (0,0) {Direct\\{\tiny 8 sets $\times$ 1}};
+% 2-way
+\node[draw, fill=green!14, minimum width=1.8cm, minimum height=2.0cm, align=center] (s) at (3.0,0) {2-way\\{\tiny 4 sets $\times$ 2}\\{\tiny comparator $\times$2}};
+% Fully
+\node[draw, fill=orange!16, minimum width=1.8cm, minimum height=2.0cm, align=center] (f) at (6.0,0) {Fully\\{\tiny 1 set $\times$ 8}\\{\tiny comparator $\times$8}};
+\draw[-{Stealth}, thick, violet!70!black] (d.east) -- (s.west) node[midway, above, font=\tiny] {$k\uparrow$};
+\draw[-{Stealth}, thick, violet!70!black] (s.east) -- (f.west);
+\node[below=0.6cm of d, font=\tiny, align=center] {low hit rate\\low cost};
+\node[below=0.6cm of f, font=\tiny, align=center] {high hit rate\\high cost};
+\end{tikzpicture}
+\end{center}
+\textbf{Replacement}: LRU (exact or pseudo-LRU tree), FIFO, random. LRU wins for loops but needs age bits.
+
+\textbf{Write policies}: write-through (to next level immediately; simple but bandwidth-heavy) vs.\ write-back (dirty bit, write only on eviction; needs coherence handling). Write-allocate (fetch block on write miss) vs.\ no-write-allocate.
+
+\section{Address Decomposition: Worked Example \texttt{0x12345678}}
+Take 32\,KB direct-mapped, 64\,B blocks, 32-bit byte addresses. This is the canonical NTU exam configuration.
+
+First compute geometry. Number of blocks: $32\,\text{KB} / 64\,\text{B} = 512$ lines. Direct-mapped so $\text{\#sets}=512$. Block offset bits: $\log_2 64 = 6$ bits (byte within block). Index bits: $\log_2 512 = 9$ bits. Tag bits: $32 - 9 - 6 = 17$ bits. Each line stores $17$-bit tag + 1 valid + 1 dirty + $64$\,B data $\approx 67$\,B.
+
+Now decompose \texttt{0x12345678}. In binary: \texttt{0001\,0010\,0011\,0100\,0101\,0110\,0111\,1000}.
+\begin{center}
+\small
+\begin{tabular}{c|c|c}
+Tag (17\,b) & Index (9\,b) & Offset (6\,b) \\ \hline
+\texttt{0x02468} = 0000\,1001\,0011\,00010 & \texttt{0x159} = 1\,0101\,1001 & \texttt{0x38} = 11\,1000
+\end{tabular}
+\end{center}
+Check: hex \texttt{0x12345678} $>>6 = $\texttt{0x0048D159} (block number); \texttt{0x0048D159} mod 512 $= 512 \times $\texttt{0x91A2} remainder \texttt{0x159} (345 decimal) $\Rightarrow$ set 345. Tag $= 512$-block number $>>9 =$ \texttt{0x02468}. So this address hits iff set 345 is valid and its tag equals \texttt{0x02468}; otherwise the whole 64\,B block \texttt{[0x12345640--0x1234567F]} is fetched.
+Quick sanity trick: offset = low hex digit masked to 6 bits. Since $64=2^6$, the low 6 bits are within-hex-digit arithmetic: \texttt{0x78} = \texttt{0b01111000}, so offset \texttt{0x38} is correct; 64\,B alignment means \texttt{0x12345678} is 56\,B into its block.
+
+For a 4-way cache of same size (512/4 = 128 sets, 7 index bits, 8 tag bits wider): index = (\texttt{0x0048D159} mod 128) = \texttt{0x59} = 89, tag = \texttt{0x048D1}. One extra tag bit compensates for fewer index bits---trade conflict rate for comparator cost.
+
+\section{The Three Cs: Why Misses Happen}
+Compulsory (cold) misses are unavoidable on first reference to a block. For 64\,B blocks scanning a 1\,MB array, compulsory misses $\approx 1\text{MB}/64\text{B}=16384$ regardless of associativity. Prefetching can hide but not eliminate them.
+
+Capacity misses occur because the working set exceeds cache size. Example: looping over a 64\,KB array with a 32\,KB cache---every block is evicted before reuse, so hit rate $\approx 0\%$ even with fully associative placement. Doubling cache size would eliminate these misses; doubling associativity would not.
+
+Conflict misses occur when $k$-way associativity is too low. Classic: direct-mapped 32\,KB cache, stride $32$\,KB = $512$ blocks. Addresses \texttt{0x00000000}, \texttt{0x00008000}, \texttt{0x00010000} all map to set 0. A loop touching two such addresses ping-pongs forever with 100\% miss rate; 2-way associativity fixes it. Conflict misses are the only Cs that associativity reduces.
+Rule of thumb on increasing block size $B$: compulsory $\downarrow$ (fewer blocks to touch), capacity $\downarrow$ slightly, conflict $\uparrow$ (fewer sets). Too-large $B$ pollutes cache with unused neighbours.
+
+\section{Replacement and Write Policies in Depth}
+\textbf{LRU}: evict least-recently-used line in the set. True LRU needs $\log_2(k!)$ bits per set---expensive for $k>4$. \textbf{Pseudo-LRU} (tree-PLRU) uses $k-1$ bits: a binary tree of preference bits flipped on access. Almost as good as LRU for loops, far cheaper. \textbf{FIFO} and \textbf{random} need no age tracking; random avoids pathological stride patterns and is common in L1.
+
+\textbf{Write-through}: every store writes through to next level (write buffer hides latency). Simple, keeps lower levels coherent, but burns bandwidth: a tight store loop at 3\,GHz can saturate the L2 port. \textbf{Write-back}: stores set dirty bit only; eviction writes back the whole 64\,B block. Saves $3$--$10\times$ bandwidth for write-heavy code but needs coherence protocol (MESI) on multi-core.
+
+\textbf{Write-allocate} pairs with write-back: on write miss, fetch the block, then overwrite the word. Avoids a future miss on the same block. \textbf{No-write-allocate} (often with write-through) just forwards the word and does not fetch---better when you will overwrite the entire block anyway (e.g., \texttt{memset}).
+
+\section{Cache Performance: AMAT Single- and Multi-Level}
+Single-level AMAT is intuitive: $\text{AMAT}=h + m\cdot p$. Let L1 $h=1$\,ns, $m=5\%$, $p=80$\,ns to DRAM:
+\[ \text{AMAT}=1 + 0.05\times 80 = 5.0\text{\,ns}. \]
+CPI impact: if 30\% of instructions are loads/stores each needing one access, memory stall $\approx 0.3\times(5-1)=1.2$ cycles per instruction.
+Add L2: let $h_{L2}=4$\,ns, local miss rate $m_{L2}=20\%$ (fraction of L1 misses that also miss L2), DRAM $80$\,ns. Hierarchical AMAT nests:
+\[ \text{AMAT}=h_{L1}+m_{L1}\cdot\big(h_{L2}+m_{L2}\cdot p_{\text{DRAM}}\big). \]
+\[ =1+0.05\times(4+0.20\times80)=1+0.05\times20=2.0\text{\,ns}. \]
+Hierarchy cut AMAT from $5$\,ns to $2$\,ns---adding a 4\,ns L2 more than pays for itself because it filters 80\% of DRAM trips. Global L2 miss rate $=m_{L1}\cdot m_{L2}=1\%$.
+
+Example with numbers the examiner loves: $h_{L1}=2$ cycles, $h_{L2}=10$ cycles, $m_{L1}=4\%$, $m_{L2}=25\%$, $p=200$ cycles.
+AMAT $=2+0.04\times(10+0.25\times200)=2+0.04\times60=4.4$ cycles. Without L2: $2+0.04\times200=10$ cycles.
+
+Matrix traversal (row- vs.\ column-major) ties locality to AMAT. Consider $1024\times1024$ \texttt{int} (4\,B), row-major in C, 64\,B blocks $\Rightarrow 16$ ints/block.
+Row-major: inner loop strides by 4\,B, so 1 miss per 16 accesses $\Rightarrow 65536$ misses.
+Column-major: stride $=1024\times4\text{\,B}=4096$\,B $=64$ blocks $\Rightarrow$ every access misses $\Rightarrow 1048576$ misses, $16\times$ worse. That $16\times$ feeds directly into $m$ and AMAT, so column-major can be $3$--$8\times$ slower in wall time despite identical instruction count.
+
+\section{Fully Associative vs.\ Direct: When Each Wins}
+Direct-mapped needs one comparator, minimal power, deterministic index --- ideal for L1 where latency is critical and $h$ dominates. Fully associative needs $N$ parallel comparators and a CAM; search is slower and hotter, so it only appears for small structures (32--64-entry TLB, victim cache, or 8-entry store buffer). Set-associative $k=4$--$8$ is the practical middle ground for L2/L3: conflict rate within 2\% of fully associative, power only $k$ comparators.
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+ & Direct & 4-way & Fully assoc.\ (512 entries)\\
+\midrule
+Comparators & 1 & 4 & 512 \\
+Hit latency & 1.0\,ns & 1.2\,ns & $\sim 3$\,ns \\
+Miss rate (SPECint) & 5.1\% & 3.4\% & 3.1\%\\
+Power / access & $1\times$ & $2.5\times$ & $60\times$\\
+\bottomrule
+\end{tabular}
+\end{center}
+\section{Locality in Code: Why Caches Work}
+Consider summing an array: \texttt{for (i=0;i<N;i++) sum+=A[i]}. Temporal locality: \texttt{sum} and \texttt{i} reused every iteration, so they stay in registers/L1. Spatial locality: \texttt{A[i]} and \texttt{A[i+1]} share a 64\,B block, so 15 of 16 accesses hit. Contrast a linked list traversal where nodes are scattered: spatial locality collapses and miss rate approaches 100\%. Caches reward predictable, sequential access patterns---the common case.
+
+Compulsory misses are the price of the first touch; hardware prefetchers hide them by fetching the next block while the core computes. Stride prefetchers detect constant strides (e.g., $+64$\,B) and stay one block ahead, cutting compulsory misses for array loops by $>80\%$.
+
+\section{Putting It Together: Row-Major Simulation}
+Simulate $A[4][8]$ of \texttt{int} (4\,B), 32\,B blocks (8 ints), direct-mapped 64\,B cache (only for illustration, tiny). Row-major layout stores $A[0][0..7]$ contiguously, then $A[1][0..7]$, etc. Accessing row 0 touches two blocks: $A[0][0..7]$ (one miss, seven hits). Column-major would touch $A[0][0],A[1][0],A[2][0],A[3][0]$ which lie 32\,B apart (8 ints $\times$ 4\,B), each in a different block---four misses for four accesses. Scale to $1024\times1024$: row-major reuses each block 16 times, column-major reuses zero times until eviction. This is why loop interchange (swap loop order) is the single most effective cache optimisation.
+
+\section{Cache Optimisations and Victim Caches}
+Four classic tweaks reduce AMAT without growing the cache: (1) \textbf{early restart / critical-word-first}: forward the requested word to the CPU as soon as it arrives, fill the rest of the block in the background; (2) \textbf{write buffer}: coalesce write-through stores so the core does not stall; (3) \textbf{prefetching}: hardware or \texttt{\_\_builtin\_prefetch} hints fetch ahead; (4) \textbf{victim cache}: a tiny fully-associative buffer (4--8 entries) holds recently evicted blocks, catching conflict misses at $\sim 1$\,ns.
+
+Blocking (tiling) reorders nested loops to keep a $B\times B$ tile in cache. For matrix multiply $C=A\times B$, naive order streams $B$ column-wise (poor locality); tiling with $32\times32$ tiles keeps all three tiles in L1, cutting misses $4$--$8\times$ and often doubling performance. This optimisation turns a capacity/conflict problem into compulsory-only within the tile.
+\section{Why Hierarchy Beats Flat Memory}
+A flat DRAM-only memory forces every access to pay 80\,ns. At 3\,GHz that is 240 cycles---the core would retire one instruction then stall for 239 cycles. The hierarchy amortises this by filtering accesses through caches: if L1 hits 95\% of the time at 1\,ns and L2 catches 80\% of the remaining misses at 4\,ns, average cost drops from 80\,ns to about 2\,ns. The principle is simple: make the common case fast and tolerate the rare slow case. This is the same reason we keep a phone's recent contacts on the home screen and the full address book behind a search.
+
+Temporal locality arises because programs reuse data quickly. Loop counters, stack frames, and recently called functions are accessed repeatedly within microseconds. Spatial locality arises because code and data are laid out sequentially: fetching instruction $n$ makes $n+1$ likely, and scanning an array touches neighbours. Hardware exploits both by moving whole 64\,B blocks on a miss, not just the requested word. Even a single miss therefore prefetches 15 neighbouring words for free.
+
+\section{Miss-Rate Sensitivity and Block Sizing}
+Consider compulsory misses for a cold scan of $S$ bytes with block size $B$: misses $=S/B$. Doubling $B$ halves compulsory misses but also halves the number of distinct blocks the cache can hold ($C/B$), increasing conflict and capacity misses. There is a U-shaped curve: miss rate falls as $B$ grows from 16\,B to 64\,B, then rises beyond 128\,B as pollution dominates. Designers pick 64\,B because it matches DRAM burst length (8 beats $\times$ 8\,B) and balances the three Cs.
+
+Capacity example revisited: array $A$ of 8\,KB fits in a 32\,KB cache with room to spare, so after the first scan it hits entirely. Array $B$ of 64\,KB does not fit; a direct-mapped cache thrashes even if fully associative, because no placement can avoid eviction before reuse. The fix is not associativity but either a larger cache (L2/L3) or algorithmic tiling that partitions $B$ into 16\,KB tiles that do fit. This is why matrix libraries tile.
+
+\section{Address Decomposition Revisited: 4-Way Example}
+For the same 32\,KB cache as 4-way set-associative, geometry changes. Total lines $=512$, lines per set $=4$, so sets $=128$, index bits $=\log_2 128=7$, offset $=6$, tag $=19$ bits. Decompose \texttt{0x12345678} again: block number \texttt{0x0048D159}, set $=$ \texttt{0x0048D159} mod $128$ $=$ \texttt{0x59} $=89$ decimal, tag $=$ \texttt{0x0048D159} $>>7$ $=$ \texttt{0x91A2} truncated to 19 bits $=$ \texttt{0x091A2}. The cache compares four tags in set 89 in parallel; a hit needs any of the four to equal \texttt{0x091A2} and be valid. Wider tag costs one extra bit per index bit removed, but fewer sets means fewer conflict aliases.
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.83]
+\node[draw, fill=blue!12, minimum width=2.8cm, minimum height=0.55cm] (addr) at (0,1.0) {\texttt{0x12345678} = 0001\,0010\,...\,0111\,1000};
+\node[draw, fill=red!14, minimum width=1.4cm, minimum height=0.55cm] (tag) at (-1.2,0) {tag 19\,b};
+\node[draw, fill=orange!16, minimum width=1.0cm, minimum height=0.55cm] (idx) at (0.8,0) {index 7\,b};
+\node[draw, fill=green!14, minimum width=1.0cm, minimum height=0.55cm] (off) at (2.4,0) {off 6\,b};
+\draw[-{Stealth}, thick, violet!70!black] (addr.south) -- (tag.north);
+\draw[-{Stealth}, thick, violet!70!black] (addr.south) -- (idx.north);
+\draw[-{Stealth}, thick, violet!70!black] (addr.south) -- (off.north);
+\node[below=0.15cm of idx, font=\tiny, text=gray!60!black] {selects set 89};
+\end{tikzpicture}
+\end{center}
+
+\section{Write Path Walkthrough}
+Trace two stores to the same block under write-back, write-allocate. Initially block is invalid. Store to \texttt{0x12345678} misses, fetches block \texttt{[0x12345640--7F]}, writes word at offset \texttt{0x38}, sets dirty$=1$. Second store to \texttt{0x12345644} (same block, offset \texttt{0x04} within 64\,B) hits, updates a different word, dirty stays 1. No DRAM traffic yet. When the block is later evicted to make room for \texttt{0x12347678} (same set, different tag), the 64\,B dirty block is written back in one burst. Total DRAM writes: one 64\,B burst instead of two 4\,B writes.
+
+Under write-through, no-write-allocate, the first store misses and writes 4\,B directly to L2/DRAM without fetching the block. The second store hits in L2 but still writes through. Two 4\,B DRAM writes occur, and the block never enters L1---subsequent reads to the same block will miss again. This is why write-through pairs with no-write-allocate for streaming writes like \texttt{memset}, while write-back pairs with write-allocate for general code.
+
+\section{AMAT Drill: From Paper to Code}
+Exam-style drill. Given: L1 $h=1$ cycle, $m=6\%$, L2 $h=8$ cycles, local $m_2=30\%$, DRAM $p=200$ cycles. Compute AMAT with and without L2. Without L2: $1+0.06\times200=13$ cycles. With L2: $1+0.06\times(8+0.30\times200)=1+0.06\times68=5.08$ cycles. Speedup $13/5.08\approx2.56\times$. If the core issues one memory access per 2 instructions at 3\,GHz, memory stall per instruction drops from $6.5$ to $2.54$ cycles, saving about $1.3$\,ns per instruction or roughly $4$\,ns per load.
+
+Sensitivity: halving $m_1$ from 6\% to 3\% saves $0.03\times68=2.04$ cycles, more than doubling L2 size might achieve. This is why compiler optimisations that improve locality (tiling, loop interchange) often beat hardware changes. Always attack the highest $m\cdot p$ product first.
+\section{Prefetching and Non-Blocking Caches}
+A blocking cache stalls the core on every miss until data returns. A non-blocking (lockup-free) cache allows hits under miss: the core continues executing independent instructions while the miss is serviced, tracking outstanding misses in MSHRs (miss status holding registers). With 4 MSHRs, four concurrent misses can be in flight, hiding much of DRAM latency for parallel workloads. Prefetching compounds this: a stream prefetcher that fetches $A[i+1]$ when $A[i]$ misses converts compulsory misses into hits if the prefetch arrives before the demand access. Accuracy and coverage trade off: aggressive prefetching reduces misses but wastes bandwidth on mispredicted streams.
+
+\section{Cache Coherence Glimpse}
+On multi-core, each core has private L1/L2. If core 0 writes $x$ cached by core 1, core 1 must see the new value. Coherence protocols (MSI/MESI) track per-block states: Modified (dirty, exclusive), Exclusive (clean, exclusive), Shared (clean, may be in other caches), Invalid. A write to Shared triggers an invalidate broadcast; readers then miss and fetch the new block. This is why write-back caches need extra messages on writes that hit Shared---the cost of keeping private caches coherent. False sharing occurs when two cores write different words in the same 64\,B block: each write invalidates the other's copy, ping-ponging the block at 80\,ns per transfer and destroying performance. Padding structs to 64\,B or partitioning data per core avoids it.
+
+\section{Exercise Walkthrough: AMAT Sensitivity}
+Worked example for exam technique. L1: $h=2$\,ns, $m=8\%$. L2: $h=6$\,ns, local $m=25\%$. DRAM: $80$\,ns. Compute AMAT with L2 nested: $2+0.08\times(6+0.25\times80)=2+0.08\times26=4.08$\,ns. If you can either halve L1 miss rate to $4\%$ (better locality) or halve L2 miss rate to $12.5\%$ (larger L2), which is better? Halving $m_1$: $2+0.04\times26=3.04$\,ns (saves $1.04$\,ns). Halving $m_2$: $2+0.08\times(6+10)=3.28$\,ns (saves $0.80$\,ns). Improving L1 wins because its misses are more frequent. Always prioritise the level with larger $m\cdot p$ contribution.
+
+\section{Detailed Cache Trace: Three Addresses}
+Trace accesses to 32\,KB direct cache (512 sets, 64\,B blocks) in order: \texttt{0x12345678}, \texttt{0x12347678}, \texttt{0x1234567C}.
+First access \texttt{0x12345678}: set 345, tag \texttt{0x02468}, miss, fetch block \texttt{0x12345640--7F}, install tag.
+Second access \texttt{0x12347678}: block number \texttt{0x048D1D9}, set $= \texttt{0x1D9}=473$, tag \texttt{0x02468} also but different set, so no conflict---miss, fetch \texttt{0x12347640--7F} into set 473.
+Third access \texttt{0x1234567C}: same block as first access (offset \texttt{0x3C} vs \texttt{0x38}), set 345, tag matches, hit in 1\,ns.
+If instead second address were \texttt{0x123C5678} (set 345 again, tag \texttt{0x024F1}), it would evict the first block; the third access would then miss---a conflict miss that 2-way associativity would have avoided by keeping both tags in set 172 (rehashed for 4-way).
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.82]
+\node[draw, fill=red!12, minimum width=1.6cm, minimum height=0.55cm] (a1) at (0,0) {\texttt{...5678} miss};
+\node[draw, fill=orange!16, minimum width=1.6cm, minimum height=0.55cm] (a2) at (3.0,0) {\texttt{...7678} miss};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.55cm] (a3) at (6.0,0) {\texttt{...567C} hit};
+\draw[-{Stealth}, thick, blue!60!black] (a1.east) -- (a2.west);
+\draw[-{Stealth}, thick, green!60!black] (a2.east) -- (a3.west) node[midway, above, font=\tiny] {same block};
+\end{tikzpicture}
+\end{center}
+\section{AMAT Drill: Two-Level Table}
+Tabulate AMAT for quick exam reference (all times in ns or cycles consistently):
+L1 hit 1, L2 hit 8, DRAM 80, L1 miss 5\%, L2 local miss 20\% $\to$ AMAT $=1+0.05(8+0.20\times80)=2.0$.
+If DRAM doubles to 160 (slower DIMM): AMAT $=1+0.05(8+32)=3.0$---still 2.7$\times$ better than no L2 ($1+0.05\times160=9.0$).
+If L1 miss climbs to 10\% (pointer-chasing workload): AMAT $=1+0.10(8+16)=3.4$.
+Lesson: workload miss rate dominates technology latency; no cache hierarchy saves a workload with no locality.
+
+\section{Inclusive vs.\ Exclusive and Victim Effects}
+Inclusive caches duplicate every L1 block in L2/L3, so L3 size is shared with L1/L2 and effective capacity is just L3 size. Exclusive caches do not duplicate, so effective capacity is sum of levels, but a hit in L1 that misses in L2 must still check L2. Modern Intel L3 is non-inclusive: it behaves inclusively for hot data but can evict without invalidating L1, balancing capacity and simplicity. Victim caches change the picture: a miss in L1 that hits in the 8-entry victim cache costs $\sim 2$\,ns instead of 80\,ns, recovering many conflict misses cheaply. The AMAT with a victim cache of hit rate $v$ among L1 misses becomes $h_1 + m_1\cdot((1-v)\cdot p + v\cdot h_{\rm victim})$.
+
+The choice of inclusivity also affects coherence traffic. With inclusive L3, the L3 knows every block present in any L1, so snoop filters are simple: check L3, and if absent, no L1 need be probed. With exclusive or non-inclusive hierarchies, a directory or snoop broadcast is needed, costing interconnect bandwidth. This is why large multi-core chips often pay the capacity cost of inclusive or directory-based designs.
+
+\section{Quantitative Locality Tuning}
+Loop tiling example with numbers. Multiply $512\times512$ doubles (8\,B), cache 32\,KB can hold about $4096$ doubles. Naive triple loop streams one matrix column-wise, missing every access after the first tile. Tiled with $64\times64$ tiles: each tile is $64\times64\times8\,\text{B}=32$\,KB, exactly fitting. Each tile is loaded once per outer iteration, so misses drop from $O(n^3/B)$ to $O(n^3/(B\sqrt{C}))$, roughly $4\times$ fewer for $n=512$. Measured speedups of $1.8$--$3\times$ are typical before any vectorisation, purely from locality.
+
+Prefetch distance tuning: if memory latency is $80$\,ns and compute does $20$ cycles ($6.7$\,ns at 3\,GHz) per iteration, the prefetcher must stay $80/6.7\approx12$ iterations ahead. Too close and data arrives late; too far and it pollutes or is evicted before use. Compilers use profile-guided prefetch distance for this reason.
+\section{Exam Checklist: Cache}
+For any cache question, follow this order and you will not lose marks:
+(1) compute $B$, \#blocks, \#sets, index bits $=\log_2$(\#sets), offset bits $=\log_2 B$, tag bits $= \text{addr bits} - \text{index} - \text{offset}$;
+(2) split the given hex address: block number $=$ addr$>>\text{offset}$, index $=$ block number mod \#sets, tag $=$ block number $>>\text{index bits}$;
+(3) classify miss: first touch $\to$ compulsory, working set $>$ cache $\to$ capacity, else conflict (fixable by associativity);
+(4) apply AMAT: $h + m\cdot p$, nesting for multi-level, and remember $m_2$ in the formula is local to that level, global is $m_1m_2$;
+(5) for row/column-major, count blocks touched: row-major $=$ $N^2 / (B/4)$ misses, column-major $=$ $N^2$ misses for $B=64$, $4$\,B ints.
+Common pitfall: mixing global and local $m_2$. Always label which you use. Another pitfall: forgetting that block offset is byte offset, so 64\,B needs 6 bits even for word-addressed views.
+
+Additional row-major drill: $1024\times1024$ int, 64\,B blocks, row-major misses $=1024\times(1024/16)=65536$, column-major $=1024\times1024=1048576$, ratio $16\times$.
+Prefetch bonus: with next-block prefetch, row-major compulsory misses halve if prefetcher stays one block ahead.
+Associativity drill: direct $m=5.1\%$ vs 4-way $m=3.4\%$ at $h=1$\,ns, $p=80$\,ns gives AMAT $5.08$\,ns vs $3.72$\,ns, saving $1.36$\,ns per access.
+LRU vs random: for cyclic access $ABCABC\ldots$ over 3 blocks in a 2-way cache, LRU hits $0\%$, random hits $\approx 25\%$---random avoids LRU's pathological resonance.
+Write-buffer depth matters: 4-entry buffer hides 4 consecutive write-through misses; the fifth stalls until one drains.
+Victim cache of 8 entries catches $40$--$60\%$ of conflict misses in direct-mapped L1, almost matching 2-way at lower power.
+Tiling $32\times32$ on $512\times512$ double keeps 8\,KB tiles in L1, cutting capacity misses $4\times$ and doubling DGEMM throughput.
+End-to-end: locality $\to$ block size $\to$ AMAT $\to$ CPI $\to$ wall time; every optimisation ultimately reduces $m\cdot p$.
+
+Row-major vs column-major gap widens with larger $N$: for $2048\times2048$ the ratio stays $16\times$ but absolute stall doubles.
+False sharing fix: pad shared counters to 64\,B or partition per core; otherwise ping-pong costs 80\,ns per write.
+Non-blocking L1 with 4 MSHRs hides up to 4 misses concurrently; MLP matters more than raw $m$ for out-of-order cores.
+Critical-word-first cuts load-use penalty from $80$\,ns to $\sim 15$\,ns for the requested word, even though block fill still takes 80\,ns.
+Directory coherence replaces broadcast with point-to-point invalidates, scaling to 64+ cores where snooping would saturate.
+
+\section{Exercises}
+\begin{exercise}A 16\,KB direct cache, 32\,B blocks, 32-bit addresses. How many sets? How many tag bits? If address 0x12345678 is cached, what are its index and tag in hex?\end{exercise}
+\begin{exercise}Compare AMAT for direct ($m=6\%$) vs.\ 4-way ($m=3.5\%$) with $h=1$\,ns, $p=70$\,ns. Which wins and by how much? What extra hardware does 4-way need?\end{exercise}
+\begin{exercise}Why does write-back need a dirty bit while write-through does not? Give a sequence where write-back saves bandwidth.\end{exercise}
+\begin{exercise}Explain the 3\,Cs with a concrete loop that exhibits each. How does doubling block size affect each C?\end{exercise}
+\begin{exercise}For a 64\,B block, why does row-major traversal of a $1024\times1024$ int array miss far less than column-major? Quantify misses per row/column.\end{exercise}
