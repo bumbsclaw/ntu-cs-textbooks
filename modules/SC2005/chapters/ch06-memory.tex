@@ -1,0 +1,203 @@
+% SC2005 Ch06 — Memory Management (no \documentclass)
+\chapter{Memory Management}
+\label{ch:memory}
+
+\begin{quote}
+\emph{Memory is the workspace of computation.} How the OS partitions, translates,
+and protects it determines both performance and isolation.
+\end{quote}
+
+\noindent\textbf{Learning Outcomes.} After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item explain address binding, logical vs.\ physical addresses;
+  \item evaluate contiguous allocation, fragmentation, and compaction;
+  \item describe paging, TLBs, and multi-level page tables;
+  \item compare paging vs.\ segmentation and segmented paging;
+  \item reason about protection, sharing, and page-table overhead.
+\end{enumerate}
+
+% ============================================================
+\section{Address Binding and Spaces}
+\label{sec:binding}
+
+A program's addresses are \emph{logical} (virtual); hardware executes on
+\emph{physical} addresses after translation via the MMU. Binding can occur at
+compile time, load time, or execution time (the most flexible, requiring base +
+limit or paging hardware).
+
+Logical addresses from the CPU go through relocation (add base) or page-table
+lookup before reaching RAM. The user never sees physical addresses.
+
+\subsection{Contiguous Allocation}
+Early systems placed each process in one contiguous block $[base, base+limit)$.
+Hardware checks every access: $base \le addr < base+limit$. Simple and fast,
+but causes \emph{external fragmentation} --- free memory is scattered in holes
+too small for new processes. \emph{Compaction} (moving processes) is expensive.
+
+Allocation strategies for holes:
+\begin{itemize}
+  \item \textbf{First-fit:} use first hole large enough --- fast, low overhead.
+  \item \textbf{Best-fit:} smallest sufficient hole --- reduces waste but leaves tiny slivers.
+  \item \textbf{Worst-fit:} largest hole --- tends to leave usable fragments.
+\end{itemize}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  m/.style={draw, minimum width=2.4cm, align=center}]
+  \draw[thick] (0,0) rectangle (2.4,3.2);
+  \node[m, fill=blue!14, minimum height=0.7cm] at (1.2,2.75) {OS};
+  \node[m, fill=green!14, minimum height=0.8cm] at (1.2,2.05) {$P_1$};
+  \node[m, fill=orange!14, minimum height=0.4cm] at (1.2,1.45) {Hole 200\,KB};
+  \node[m, fill=violet!12, minimum height=1.0cm] at (1.2,0.75) {$P_2$};
+  \node[m, fill=gray!14, minimum height=0.25cm] at (1.2,0.12) {Hole 80\,KB};
+  \node[font=\tiny, align=left] at (4.2,1.5) {External\\fragmentation:\\free scattered\\in small holes};
+  \draw[-{Stealth}, thick, red!60!black] (2.5,1.45) -- (3.3,1.45);
+  \node[font=\tiny, fill=white] at (1.2,-0.35) {Physical memory (contiguous)};
+\end{tikzpicture}
+\caption{Contiguous allocation with external fragmentation.}
+\label{fig:contiguous}
+\end{figure}
+
+% ============================================================
+\section{Paging}
+\label{sec:paging}
+
+\emph{Paging} eliminates external fragmentation by dividing logical memory into
+fixed-size \emph{pages} (e.g., 4\,KB) and physical memory into \emph{frames}
+of the same size. A \emph{page table} maps page number $p$ to frame $f$; offset
+$d$ is preserved: physical address $= f \times \text{PAGE\_SIZE} + d$.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  b/.style={draw, rounded corners, align=center, minimum width=2.2cm, minimum height=0.55cm}]
+  \node[b, fill=blue!12] (vpn) at (0,1.8) {Virtual addr\\ $p$ \,|\, $d$};
+  \node[b, fill=orange!16] (pt) at (3.2,1.8) {Page table\\ $p \to f$};
+  \node[b, fill=green!14] (phys) at (1.6,0.4) {Physical addr\\ $f$ \,|\, $d$};
+  \node[b, fill=violet!12] (mem) at (1.6,-0.75) {RAM frame $f$};
+  \draw[-{Stealth}, thick, blue!60!black] (vpn) -- (pt) node[midway,above,font=\tiny]{lookup};
+  \draw[-{Stealth}, thick, blue!60!black] (pt) -- (phys);
+  \draw[-{Stealth}, thick] (phys) -- (mem);
+  \draw[-{Stealth}, thick, dashed, red!60!black] (vpn) -- (phys) node[midway,left,font=\tiny]{$d$ preserved};
+\end{tikzpicture}
+\caption{Paging address translation: page number maps to frame, offset passes through.}
+\label{fig:paging}
+\end{figure}
+
+\subsection{TLB}
+Every memory access would need a page-table lookup without caching. The
+\emph{Translation Lookaside Buffer} (TLB) is a small associative cache of
+recent $p\to f$ mappings. On a TLB miss, hardware or OS walks the page table
+and refills the TLB. Effective access time:
+\[
+  t_{\text{eff}} = h \cdot (t_{\text{TLB}}+t_{\text{mem}}) + (1-h)\cdot(t_{\text{TLB}}+2t_{\text{mem}})
+\]
+with hit rate $h$.
+
+\begin{example}[TLB effect]
+With $h=0.98$, $t_{\text{TLB}}=5$\,ns, $t_{\text{mem}}=80$\,ns:
+$t_{\text{eff}}=0.98\cdot85+0.02\cdot165=86.6$\,ns vs.\ $160$\,ns without TLB.
+Even a 2\% miss rate doubles cost without the TLB.
+\end{example}
+
+\subsection{Multi-Level Page Tables}
+A flat page table for 32-bit addresses with 4\,KB pages has $2^{20}$ entries
+($\sim$4\,MB per process). \emph{Two-level} paging splits $p$ into
+$p_1\,|\,p_2$: the outer table points to inner tables allocated only when
+needed, drastically reducing overhead for sparse address spaces. 64-bit systems
+use 3--4 levels.
+
+% ============================================================
+\section{Segmentation and Combined Schemes}
+\label{sec:segmentation}
+
+\emph{Segmentation} divides memory logically (code, data, stack, heap) into
+variable-size segments with base/limit per segment. It matches programmer
+view and enables sharing/protection per segment, but reintroduces external
+fragmentation.
+
+\textbf{Segmented paging:} each segment has its own page table --- combining
+logical organization with paging's freedom from external fragmentation. Intel
+x86 historically used this hybrid.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  s/.style={draw, rounded corners, align=center, minimum width=2.0cm, minimum height=0.6cm}]
+  \node[s, fill=blue!12] (va) at (0,1.6) {Virtual addr\\ $s$ \,|\, $p$ \,|\, $d$};
+  \node[s, fill=orange!15] (seg) at (3.0,1.6) {Segment table\\ $s\to$ page table};
+  \node[s, fill=green!14] (pt) at (3.0,0.4) {Page table\\ $p\to f$};
+  \node[s, fill=violet!12] (pa) at (0,0.4) {Physical addr\\ $f$ \,|\, $d$};
+  \draw[-{Stealth}, thick, blue!60!black] (va)--(seg);
+  \draw[-{Stealth}, thick, blue!60!black] (seg)--(pt);
+  \draw[-{Stealth}, thick, blue!60!black] (pt)--(pa);
+\end{tikzpicture}
+\caption{Segmented paging: segment $\to$ page table $\to$ frame.}
+\label{fig:segpage}
+\end{figure}
+
+Paging suffers \emph{internal fragmentation} (last page partially unused,
+average $\frac{1}{2}$ page per segment). Protection bits (R/W/X, user/supervisor)
+and sharing (shared frames, copy-on-write) are enforced per page/segment.
+
+% ============================================================
+\begin{remark}[Internal vs.\ external fragmentation]
+Paging has no external fragmentation (any free frame fits any page) but pays
+internal fragmentation: the last page of each process wastes on average
+$\text{PAGE\_SIZE}/2$ bytes. With 4\,KB pages and many small processes this
+adds up, motivating variable page sizes (huge pages: 2\,MB/1\,GB) for
+large mappings.
+\end{remark}
+
+\begin{lstlisting}[language=C,caption={Page-table walk (two-level, sketch)}]
+// va = p1 | p2 | offset  (10 | 10 | 12 for 4KB pages, 32-bit)
+pte_t *pt = outer[p1];          // outer table lookup
+if (!pt) fault("outer miss");
+frame = pt[p2].frame;           // inner table lookup
+phys = (frame << 12) | offset;
+\end{lstlisting}
+
+% TLB shootdown is a key multicore overhead
+% covered further in virtual memory chapter
+\begin{remark}[Why TLB shootdown matters]
+On multicore, updating a page-table entry requires invalidating stale TLB
+entries on other cores (TLB shootdown via IPIs). Frequent \texttt{mmap/mprotect}
+can thus be surprisingly expensive on large machines.
+\end{remark}
+
+\begin{example}[Two-level page-table size]
+For a 32-bit VA with 4\,KB pages, $p_1$ and $p_2$ are 10 bits each. The outer
+table has $1024$ entries; each inner table has $1024$ entries. A process using
+only two far-apart pages needs just 1 outer entry $+$ 2 inner tables ($\sim$12\,KB)
+instead of a flat 4\,MB table --- a $300\times$ saving.
+\end{example}
+
+\begin{remark}[Huge pages]
+Using 2\,MB or 1\,GB huge pages reduces TLB pressure (one entry covers more)
+at the cost of higher internal fragmentation. Databases and HPC workloads
+often enable huge pages for this reason.
+\end{remark}
+
+\section{Exercises}
+\label{sec:ch06-ex}
+\begin{exercise}
+Given logical address 0x1234 with page size 1\,KB (10-bit offset), find page
+number and offset. If page 4 maps to frame 7, what is the physical address?
+\end{exercise}
+\begin{exercise}
+For $t_{\text{mem}}=100$\,ns, $t_{\text{TLB}}=10$\,ns, and hit rate 95\%,
+compute effective access time with and without TLB.
+\end{exercise}
+\begin{exercise}
+Compare best-fit vs.\ first-fit allocation on a sequence of allocations and
+frees. Which fragments more and why?
+\end{exercise}
+\begin{exercise}
+Why do 64-bit systems need multi-level page tables? Estimate table size for a
+flat table with 4\,KB pages.
+\end{exercise}
+\begin{exercise}
+Explain how copy-on-write for \texttt{fork} uses page-table protection bits to
+defer copying until a write occurs.
+\end{exercise}

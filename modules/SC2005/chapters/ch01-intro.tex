@@ -1,0 +1,205 @@
+% SC2005 Ch01 — OS Introduction (no \documentclass)
+\chapter{Introduction to Operating Systems}
+\label{ch:intro}
+
+\begin{quote}
+\emph{``The operating system is the most important program that runs on a computer.''}
+This chapter answers: what an OS \emph{is}, why hardware needs it, and how it
+mediates every interaction between user programs and the machine.
+\end{quote}
+
+\noindent\textbf{Learning Outcomes.} After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item explain the OS as resource manager and extended machine;
+  \item distinguish kernel vs.\ user mode and the role of dual-mode operation;
+  \item describe system calls, traps, and the system-call interface;
+  \item sketch major OS structures (monolithic, layered, microkernel, modular);
+  \item outline booting, interrupts, and I/O organization.
+\end{enumerate}
+
+% ============================================================
+\section{What Is an Operating System?}
+\label{sec:what-is-os}
+
+An operating system (OS) is system software that (i) manages hardware resources
+(CPU, memory, storage, I/O) and (ii) provides a convenient execution environment
+for applications. Two complementary views:
+
+\begin{itemize}
+  \item \textbf{Resource allocator:} arbitrates conflicting requests for efficient,
+        fair use; decides between users/jobs when resources are scarce.
+  \item \textbf{Control program:} prevents errors and improper use of the computer.
+  \item \textbf{Extended / virtual machine:} hides hardware complexity behind
+        clean abstractions (files, processes, sockets).
+\end{itemize}
+
+\begin{definition}[Kernel]
+The \emph{kernel} is the core privileged component that runs with full hardware
+access, handling scheduling, memory management, file systems, and device drivers.
+Everything outside the kernel runs in \emph{user mode} with restricted privileges.
+\end{definition}
+
+\subsection{Computer-System Organization}
+A modern system has CPUs, memory, and I/O devices connected via a bus. Device
+controllers buffer data and interrupt the CPU when work completes. Direct Memory
+Access (DMA) lets controllers transfer blocks without per-byte CPU involvement.
+
+\subsection{Storage Hierarchy}
+Registers $\to$ cache $\to$ RAM $\to$ SSD/HDD $\to$ network storage: speed
+decreases while capacity and cost-per-bit improve. The OS migrates data across
+this hierarchy transparently (caching, paging, buffering).
+
+% ============================================================
+\section{Dual-Mode Operation and Protection}
+\label{sec:dual-mode}
+
+To protect the OS from user programs (and users from each other), hardware
+provides two modes indicated by a mode bit:
+
+\begin{itemize}
+  \item \textbf{Kernel (privileged) mode:} all instructions allowed.
+  \item \textbf{User mode:} privileged instructions (I/O, halt, set mode bit)
+        trap to the kernel.
+\end{itemize}
+
+A \emph{privileged instruction} executed in user mode causes a trap (exception).
+Mode switches occur on system calls, interrupts, and exceptions. Timers prevent
+infinite loops from seizing the CPU.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.78, every node/.style={font=\small},
+  box/.style={draw, rounded corners, minimum width=3.2cm, minimum height=0.9cm, align=center}]
+  \node[box, fill=blue!15] (app) at (0,3.2) {User Applications\\(user mode)};
+  \node[box, fill=green!15] (lib) at (0,1.8) {System libraries / Shell};
+  \node[box, fill=orange!18, minimum width=7cm] (kernel) at (0,0.2) {Kernel (process, memory, FS, drivers) --- kernel mode};
+  \node[box, fill=violet!12, minimum width=7cm] (hw) at (0,-1.2) {Hardware (CPU, RAM, disks, NIC)};
+  \draw[-{Stealth}, thick, blue!60!black] (app) -- (lib) node[midway,right,font=\tiny]{syscall};
+  \draw[-{Stealth}, thick, blue!60!black] (lib) -- (kernel);
+  \draw[-{Stealth}, thick] (kernel) -- (hw);
+  \draw[-{Stealth}, thick, dashed, red!60!black] (hw) -- ++(4.5,0) |- (kernel) node[pos=0.25,above,font=\tiny]{interrupt};
+\end{tikzpicture}
+\caption{Layered view: user vs.\ kernel, hardware, and control flow.}
+\label{fig:os-layers}
+\end{figure}
+
+% ============================================================
+\section{System Calls and OS Services}
+\label{sec:syscalls}
+
+A \emph{system call} is the programmatic interface to OS services. It triggers a
+synchronous trap (e.g., \texttt{syscall} / \texttt{int 0x80} / \texttt{SVC})
+that switches to kernel mode, dispatches via a system-call table, and returns.
+
+\begin{table}[h!]
+\centering\small
+\begin{tabular}{ll}
+\toprule
+Category & Examples (POSIX) \\
+\midrule
+Process control & \texttt{fork}, \texttt{exec}, \texttt{exit}, \texttt{wait} \\
+File management & \texttt{open}, \texttt{read}, \texttt{write}, \texttt{close} \\
+Device management & \texttt{ioctl}, \texttt{read}, \texttt{write} \\
+Information & \texttt{getpid}, \texttt{alarm}, \texttt{sleep} \\
+Communication & \texttt{pipe}, \texttt{shmget}, \texttt{mmap}, \texttt{socket} \\
+Protection & \texttt{chmod}, \texttt{umask}, \texttt{chown} \\
+\bottomrule
+\end{tabular}
+\caption{System-call categories with POSIX examples.}
+\end{table}
+
+\begin{lstlisting}[language=C,caption={System-call usage: copy a file (POSIX)}]
+#include <fcntl.h>
+#include <unistd.h>
+#define BS 4096
+int main() {
+    int src = open("in.txt", O_RDONLY);
+    int dst = open("out.txt", O_WRONLY|O_CREAT|O_TRUNC, 0644);
+    char buf[BS]; ssize_t n;
+    while ((n = read(src, buf, BS)) > 0)  // read() is a system call
+        write(dst, buf, n);               // write() traps to kernel
+    close(src); close(dst);
+    return 0;
+}
+\end{lstlisting}
+
+Types of system calls include process control, file manipulation, device
+management, information maintenance, communications, and protection.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\footnotesize},
+  b/.style={draw, rounded corners, fill=blue!12, minimum width=2.6cm, minimum height=0.85cm, align=center},
+  k/.style={draw, rounded corners, fill=orange!16, minimum width=2.6cm, minimum height=0.85cm, align=center}]
+  \node[b] (u) at (0,2.2) {User process\\ \texttt{read(fd,buf,n)}};
+  \node[k] (t) at (0,0.8) {Trap / syscall\\handler};
+  \node[k] (d) at (0,-0.55) {Kernel dispatch\\ \texttt{sys\_read()}};
+  \node[b] (r) at (0,-1.9) {Return to user\\ + result / errno};
+  \draw[-{Stealth}, thick, blue!60!black] (u) -- (t);
+  \draw[-{Stealth}, thick, blue!60!black] (t) -- (d);
+  \draw[-{Stealth}, thick, blue!60!black] (d) -- (r);
+  \node[draw, dashed, rounded corners, fit=(t)(d), inner sep=4pt, label={[font=\tiny]above:kernel mode}] {};
+\end{tikzpicture}
+\caption{System-call path: trap, dispatch, and return.}
+\label{fig:syscall-path}
+\end{figure}
+
+% ============================================================
+\section{OS Structures and Booting}
+\label{sec:structures}
+
+\textbf{Monolithic} kernels (Linux, classic UNIX) run all services in one
+privileged image for performance. \textbf{Layered} designs enforce hierarchy;
+\textbf{microkernels} (Mach, seL4) keep only scheduling, IPC, and MM in the
+kernel, pushing drivers/FS to user servers. \textbf{Modular/hybrid} kernels
+load modules dynamically.
+
+Booting: firmware (BIOS/UEFI) $\to$ bootloader $\to$ kernel image $\to$
+\texttt{init}/\texttt{systemd} (PID~1). Interrupts (hardware) and exceptions
+(software faults) are vectored through an interrupt descriptor table.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\scriptsize},
+  s/.style={draw, rounded corners, align=center, minimum width=2.0cm, minimum height=0.75cm}]
+  \node[s, fill=blue!12] (a) at (0,0) {Interrupt /\\Exception};
+  \node[s, fill=orange!15] (b) at (3.2,0) {Save context\\+ switch to kernel};
+  \node[s, fill=green!14] (c) at (6.4,0) {Vector to ISR\\(handler)};
+  \node[s, fill=violet!12] (d) at (6.4,-1.4) {Service\\+ acknowledge};
+  \node[s, fill=blue!10] (e) at (3.2,-1.4) {Restore context\\+ \texttt{iret}};
+  \draw[-{Stealth}, thick] (a)--(b); \draw[-{Stealth}, thick] (b)--(c);
+  \draw[-{Stealth}, thick] (c)--(d); \draw[-{Stealth}, thick] (d)--(e);
+  \draw[-{Stealth}, thick, dashed] (e)--(a);
+\end{tikzpicture}
+\caption{Interrupt handling pipeline (simplified).}
+\label{fig:interrupt}
+\end{figure}
+
+% ============================================================
+\begin{remark}[System-call cost]
+A system call is orders of magnitude slower than a function call due to mode
+switch, parameter validation, and cache/TLB effects. Hence \texttt{read} with
+a 1-byte buffer is far slower than buffering 4\,KB and issuing fewer calls.
+\end{remark}
+
+\section{Exercises}
+\label{sec:ch01-ex}
+\begin{exercise}
+Explain why dual-mode operation is necessary. What goes wrong if all code runs
+in kernel mode?
+\end{exercise}
+\begin{exercise}
+List three abstractions an OS provides over raw hardware and justify each.
+\end{exercise}
+\begin{exercise}
+Trace the system calls issued when a shell runs \texttt{cp a.txt b.txt}.
+Which calls handle process creation vs.\ file I/O?
+\end{exercise}
+\begin{exercise}
+Compare monolithic, microkernel, and modular structures on performance,
+reliability, and extensibility.
+\end{exercise}
+\begin{exercise}
+Distinguish interrupt, exception, and system call (trap) along dimensions:
+synchrony, source, and handler lookup.
+\end{exercise}

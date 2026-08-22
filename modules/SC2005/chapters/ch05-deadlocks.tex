@@ -1,0 +1,202 @@
+% SC2005 Ch05 — Deadlocks (no \documentclass)
+\chapter{Deadlocks}
+\label{ch:deadlocks}
+
+\begin{quote}
+\emph{``A deadlock is a standstill.''} Four conditions conspire to freeze a
+system; this chapter shows how to prevent, avoid, or recover from them.
+\end{quote}
+
+\noindent\textbf{Learning Outcomes.} After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item state the four Coffman conditions for deadlock;
+  \item model resource allocation with graphs and detect cycles;
+  \item apply deadlock prevention by breaking each condition;
+  \item run the Banker's algorithm for deadlock avoidance;
+  \item compare detection-and-recovery vs.\ ignoring deadlocks (ostrich).
+\end{enumerate}
+
+% ============================================================
+\section{System Model and Four Conditions}
+\label{sec:deadlock-conditions}
+
+Resources have types with multiple instances (e.g., 3 tape drives). A process
+uses a resource as: \texttt{request} $\to$ \texttt{use} $\to$ \texttt{release}.
+A \emph{deadlock} is a set of processes each waiting for a resource held by
+another in the set, with no progress possible.
+
+\begin{theorem}[Coffman conditions]
+Deadlock can occur only if all four hold simultaneously:
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{Mutual exclusion:} at least one resource is non-shareable.
+  \item \textbf{Hold and wait:} a process holds one resource while waiting for another.
+  \item \textbf{No preemption:} resources cannot be forcibly taken away.
+  \item \textbf{Circular wait:} a cycle $P_0\to R_0\to P_1\to R_1\to\cdots\to P_0$.
+\end{enumerate}
+\end{theorem}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.76, every node/.style={font=\scriptsize},
+  p/.style={draw, circle, fill=blue!14, minimum size=0.95cm},
+  r/.style={draw, rectangle, rounded corners, fill=orange!16, minimum size=0.9cm}]
+  \node[p] (p0) at (0,1.6) {$P_0$}; \node[p] (p1) at (3.4,1.6) {$P_1$};
+  \node[r] (r0) at (0,0) {$R_0$};   \node[r] (r1) at (3.4,0) {$R_1$};
+  \draw[-{Stealth}, thick, blue!60!black] (p0) -- (r1) node[midway,above,font=\tiny]{request};
+  \draw[-{Stealth}, thick, blue!60!black] (p1) -- (r0) node[midway,above,font=\tiny]{request};
+  \draw[-{Stealth}, thick, red!60!black] (r0) -- (p0) node[midway,left,font=\tiny]{holds};
+  \draw[-{Stealth}, thick, red!60!black] (r1) -- (p1) node[midway,right,font=\tiny]{holds};
+  \node[font=\tiny, fill=white] at (1.7,0.75) {cycle $\Rightarrow$ deadlock};
+\end{tikzpicture}
+\caption{Resource-allocation graph with a cycle: mutual exclusion + hold-and-wait + circular wait.}
+\label{fig:rag-cycle}
+\end{figure}
+
+If any condition is absent, deadlock is impossible. Prevention attacks one of
+the four; avoidance uses extra information to stay out of danger.
+
+% ============================================================
+\section{Resource-Allocation Graphs}
+\label{sec:rag}
+
+A \emph{resource-allocation graph} (RAG) has process nodes $P_i$, resource
+nodes $R_j$, request edges $P_i\to R_j$ and assignment edges $R_j\to P_i$.
+\begin{itemize}
+  \item No cycle $\Rightarrow$ no deadlock.
+  \item Cycle $\Rightarrow$ deadlock \emph{if} each resource has one instance;
+        otherwise cycle is necessary but not sufficient.
+\end{itemize}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  p/.style={draw, circle, fill=blue!12, minimum size=0.9cm},
+  r/.style={draw, rectangle, rounded corners, fill=green!14, minimum size=0.85cm}]
+  \node[p] (a) at (0,1.4) {$P_0$}; \node[p] (b) at (2.4,1.4) {$P_1$};
+  \node[p] (c) at (4.8,1.4) {$P_2$};
+  \node[r] (ra) at (0,0) {$R_A$}; \node[r] (rb) at (2.4,0) {$R_B$};
+  \node[r] (rc) at (4.8,0) {$R_C$};
+  \draw[-{Stealth}, thick, red!60!black] (ra)--(a);
+  \draw[-{Stealth}, thick, red!60!black] (rb)--(b);
+  \draw[-{Stealth}, thick, blue!60!black] (a)--(rb);
+  \draw[-{Stealth}, thick, blue!60!black] (b)--(rc);
+  \draw[-{Stealth}, thick, blue!60!black] (c)--(ra);
+  \node[font=\tiny, fill=white] at (2.4,0.65) {3-process cycle};
+\end{tikzpicture}
+\caption{A 3-process, 3-resource wait cycle; with single-instance resources this is a deadlock.}
+\label{fig:rag-3cycle}
+\end{figure}
+
+Deadlock detection for single-instance resources reduces to cycle detection in
+the wait-for graph. For multiple instances, a worklist algorithm similar to
+Banker's is used.
+
+% ============================================================
+\section{Prevention and Avoidance}
+\label{sec:prevention-avoidance}
+
+\textbf{Prevention} breaks one Coffman condition:
+\begin{itemize}
+  \item Break mutual exclusion: make resources shareable (not always possible).
+  \item Break hold-and-wait: require all resources at once (\texttt{request-all}).
+  \item Break no-preemption: allow preemption of held resources.
+  \item Break circular wait: impose a total order on resources; processes
+        request in increasing order only --- no cycle can form.
+\end{itemize}
+
+\textbf{Avoidance} requires advance knowledge: each process declares its maximum
+claim \texttt{Max} per resource. The OS grants requests only if the system
+remains in a \emph{safe state} (some execution order can satisfy all maxima).
+
+\subsection{Banker's Algorithm}
+State: \texttt{Available}, \texttt{Max}, \texttt{Allocation},
+\texttt{Need = Max -- Allocation}. On request $\le$ Need $\le$ Available,
+tentatively allocate and run the \emph{safety check}: find a sequence
+$\langle P_{i_1},\dots,P_{i_n}\rangle$ where each $P_{i_k}$ can finish with
+\texttt{Available} $+$ allocations of earlier processes.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  b/.style={draw, rounded corners, align=center, minimum width=2.4cm, minimum height=0.7cm}]
+  \node[b, fill=blue!12] (req) at (0,1.8) {Request $r\le$ Need?};
+  \node[b, fill=orange!15] (tent) at (0,0.7) {Tentatively allocate};
+  \node[b, fill=green!14] (safe) at (0,-0.45) {Safety check\\(find safe sequence)};
+  \node[b, fill=violet!12] (grant) at (3.8,0.7) {Grant};
+  \node[b, fill=red!14] (deny) at (3.8,-0.45) {Deny / block};
+  \draw[-{Stealth}, thick, blue!60!black] (req)--(tent) node[midway,right,font=\tiny]{yes};
+  \draw[-{Stealth}, thick, red!60!black] (req)--(deny) node[midway,above,font=\tiny]{no};
+  \draw[-{Stealth}, thick] (tent)--(safe);
+  \draw[-{Stealth}, thick, green!50!black] (safe)--(grant) node[midway,above,font=\tiny]{safe};
+  \draw[-{Stealth}, thick, red!60!black] (safe)--(deny) node[midway,above,font=\tiny]{unsafe};
+\end{tikzpicture}
+\caption{Banker's algorithm: grant only if the tentative state is safe.}
+\label{fig:banker}
+\end{figure}
+
+\begin{example}[Banker's safety check]
+5 processes, 3 resource types; \texttt{Available} $=(3,3,2)$. With Need and
+Allocation matrices the safe sequence $\langle P_1,P_3,P_4,P_0,P_2\rangle$
+exists, so the state is safe and a new request from $P_1$ can be granted.
+If no sequence exists the request must wait, even though resources are free.
+\end{example}
+
+Detection-and-recovery lets deadlocks happen, then kills or rolls back
+processes to break cycles. The ``ostrich algorithm'' (ignore deadlocks) is used
+when deadlocks are rare and recovery is expensive --- as in many UNIX systems.
+
+% ============================================================
+\begin{remark}[Livelock vs.\ Deadlock vs.\ Starvation]
+In deadlock, processes block forever waiting. In livelock, they \emph{actively}
+retry but keep colliding (e.g., two people stepping aside the same way).
+Starvation is indefinite postponement of one process while others progress.
+\end{remark}
+
+\subsection{Dining Philosophers}
+Five philosophers share five chopsticks (one between each pair). Each needs two
+to eat. Naively picking left then right deadlocks when all pick left
+simultaneously. Solutions: impose ordering (pick lower-numbered first), limit
+concurrency to four philosophers, or use a waiter (monitor) that grants both
+sticks atomically.
+
+\begin{lstlisting}[language=C,caption={Ordered chopstick acquisition prevents deadlock}]
+#define N 5
+pthread_mutex_t chop[N];
+void eat(int i){
+    int a = i, b = (i+1)%N;
+    if(a > b){ int t=a; a=b; b=t; } // enforce order
+    pthread_mutex_lock(&chop[a]);
+    pthread_mutex_lock(&chop[b]);
+    // ... eat ...
+    pthread_mutex_unlock(&chop[b]);
+    pthread_mutex_unlock(&chop[a]);
+}
+\end{lstlisting}
+
+The choice among strategies depends on workload: databases use
+deadlock detection (wait-for graph); embedded real-time systems use prevention
+(ordering); general-purpose OSes often use the ostrich approach.
+
+\section{Exercises}
+\label{sec:ch05-ex}
+\begin{exercise}
+Give a real-world analogy for each Coffman condition and explain how breaking
+that condition resolves the impasse.
+\end{exercise}
+\begin{exercise}
+Draw the RAG for: $P_0$ holds $R_0$ waits for $R_1$; $P_1$ holds $R_1$ waits for
+$R_2$; $P_2$ holds $R_2$ waits for $R_0$. Is there deadlock if each $R_i$ has
+two instances and one is free?
+\end{exercise}
+\begin{exercise}
+Run Banker's algorithm on the textbook 5-process example and verify the safe
+sequence step by step.
+\end{exercise}
+\begin{exercise}
+Explain why imposing a total order on resources prevents circular wait. Why is
+this prevention strategy sometimes impractical?
+\end{exercise}
+\begin{exercise}
+Compare prevention, avoidance, detection/recovery, and the ostrich approach on
+overhead and applicability. When would an OS choose each?
+\end{exercise}

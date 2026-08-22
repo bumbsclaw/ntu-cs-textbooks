@@ -1,0 +1,202 @@
+\chapter{Unified Modeling Language (UML)}
+\label{ch:uml}
+
+UML is the lingua franca for visualising software structure and behaviour. It does not prescribe a process; it gives a standard notation that every stakeholder---from customer to coder---can read. This chapter covers the three diagrams you will use most often in design reviews and technical interviews: class, sequence, and state-machine diagrams.
+
+\section{UML Overview}
+
+UML~2.5 defines 14~diagram types in two families: \emph{structure} diagrams (class, object, component, deployment, package) and \emph{behaviour} diagrams (use case, sequence, activity, state machine, communication). We focus on the core three that appear in almost every design document.
+
+\begin{definition}[Model vs.\ Diagram]
+A \emph{model} is an abstraction of the system capturing selected aspects; a \emph{diagram} is one graphical view of that model. Multiple diagrams can show overlapping elements from different perspectives.
+\end{definition}
+
+Why model at all? Models enable reasoning before code exists: you can check multiplicities, detect missing associations, and walk through interactions without running anything. A ten-minute whiteboard review of a sequence diagram can prevent a week of integration pain.
+
+\section{Class Diagrams}
+
+A class diagram shows the static structure: classes, attributes, operations, and relationships. It is the primary input to object-oriented code generation.
+
+\subsection{Notation}
+
+\begin{itemize}
+    \item \textbf{Class box}: three compartments -- name (bold), attributes (with types and visibility), operations (with signatures). Visibility: \texttt{+} public, \texttt{-} private, \texttt{\#} protected, \texttt{\textasciitilde} package.
+    \item \textbf{Relationships}: association (solid line), aggregation (hollow diamond -- ``has-a'' with independent lifecycle), composition (filled diamond -- strong ownership, lifecycle bound), inheritance/generalisation (hollow triangle), dependency (dashed arrow), multiplicity (\texttt{1}, \texttt{0..1}, \texttt{*}, \texttt{1..*}).
+    \item \textbf{Association class}: a class attached to an association link when the link itself carries data.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize}]
+  \tikzstyle{cls}=[draw,rounded corners,fill=blue!8,minimum width=3.05cm,align=center,thick]
+  \node[cls,fill=blue!14] (person) at (0,3.2) {\textbf{Person}\\\rule{2.4cm}{0.4pt}\\ \texttt{-name: String}\\ \texttt{-email: String}\\ \rule{2.4cm}{0.4pt} \texttt{+getName(): String}};
+  \node[cls,fill=green!14] (student) at (-3.2,0.85) {\textbf{Student}\\\rule{2.4cm}{0.4pt}\\ \texttt{-matricNo: String}\\ \texttt{-gpa: double}\\ \rule{2.4cm}{0.4pt} \texttt{+enroll(c: Course)}};
+  \node[cls,fill=green!14] (prof) at (3.2,0.85) {\textbf{Professor}\\\rule{2.4cm}{0.4pt}\\ \texttt{-staffId: String}\\ \rule{2.4cm}{0.4pt} \texttt{+assignGrade()}};
+  \node[cls,fill=orange!14] (course) at (-3.2,-1.85) {\textbf{Course}\\\rule{2.4cm}{0.4pt}\\ \texttt{-code: String}\\ \texttt{-capacity: int}\\ \rule{2.4cm}{0.4pt} \texttt{+addStudent(s: Student)}};
+  \node[cls,fill=violet!14] (enroll) at (3.2,-1.85) {\textbf{Enrollment}\\\rule{2.4cm}{0.4pt}\\ \texttt{-grade: String}\\ \texttt{-semester: String}\\ \rule{2.4cm}{0.4pt} };
+  % inheritance
+  \draw[-{Triangle[open, length=4mm]},thick] (student.north) -- (person.south west);
+  \draw[-{Triangle[open, length=4mm]},thick] (prof.north) -- (person.south east);
+  % associations
+  \draw[thick] (student) -- (enroll) node[midway,above,font=\tiny] {1 -- *};
+  \draw[thick] (course) -- (enroll) node[midway,above,font=\tiny] {1 -- *};
+  \node[draw,diamond,fill=gray!20,aspect=1.5,inner sep=1pt,thick] at (-1.1,-0.42) {};
+  \node[font=\tiny,gray] at (-1.15,0.02) {assoc.\ class};
+\end{tikzpicture}
+\caption{Class diagram fragment -- inheritance (Person $\triangleleft$ Student/Professor) and association via Enrollment association class with multiplicities.}
+\end{figure}
+
+Design heuristics: prefer composition over inheritance; keep inheritance hierarchies shallow (depth $\leq 3$); use association classes when a link itself carries data (here, Enrollment holds grade and semester that belong to neither Student nor Course alone).
+
+\subsection{Common Pitfalls}
+
+Misusing aggregation/composition changes lifecycle semantics: composition implies the part dies with the whole (deleting a Course deletes its Enrollments), while aggregation does not. Getting this wrong causes either dangling references or unintended cascading deletes. Another pitfall is modelling every database table as a class---classes represent domain concepts, not storage.
+
+\section{Sequence Diagrams}
+
+Sequence diagrams capture \emph{interactions over time}. Time flows downward; each vertical dashed lifeline is an object or component; horizontal arrows are messages: synchronous (filled arrowhead, caller blocks), asynchronous (open arrowhead), and return (dashed).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\scriptsize}]
+  % lifelines
+  \foreach \x/\lbl/\col in {0/Student/blue!12, 3.6/ExamController/green!14, 7.2/GradingService/orange!14, 10.8/Database/violet!14} {
+    \node[draw,rounded corners,fill=\col,minimum width=2.25cm,minimum height=0.7cm,thick] at (\x,3.3) {\lbl};
+    \draw[dashed,gray] (\x,2.95) -- (\x,-2.9);
+    \fill[gray!60] (\x,2.95) circle (1.2pt);
+  }
+  % messages
+  \draw[-{Stealth[length=2.5mm]},thick] (0,2.35) -- (3.6,2.35) node[midway,above,font=\tiny] {1: submit(answers)};
+  \draw[-{Stealth[length=2.5mm]},thick] (3.6,1.65) -- (7.2,1.65) node[midway,above,font=\tiny] {2: grade(answers)};
+  \draw[-{Stealth[length=2.5mm]},thick] (7.2,0.95) -- (10.8,0.95) node[midway,above,font=\tiny] {3: fetchKey(examId)};
+  \draw[dashed,->,thick,gray] (10.8,0.35) -- (7.2,0.35) node[midway,above,font=\tiny] {4: return key};
+  % alt fragment
+  \draw[thick,rounded corners] (-0.65,-0.05) rectangle (11.45,-2.05);
+  \node[draw,fill=yellow!18,font=\tiny,thick] at (0.3,-0.05) {alt};
+  \node[font=\tiny,align=left] at (2.4,-0.55) {[score $\geq$ passMark] / [else]};
+  \draw[-{Stealth[length=2.5mm]},thick,blue!60!black] (7.2,-0.95) -- (3.6,-0.95) node[midway,above,font=\tiny] {5a: pass(score)};
+  \draw[-{Stealth[length=2.5mm]},thick,red!60!black] (7.2,-1.55) -- (3.6,-1.55) node[midway,above,font=\tiny] {5b: fail(score)};
+  \draw[dashed,->,thick,gray] (3.6,-2.45) -- (0,-2.45) node[midway,above,font=\tiny] {6: showResult()};
+\end{tikzpicture}
+\caption{Sequence diagram for exam submission -- synchronous calls, return messages, and an alt fragment for pass/fail. Time flows downward.}
+\end{figure}
+
+Good practice: keep diagrams to 5--7~lifelines; use \texttt{alt}, \texttt{loop}, \texttt{opt}, and \texttt{ref} fragments sparingly; prefer to split complex flows across multiple diagrams rather than nesting fragments three deep. Each sequence diagram should tell one coherent story.
+
+\section{State-Machine Diagrams}
+
+State diagrams model the lifecycle of a \emph{single} object or component. Nodes are states (rounded rectangles); arrows are transitions labelled \texttt{event [guard] / action}; the filled circle is the initial state, the bullseye is the final state. Composite states (with nested regions) model hierarchical behaviour.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\footnotesize}]
+  \tikzstyle{st}=[draw,rounded corners,fill=blue!10,minimum width=2.45cm,minimum height=0.9cm,align=center,thick]
+  \node[draw,circle,fill=black,minimum size=5pt,inner sep=0pt] (init) at (-4.2,0) {};
+  \node[st,fill=green!15] (draft) at (-1.6,0) {Draft};
+  \node[st,fill=orange!15] (submitted) at (1.5,0) {Submitted};
+  \node[st,fill=violet!15] (graded) at (4.6,0) {Graded};
+  \node[draw,circle,fill=black!10,minimum size=13pt,thick] (final) at (6.8,0) {};
+  \draw[fill=black] (6.8,0) circle (4.5pt);
+  \draw[-{Stealth},thick] (init) -- (draft) node[midway,above,font=\tiny] {create};
+  \draw[-{Stealth},thick] (draft) -- (submitted) node[midway,above,font=\tiny] {submit [valid]};
+  \draw[-{Stealth},thick,bend left=20] (submitted) to node[above,font=\tiny] {grade / compute} (graded);
+  \draw[-{Stealth},thick,bend left=20] (submitted) to node[below,font=\tiny] {requestChanges} (draft);
+  \draw[-{Stealth},thick] (graded) -- (final);
+  \node[st,fill=red!12,minimum width=2.1cm] (arch) at (1.5,-1.9) {Archived};
+  \draw[-{Stealth},thick,dashed] (graded) -- (arch) node[midway,right,font=\tiny] {archive / after 1yr};
+  \node[st,fill=gray!12,minimum width=2.1cm] (cancel) at (-1.6,-1.9) {Cancelled};
+  \draw[-{Stealth},thick,dashed,red!60!black] (draft) -- (cancel) node[midway,left,font=\tiny] {cancel};
+  \draw[-{Stealth},thick,dashed,red!60!black] (submitted) -- (cancel) node[midway,above,font=\tiny] {cancel};
+\end{tikzpicture}
+\caption{State machine for an Exam Attempt -- guards in brackets, actions after slash, and terminal states. Cancellation is possible from Draft or Submitted but not after grading.}
+\end{figure}
+
+State machines are invaluable for validating lifecycle invariants: ``no grading before submission'' becomes a missing transition that the diagram makes obvious. They also generate test cases directly---each path from initial to final state is a scenario to test.
+
+
+\section{Activity Diagrams -- Workflow View}
+
+An activity diagram models control and data flow across actions, decisions, forks/joins (concurrency), and swimlanes (partition by actor or component). Unlike flowcharts, activity diagrams have formal semantics for parallelism: a fork splits one flow into concurrent flows, and the matching join synchronises them. This makes them suitable for modelling business processes and concurrent algorithms.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.70, every node/.style={font=\scriptsize}]
+  \node[draw,circle,fill=black,minimum size=4pt,inner sep=0pt] (s) at (0,2.6) {};
+  \node[draw,rounded corners,fill=green!14,minimum width=2.4cm,minimum height=0.7cm,thick] (a1) at (0,1.7) {Receive Order};
+  \node[draw,diamond,fill=orange!18,aspect=1.6,inner sep=2pt,thick] (dec) at (0,0.7) {};
+  \node[font=\tiny] at (0,0.7) {in stock?};
+  \node[draw,rounded corners,fill=blue!12,minimum width=2.2cm,minimum height=0.7cm,thick] (a2) at (-2.2,-0.4) {Pack \& Ship};
+  \node[draw,rounded corners,fill=violet!14,minimum width=2.2cm,minimum height=0.7cm,thick] (a3) at (2.2,-0.4) {Reorder Stock};
+  \node[draw,fill=black!10,minimum width=2.2cm,minimum height=0.12cm] (fork) at (0,-1.3) {};
+  \node[draw,rounded corners,fill=teal!12,minimum width=2.0cm,minimum height=0.6cm,thick] (a4) at (-1.3,-2.0) {Send Invoice};
+  \node[draw,rounded corners,fill=teal!12,minimum width=2.0cm,minimum height=0.6cm,thick] (a5) at (1.3,-2.0) {Update Inventory};
+  \node[draw,fill=black!10,minimum width=2.2cm,minimum height=0.12cm] (join) at (0,-2.7) {};
+  \node[draw,circle,fill=black!10,minimum size=11pt,thick] (e) at (0,-3.5) {};
+  \draw[fill=black] (0,-3.5) circle (4pt);
+  \draw[->,thick] (s) -- (a1); \draw[->,thick] (a1) -- (dec);
+  \draw[->,thick] (dec) -- node[above,font=\tiny] {yes} (a2);
+  \draw[->,thick] (dec) -- node[above,font=\tiny] {no} (a3);
+  \draw[->,thick] (a2) |- (fork); \draw[->,thick] (a3) |- (fork);
+  \draw[->,thick] (fork) -- (a4); \draw[->,thick] (fork) -- (a5);
+  \draw[->,thick] (a4) -- (join); \draw[->,thick] (a5) -- (join);
+  \draw[->,thick] (join) -- (e);
+\end{tikzpicture}
+\caption{Activity diagram with decision, merge, fork/join (concurrent invoice and inventory update), and swimlane-partitionable actions.}
+\end{figure}
+
+
+\section{Package and Component Diagrams}
+
+For large systems, package diagrams show how classes are grouped into packages and how packages depend on each other (dashed arrows for dependencies, solid for imports). Component diagrams go further, showing deployable components with provided/required interfaces (lollipop/socket notation). Both help reason about build order, team ownership, and deployment topology before code exists.
+
+\section{Choosing the Right Diagram}
+
+\begin{itemize}
+    \item Need static structure for code generation or database design? Class diagram.
+    \item Need to reason about ordering, concurrency, or API contracts? Sequence diagram.
+    \item Need to validate lifecycle invariants or generate state-based tests? State machine.
+    \item Need high-level workflow across multiple actors? Activity diagram (beyond scope here).
+\end{itemize}
+
+In practice, a design review walks through all three: the class diagram sets the vocabulary, sequence diagrams show how objects collaborate to realise use cases, and state machines ensure each object's lifecycle is sound.
+
+
+\section{UML Tooling and Conventions}
+
+Modern teams generate skeleton code from class diagrams and reverse-engineer diagrams from code. Round-trip engineering keeps model and code synchronised, but only if the team treats the model as authoritative. Naming conventions matter: class names are singular nouns (\texttt{Student}, not \texttt{Students}), association names are verbs (\texttt{enrollsIn}), and role names clarify multiplicity (\texttt{advisor} vs.\ \texttt{advisee}). Consistent layout (e.g., inheritance hierarchies top-down, associations left-to-right) dramatically improves readability during reviews.
+
+\begin{remark}
+A diagram that cannot be understood in 60~seconds is too complex. Split it. The goal is communication, not decoration.
+\end{remark}
+
+
+\begin{remark}
+When hand-drawing UML on a whiteboard, omit attribute types for speed but keep multiplicities and arrowheads precise---they carry the most semantic weight.
+\end{remark}
+
+
+\section{Common Modelling Mistakes}
+
+Novices often create ``god classes'' that know too much, omit multiplicities (leaving cardinality ambiguous), or model every database column as a separate class. A useful review checklist: does every association have multiplicity at both ends? Is every inheritance hierarchy justified by true ``is-a''? Are there cycles in package dependencies? Catching these on the whiteboard is minutes; catching them in code is days.
+
+\section{Exercises}
+
+\begin{exercise}
+Draw a class diagram for a library with Book, Copy, Member, Loan. Show aggregation vs.\ composition between Book--Copy and Loan--Member. Add multiplicities and at least one association class. Explain your choice of diamond fill.
+\end{exercise}
+
+\begin{exercise}
+Model ``withdraw cash from ATM'' as a sequence diagram with four lifelines (Customer, ATM, BankServer, Account). Include an alt fragment for insufficient funds and a loop fragment for retrying PIN entry (max 3~attempts). Label synchronous vs.\ asynchronous messages.
+\end{exercise}
+
+\begin{exercise}
+Construct a state-machine diagram for an online Order with states Pending, Paid, Shipped, Delivered, Cancelled, Refunded. Label each transition with event [guard] / action and identify any illegal transition that your diagram prevents.
+\end{exercise}
+
+\begin{exercise}
+Explain why sequence diagrams are better than flowcharts for reasoning about distributed-system interactions. Give a concrete example where ordering ambiguity in a flowchart hides a race condition that a sequence diagram would reveal.
+\end{exercise}
+
+\begin{exercise}
+A class diagram shows a hollow diamond between Department and Professor. A junior developer implements this as composition (filled diamond, cascading delete). What bug could this introduce when a Department is deleted? How would you catch it in a code review or test?
+\end{exercise}

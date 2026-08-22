@@ -1,0 +1,206 @@
+% SC2005 Ch04 — Synchronization (no \documentclass)
+\chapter{Synchronization}
+\label{ch:sync}
+
+\begin{quote}
+\emph{Concurrency without synchronization is chaos.} This chapter builds the
+primitives that make correct concurrent programs possible.
+\end{quote}
+
+\noindent\textbf{Learning Outcomes.} After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item identify race conditions and define the critical-section problem;
+  \item explain Peterson's algorithm and hardware atomics (TSL, CAS);
+  \item use semaphores and mutexes correctly;
+  \item use monitors / condition variables and solve producer--consumer;
+  \item avoid common pitfalls (deadlock, missed wakeup, busy waiting).
+\end{enumerate}
+
+% ============================================================
+\section{Races and the Critical Section}
+\label{sec:race-cs}
+
+A \emph{race condition} occurs when unsynchronized accesses to shared state
+produce nondeterministic results. Example: \texttt{count++} is
+\texttt{load--inc--store}; interleaving two increments can lose an update.
+
+\subsection{Critical-Section Requirements}
+A correct mutual-exclusion protocol guarantees:
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{Mutual exclusion:} at most one process in its critical section (CS).
+  \item \textbf{Progress:} a process not in CS cannot block others indefinitely.
+  \item \textbf{Bounded waiting:} no indefinite starvation.
+\end{enumerate}
+
+\subsection{Peterson's Algorithm (2 processes)}
+For processes $P_0, P_1$ with shared \texttt{flag[2]} and \texttt{turn}:
+
+\begin{lstlisting}[language=C,caption={Peterson's algorithm for $P_i$}]
+// shared: flag[2]={0,0}; turn=0;
+flag[i] = 1; turn = 1 - i;           // intend + yield
+while (flag[1-i] && turn == 1-i) ;   // busy-wait
+// --- critical section ---
+flag[i] = 0;
+// --- remainder ---
+\end{lstlisting}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  s/.style={draw, rounded corners, align=center, minimum width=2.6cm, minimum height=0.75cm}]
+  \node[s, fill=blue!12] (a) at (0,1.6) {\texttt{flag[i]=1; turn=j}};
+  \node[s, fill=orange!15] (b) at (4.2,1.6) {\texttt{while(flag[j]\&\&turn==j)};};
+  \node[s, fill=green!14] (c) at (4.2,0.3) {Critical Section};
+  \node[s, fill=violet!12] (d) at (0,0.3) {\texttt{flag[i]=0}};
+  \draw[-{Stealth}, thick, blue!60!black] (a)--(b);
+  \draw[-{Stealth}, thick, green!50!black] (b)--(c) node[midway,right,font=\tiny]{guard false};
+  \draw[-{Stealth}, thick, red!60!black] (b) -- ++(0,1.0) -- ++(-1.5,0) |- (b) node[pos=0.25,left,font=\tiny]{spin};
+  \draw[-{Stealth}, thick] (c)--(d); \draw[-{Stealth}, thick, dashed] (d) |- (a);
+\end{tikzpicture}
+\caption{Peterson's protocol flow for process $P_i$ (busy-waiting).}
+\label{fig:peterson}
+\end{figure}
+
+Peterson satisfies all three requirements but uses busy waiting, is limited to
+two processes, and assumes sequentially consistent memory (fails under modern
+reordering without fences).
+
+\subsection{Hardware Support}
+Atomic instructions let software build synchronization without pure busy-wait
+loops: \texttt{test-and-set} (TSL), \texttt{compare-and-swap} (CAS), and
+\texttt{fetch-and-add} --- each completes atomically in hardware.
+
+\begin{lstlisting}[language=C,caption={Spinlock via compare-and-swap}]
+#include <stdatomic.h>
+atomic_flag lock = ATOMIC_FLAG_INIT;
+void acquire() { while (atomic_flag_test_and_set(&lock)) ; /* spin */ }
+void release() { atomic_flag_clear(&lock); }
+\end{lstlisting}
+
+% ============================================================
+\section{Semaphores and Mutexes}
+\label{sec:semaphores}
+
+A \emph{semaphore} $S$ is an integer with atomic \texttt{wait(S)} / \texttt{P}
+and \texttt{signal(S)} / \texttt{V}:
+
+\begin{center}
+\texttt{wait(S): while(S$\le$0); S--\quad\quad signal(S): S++}
+\end{center}
+Binary semaphore ($S\in\{0,1\}$) acts as a mutex; counting semaphore tracks
+available resources. Practical semaphores block instead of spinning (queue +
+\texttt{sleep}/\texttt{wakeup}).
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  b/.style={draw, rounded corners, align=center, minimum width=2.8cm, minimum height=0.75cm}]
+  \node[b, fill=blue!12] (w) at (0,1.2) {\texttt{wait(S)}: if $S>0$ decr else block};
+  \node[b, fill=green!14] (cs) at (0,0.0) {Critical Section};
+  \node[b, fill=orange!15] (s) at (0,-1.2) {\texttt{signal(S)}: incr; wake one waiter};
+  \draw[-{Stealth}, thick, blue!60!black] (w)--(cs);
+  \draw[-{Stealth}, thick, blue!60!black] (cs)--(s);
+  \draw[-{Stealth}, thick, dashed, red!60!black] (s.east) -- ++(0.9,0) |- (w.east) node[pos=0.25,right,font=\tiny]{next waiter};
+  \node[draw, dashed, rounded corners, fit=(w)(s), inner sep=4pt, label={[font=\tiny]above right:semaphore invariant $S\ge 0$}] {};
+\end{tikzpicture}
+\caption{Semaphore-based mutual exclusion with blocking (not spinning).}
+\label{fig:semaphore}
+\end{figure}
+
+\subsection{Producer--Consumer with Semaphores}
+Buffer size $N$: \texttt{empty} $=N$, \texttt{full} $=0$, \texttt{mutex} $=1$.
+\begin{lstlisting}[language=C,caption={Bounded buffer --- semaphore solution}]
+sem_t empty, full, mutex; // init N, 0, 1
+void *producer(void *a) {
+    for (;;) { Item x = produce();
+        sem_wait(&empty); sem_wait(&mutex);
+        buffer[in] = x; in = (in+1)%N;
+        sem_post(&mutex); sem_post(&full);
+    }
+}
+void *consumer(void *a) {
+    for (;;) {
+        sem_wait(&full); sem_wait(&mutex);
+        Item x = buffer[out]; out=(out+1)%N;
+        sem_post(&mutex); sem_post(&empty);
+        consume(x);
+    }
+}
+\end{lstlisting}
+Ordering matters: waiting on \texttt{mutex} before \texttt{empty/full} can
+deadlock (see Chapter~5).
+
+% ============================================================
+\section{Monitors and Condition Variables}
+\label{sec:monitors}
+
+A \emph{monitor} encapsulates shared data + procedures with implicit mutual
+exclusion (only one thread inside at a time). \emph{Condition variables}
+(\texttt{wait}, \texttt{signal}/\texttt{broadcast}) let threads sleep until a
+predicate holds --- always re-check in a \texttt{while} loop (spurious wakeups).
+
+\begin{lstlisting}[language=C,caption={Monitor-style bounded buffer (pthreads)}]
+pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t not_full = PTHREAD_COND_INITIALIZER,
+               not_empty = PTHREAD_COND_INITIALIZER;
+int cnt=0, in=0, out=0; Item buf[N];
+void put(Item x){ pthread_mutex_lock(&m);
+    while(cnt==N) pthread_cond_wait(&not_full,&m);
+    buf[in]=x; in=(in+1)%N; cnt++;
+    pthread_cond_signal(&not_empty); pthread_mutex_unlock(&m);
+}
+Item get(){ pthread_mutex_lock(&m);
+    while(cnt==0) pthread_cond_wait(&not_empty,&m);
+    Item x=buf[out]; out=(out+1)%N; cnt--;
+    pthread_cond_signal(&not_full); pthread_mutex_unlock(&m); return x;
+}
+\end{lstlisting}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  b/.style={draw, rounded corners, align=center, minimum width=2.6cm, minimum height=0.75cm}]
+  \node[b, fill=blue!12] (enter) at (0,1.8) {Enter monitor\\(acquire lock)};
+  \node[b, fill=orange!15] (check) at (0,0.7) {Predicate?};
+  \node[b, fill=green!14] (work) at (3.0,0.7) {Access shared data};
+  \node[b, fill=violet!12] (wait) at (0,-0.55) {\texttt{cond\_wait}\\ (release + sleep)};
+  \node[b, fill=gray!14] (exit) at (3.0,-0.55) {Signal + exit\\(release lock)};
+  \draw[-{Stealth}, thick] (enter)--(check);
+  \draw[-{Stealth}, thick, green!50!black] (check)--(work) node[midway,above,font=\tiny]{true};
+  \draw[-{Stealth}, thick, red!60!black] (check)--(wait) node[midway,left,font=\tiny]{false};
+  \draw[-{Stealth}, thick, dashed, red!60!black] (wait) |- (check);
+  \draw[-{Stealth}, thick] (work)--(exit);
+\end{tikzpicture}
+\caption{Monitor + condition variable pattern: always re-check predicate after wakeup.}
+\label{fig:monitor}
+\end{figure}
+
+% ============================================================
+\begin{remark}[Spurious wakeups]
+On some systems \texttt{pthread\_cond\_wait} may return without a signal.
+Hence the predicate must be rechecked in a loop --- an \texttt{if} would
+proceed with a false precondition.
+\end{remark}
+
+\section{Exercises}
+\label{sec:ch04-ex}
+\begin{exercise}
+Show the lost-update race for \texttt{count++} with a concrete interleaving
+of \texttt{load/inc/store} instructions.
+\end{exercise}
+\begin{exercise}
+Prove Peterson's algorithm guarantees mutual exclusion. Which requirement fails
+if \texttt{turn} is removed?
+\end{exercise}
+\begin{exercise}
+Swap the two \texttt{sem\_wait} lines in producer (\texttt{mutex} before
+\texttt{empty}). Construct a deadlock scenario.
+\end{exercise}
+\begin{exercise}
+Implement a reader--writer lock with semaphores that gives writers priority.
+Explain starvation of readers.
+\end{exercise}
+\begin{exercise}
+Why must \texttt{pthread\_cond\_wait} be called inside a \texttt{while} loop
+testing the predicate, not an \texttt{if}?
+\end{exercise}
