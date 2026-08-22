@@ -11,15 +11,15 @@
 |-------|--------|-------|
 | 0 - Curriculum deep research and outline | DONE | outline committed 44c9533; verified 135 AU (17+16+47+35+20) |
 | 0a - Adversarial review of outline | DONE (FAIL→FIXED) | 2026-08-23 01:05 SGT — verdict FAIL BLOCKING (SC2000 title, Core double-count, College Core 27→16 bucket, MPE 35/36 invariant). Review: docs/curriculum-outline-review.md. Trivial fixes patched in outline (SC2000→Prob&Stats, SC1003 deduped from Core, HW0288/SC2203/SC2008 prereq nuances, MPE Highest Distinction, bucket footnotes). Non-blocking TODOs (SC4023 verification, graph detail) logged in review §Recommended Fixes. |
-| 1 - Exemplar fleet (SC2001) | DONE | fleet deleg_adace572+deleg_bc8aad5d+deleg_dd84bab0 DONE 01:22 SGT — 8/8 chapters (1859 lines, 16 TikZ) ch01 375 ch02 217 ch03 210 ch04 201 ch05 220 ch06 233 ch07 200 ch08 203; main.pdf 46p 824KB compiles 0 pgf errors (automata patched). QA fleet deleg_68d71dca DONE 01:28 SGT — PASS (conditional) ch01-04 + PASS WITH MINOR FIXES ch05-08; 2 trivial patches auto-applied (ch04 Master ref + strip lemma, ch06 coin-change label + matrix-chain arithmetic) |
+| 1 - Exemplar fleet (SC2001) v2 RETRY | IN_PROGRESS | v2 dispatched 01:31 SGT per Bowen feedback: color TikZ where useful + syntax-highlighted code (listings) + stricter visual QA (diagram+formula compile check). Previous 46p PASS but plain verbatim + muted colors. Agents: code-fix (verbatim->lstlisting) + colorize TikZ + formula overflow fixes; then adversarial QA with rendering checks | v1 01:22 SGT — 8/8 chapters (1859 lines, 16 TikZ) ch01 375 ch02 217 ch03 210 ch04 201 ch05 220 ch06 233 ch07 200 ch08 203; main.pdf 46p 824KB compiles 0 pgf errors (automata patched). QA fleet deleg_68d71dca DONE 01:28 SGT — PASS (conditional) ch01-04 + PASS WITH MINOR FIXES ch05-08; 2 trivial patches auto-applied (ch04 Master ref + strip lemma, ch06 coin-change label + matrix-chain arithmetic) |
 | 2 - Batch expansion (3 cores) | READY | queued: SC1007 (Data Structures extension), SC2005 (Operating Systems), SC2006 (Software Engineering) chunked writers — awaiting push |
 | 3 - Final QA fleet | PENDING | |
-| 4 - LaTeX PDF render | PENDING | latexmk + push |
+| 4 - LaTeX PDF render | IN_PROGRESS | v2 re-render (pdflatex x2) + git push of v2 artifacts |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
 |------|-------|----|------|---------|-------|-------------|----|-----|
-| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (ab1d8cd) | DONE 8/8 (1859 lines, 16 TikZ) 01:22 SGT | DONE PASS ch01-04 (REVIEW-ch01-04.md) + PASS ch05-08 (REVIEW-ch05-08.md) 01:28 SGT | DONE | DONE 46p main.pdf (843KB, 2× pdflatex pass) |
+| SC2001 | Algorithm Design and Analysis | 3 | Core | DONE (ab1d8cd) | DONE 8/8 v1 (1859 lines) 01:22 SGT — v2 IN_PROGRESS (color+highlight retry 01:31 SGT) | DONE PASS v1 (REVIEW-ch01-04.md + REVIEW-ch05-08.md) 01:28 SGT — re-review queued for v2 | DONE | DONE v1 46p 843KB — v2 re-render queued |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
