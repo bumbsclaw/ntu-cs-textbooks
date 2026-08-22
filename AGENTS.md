@@ -12,3 +12,7 @@
 - `progress.md` is crash-resume checkpoint — first `PENDING` row is next task.
 - Modules under `modules/<CODE>/` with `main.tex` (book class) + `chapters/*.tex` + `main.pdf` (tracked). `.gitignore` ignores *.aux/log/out/toc only — PDFs are tracked via `git add -f`.
 - Model for fleets: `muse-spark-1.2-contribution` via opencode-go (ox-alpha-free ONLY, no fallback). Keep generations ≤260 lines / ~3000 tokens to stay under 30s 500/503 flap.
+
+## Small-screen layout (Bowen 2026-08-23)
+- Geometry: narrow margins (top/bottom ~1.3cm, left/right ~1.2cm, includeheadfoot) to maximize text area on phones. Spacing: \setstretch{1.20}, \parskip 0.70em, list itemsep 0.45em — airier than default. Float seps reduced for phone scroll.
+- Keep lstlisting xleftmargin ~1em so code blocks breathe on narrow widths. Verify pdf still compiles with no Overfull>15pt on phone-width text.
