@@ -11,6 +11,7 @@
 6. Visual refinement (Bowen 01:31 SGT): diagrams MUST use color where useful (fills blue!12 etc), code blocks MUST be syntax-highlighted (`lstlisting[language=Python/C]` + `lstset` colors), QA MUST compile-check diagrams+formulas (grep `!`, `pgfkeys`, `Overfull>15pt`, `hyperref Warning`) and FAIL if broken. Saved to memory + `AGENTS.md`.
 7. Small-screen tuning (Bowen 02:06 SGT): narrow margins top/bottom 1.3cm left/right 1.2cm includeheadfoot, `setstretch 1.20`, `parskip 0.70em`, `itemsep 0.45em`, TikZ scales 0.70-0.78, float seps tightened — maximize reading area on phones. Saved to `AGENTS.md` + memory.
 8. 02:12 SGT: Bowen to bed — after Phase 2, Hermes is final quality gate, adversarial QA must run, then autonomously proceed phase-by-phase until ALL modules FULLY COMPLETE. Keep working through night. Save this brief so memory persists across crashes.
+9. 02:16 SGT FINAL: Content MUST be ZERO to 100 — assume NO bachelor's prior knowledge. Every module explains from the ground up (sets, logic, what computation is) and leads with intuition (why/picture/analogy) before formalism/proof. No word limit — be thorough, not verbose/redundant. Also audit Phase 1 SC2001 book for more ground-up intuition gaps and expand where needed.
 
 ## Curriculum truth (adversarially verified)
 - **Total 135 AU**: ICC+CSL 17 + College Core 16 + Programme Core 47 + MPE 35 + BDE 20 =135. PDF alternative buckets: Core 47 + MPE 35 + ICC 17 + F-Core 15 + BDE 21 =135 (bucket boundary, total invariant). Degree Audit authoritative.

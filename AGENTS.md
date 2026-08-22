@@ -1,5 +1,10 @@
 # NTU CS Textbooks — Project Instructions (AGENTS.md)
-> Last updated: 2026-08-23 (Bowen visual-qa feedback)
+> Last updated: 2026-08-23 (Bowen 0→100 ground-up + visual-qa + small-screen)
+
+## 0→100 ground-up content law (MUST-pass)
+- **Assume ZERO bachelor's knowledge.** Every module starts from first principles (sets, logic, what a computer does). Do not assume discrete math, data structures, or programming maturity — define everything on first use, add intuition before formalism, then formalize.
+- **Intuition first, then rigor.** Each concept: why it exists (intuition / picture / analogy) → formal definition → worked example → proof/sketch → exercise. Never jump straight to formalism.
+- **No word limit.** Be as long as needed; not verbose/redundant, but do not compress to save space. Depth over brevity.
 
 ## Build quality invariants (MUST-pass before any commit)
 - **Diagrams:** TikZ figures MUST use color where useful — fills (blue!15, green!20, orange!15, violet!10), colored nodes/edges, legend. Monochrome only when pedagogy demands. Each TikZ must compile (0 pgfkeys errors) and be labeled.
