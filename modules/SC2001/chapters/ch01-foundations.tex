@@ -1,0 +1,375 @@
+% SC2001 — Chapter 1: Foundations
+% No \documentclass — this file is \input/\include'd by main.tex (book/report class).
+% Preamble must load: amsmath, amssymb, amsthm, tikz, enumitem, algorithm/algorithmic or equivalent.
+\chapter{Foundations: From Zero to Algorithmic Reasoning}
+\label{ch:foundations}
+
+\begin{quote}
+\emph{``An algorithm must be seen to be believed.''} --- Donald Knuth. Before we design faster algorithms, we must agree on what an algorithm \emph{is}, how to argue that it is \emph{correct}, and what it costs to run. This chapter builds that floor from first principles.
+\end{quote}
+
+\noindent\textbf{Prerequisites:} None beyond elementary logic and high-school algebra, but we assume the maturity of MH1812 Discrete Mathematics and SC1007 Data Structures. Students who have not seen sets, functions, or proof by induction will find a self-contained refresher here. Readers already comfortable with induction may skim \S\ref{sec:induction} and focus on \S\ref{sec:ram}--\ref{sec:invariants}.
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item recall essential discrete-mathematical notation and handle sums, logarithms, floors and ceilings fluently;
+    \item distinguish and apply direct proof, contrapositive, contradiction, and counterexamples;
+    \item prove statements by (weak and strong) mathematical induction;
+    \item define \emph{algorithm} precisely and describe the RAM model and its cost measure;
+    \item prove correctness of iterative algorithms using loop invariants and termination arguments.
+\end{enumerate}
+
+% ============================================================
+\section{Discrete Mathematics Refresher}
+\label{sec:discrete-refresher}
+
+We collect notation and facts used without comment throughout the book. This is not a substitute for MH1812, but a compact reference.
+
+\subsection{Sets, Functions, Relations}
+A \emph{set} is an unordered collection of distinct objects. We write $x \in S$, $S \subseteq T$, $S \subsetneq T$, $|S|$ for cardinality, $\emptyset$ for the empty set, $\mathbb{N}=\{0,1,2,\dots\}$ (we include $0$; any off-by-one is irrelevant asymptotically), $\mathbb{Z},\mathbb{Q},\mathbb{R},\mathbb{Z}^+$.
+
+A \emph{function} $f: A \to B$ assigns to each $a\in A$ exactly one $b=f(a)\in B$. $A$ is the domain, $B$ the codomain, $f(A)=\{f(a):a\in A\}$ the image. $f$ is \emph{injective} if $f(a)=f(a')\Rightarrow a=a'$, \emph{surjective} if $f(A)=B$, \emph{bijective} if both. The \emph{composition} $(g\circ f)(a)=g(f(a))$.
+
+A \emph{relation} $R\subseteq A\times A$ may be reflexive, symmetric, transitive, antisymmetric --- yielding equivalences and partial orders. A \emph{graph} $G=(V,E)$ with $E\subseteq V\times V$ appears from Chapter~6; we assume familiarity with paths, cycles, and trees from SC1007.
+
+\subsection{Logic and Quantifiers}
+Propositions combine via $\neg,\land,\lor,\Rightarrow,\Leftrightarrow$. The quantifiers $\forall$ (\emph{for all}) and $\exists$ (\emph{there exists}) bind variables: $\forall n\in\mathbb{N},\, P(n)$ and $\exists x\in S,\, Q(x)$. Negation swaps them:
+\[
+\neg(\forall x\, P(x)) \equiv \exists x\, \neg P(x),\qquad
+\neg(\exists x\, P(x)) \equiv \forall x\, \neg P(x).
+\]
+Implication $P\Rightarrow Q$ is equivalent to $\neg P\lor Q$ and to its contrapositive $\neg Q\Rightarrow\neg P$.
+
+\subsection{Sums, Products, Logarithms}
+We use freely:
+\begin{itemize}
+    \item Arithmetic sum: $\sum_{i=1}^{n} i = n(n+1)/2$.
+    \item Geometric sum ($r\neq 1$): $\sum_{i=0}^{n-1} r^i = (r^n-1)/(r-1)$; if $|r|<1$, $\sum_{i=0}^{\infty} r^i = 1/(1-r)$.
+    \item Harmonic sum: $H_n = \sum_{i=1}^{n}1/i = \ln n + \gamma + O(1/n)$ where $\gamma\approx0.5772$.
+    \item Logarithms: $\log$ without base means $\log_2$ in this book when analysing algorithms; $\ln$ is base $e$, $\lg$ is always base $2$. Change of base: $\log_a n = (\log_b n)/(\log_b a)=\Theta(\log_b n)$. Hence base is irrelevant inside $O(\cdot)$.
+    \item Floors and ceilings: $\lfloor x\rfloor \le x < \lfloor x\rfloor+1$, $\lceil x\rceil-1 < x \le \lceil x\rceil$, and $x-1 < \lfloor x\rfloor \le x \le \lceil x\rceil < x+1$. We often drop $\lfloor\cdot\rfloor,\lceil\cdot\rceil$ in asymptotics, noting the error is at most $1$.
+    \item Factorials and exponentiation, inequalities: $n! \le n^n$, $2^n \le n!$ for $n\ge 4$, $(1+1/n)^n < e < (1+1/n)^{n+1}$.
+\end{itemize}
+
+\begin{example}[Manipulating sums]
+For $n\ge 1$,
+\[
+\sum_{i=1}^{n} (2i-1) = 2\frac{n(n+1)}{2} - n = n^2.
+\]
+Linearity of summation ($\sum c\cdot a_i = c\sum a_i$, $\sum(a_i+b_i)=\sum a_i+\sum b_i$) justifies the first equality without induction.
+\end{example}
+
+% ============================================================
+\section{Proof Techniques}
+\label{sec:proofs}
+
+Every correctness proof and every lower bound in this book uses one of four patterns. Master them now.
+
+\begin{definition}[Theorem, Lemma, Corollary]
+A \emph{theorem} is a statement proved true. A \emph{lemma} is a helper theorem en route to a larger one. A \emph{corollary} is an immediate consequence.
+\end{definition}
+
+\subsection{Direct Proof}
+Assume the hypothesis; deduce the conclusion via definitions and previously proved facts.
+
+\begin{example}
+Claim: If $n$ is odd then $n^2$ is odd. \emph{Proof.} Write $n=2k+1$ for some $k\in\mathbb{Z}$. Then $n^2=4k^2+4k+1=2(2k^2+2k)+1$, which is odd. \qed
+\end{example}
+
+\subsection{Contrapositive}
+To prove $P\Rightarrow Q$, prove $\neg Q\Rightarrow\neg P$ instead (logically equivalent).
+
+\begin{example}
+Claim: If $n^2$ is even then $n$ is even. \emph{Proof.} Contrapositive: if $n$ is odd then $n^2$ is odd --- proved above. \qed
+\end{example}
+
+\subsection{Proof by Contradiction}
+Assume the statement is false and derive an impossibility ($R\land\neg R$).
+
+\begin{example}[Irrationality of $\sqrt2$]
+Suppose $\sqrt2=p/q$ in lowest terms, $p,q\in\mathbb{Z}^+$, $\gcd(p,q)=1$. Then $2q^2=p^2$, so $p^2$ is even, hence $p$ is even: $p=2k$. Then $2q^2=4k^2$, so $q^2=2k^2$, hence $q$ is even --- contradicting $\gcd(p,q)=1$. \qed
+\end{example}
+
+\subsection{Counterexample and Cases}
+To disprove $\forall x\, P(x)$ it suffices to exhibit one $x$ with $\neg P(x)$. To prove a claim that naturally splits (e.g., by parity, by size), prove each case separately and exhaust all possibilities.
+
+\begin{example}
+Claim ``Every integer $n>1$ is prime'' is false: $4=2\cdot2$ is a counterexample. Claim ``$n^2\bmod 4\in\{0,1\}$ for all $n\in\mathbb{Z}$'': check cases $n$ even ($n=2k\Rightarrow n^2=4k^2\equiv0$) and $n$ odd ($n=2k+1\Rightarrow n^2=4k(k+1)+1\equiv1$).
+\end{example}
+
+\begin{remark}[How to choose]
+Try direct proof first. If the conclusion is a negation (``not'', ``irrational'', ``no algorithm exists''), contradiction is often cleaner. If $P$ is itself a negation, contrapositive may be direct in disguise.
+\end{remark}
+
+% ============================================================
+\section{Mathematical Induction}
+\label{sec:induction}
+
+Induction is the single most used proof technique in algorithm analysis: it proves loop invariants, closed forms for recurrences, and properties of recursively defined structures.
+
+\subsection{Weak (Ordinary) Induction}
+To prove $\forall n\ge n_0,\, P(n)$:
+\begin{enumerate}[label=(I\arabic*)]
+    \item \textbf{Base case:} prove $P(n_0)$.
+    \item \textbf{Inductive step:} prove $\forall k\ge n_0,\, P(k)\Rightarrow P(k+1)$.
+\end{enumerate}
+The hypothesis $P(k)$ in the inductive step is the \emph{induction hypothesis} (IH).
+
+\begin{theorem}[Sum of first $n$ integers]
+For all $n\ge1$, $\sum_{i=1}^{n} i = n(n+1)/2$.
+\end{theorem}
+\begin{proof}
+Base $n=1$: $1=1\cdot2/2$. Assume IH for $k$: $\sum_{i=1}^{k}i=k(k+1)/2$. Then
+\[
+\sum_{i=1}^{k+1} i = \Bigl(\sum_{i=1}^{k}i\Bigr)+(k+1)=k(k+1)/2+(k+1)=(k+1)(k+2)/2.
+\]
+Thus $P(k)\Rightarrow P(k+1)$. By induction $P(n)$ holds for all $n\ge1$.
+\end{proof}
+
+\subsection{Strong Induction}
+To prove $\forall n\ge n_0,\, P(n)$, prove $P(n_0)$ and $\forall k\ge n_0,\, \bigl(\forall j,\,n_0\le j\le k\Rightarrow P(j)\bigr)\Rightarrow P(k+1)$. The IH assumes \emph{all} earlier cases, not just $k$. Strong and weak induction are logically equivalent, but strong induction avoids reproving ad hoc ``reach back'' lemmas.
+
+\begin{theorem}[Every $n\ge2$ has a prime divisor]
+For all $n\ge2$, $n$ is divisible by some prime.
+\end{theorem}
+\begin{proof}
+Base $n=2$: $2$ is prime and divides itself. Fix $k\ge2$ and assume every integer $j$ with $2\le j\le k$ has a prime divisor (strong IH). Consider $k+1$: if $k+1$ is prime we are done; otherwise $k+1=a\cdot b$ with $2\le a,b\le k$. By IH, $a$ has a prime divisor $p$, and $p\mid a\mid(k+1)$.
+\end{proof}
+
+\begin{theorem}[Fibonacci growth --- strong induction at work]
+Let $F_0=0,F_1=1,F_{n}=F_{n-1}+F_{n-2}$ for $n\ge2$. Then $F_n\ge 2^{n/2-1}$ for all $n\ge1$ (a weak lower bound used later to analyse recursive Fibonacci).
+\end{theorem}
+\begin{proof}
+Check $n=1$: $F_1=1\ge2^{-0.5}\approx0.707$. $n=2$: $F_2=1\ge2^{0}=1$ --- equality, but we need two bases because the recurrence reaches back two steps. Assume IH for all $1\le j\le k$ with $k\ge2$. Then $F_{k+1}=F_k+F_{k-1}\ge2^{k/2-1}+2^{(k-1)/2-1}=2^{(k-1)/2-1}(2^{1/2}+1)\ge2^{(k-1)/2-1}\cdot2=2^{(k+1)/2-1}$, using $ \sqrt2+1>2$.
+\end{proof}
+
+\subsection{Structural Induction}
+For recursively defined sets (lists, trees, well-formed formulae), prove $P$ for base structures and that constructors preserve $P$. This is induction on the \emph{structure}, not merely on size, and underpins correctness of recursive algorithms on trees/graphs in Chapters~5--6.
+
+\begin{example}[Binary trees]
+A binary tree is either $\mathsf{Leaf}$ or $\mathsf{Node}(L,x,R)$ where $L,R$ are binary trees. To prove ``number of leaves = number of internal nodes $+1$'' for full binary trees, check the leaf base and show the constructor preserves the invariant.
+\end{example}
+
+\begin{remark}[Common pitfalls]
+Always \emph{state} the IH explicitly, check that the base covers all cases the step reaches back to, and avoid ``all horses are the same colour''---style illicit generalisation where $P(k)\Rightarrow P(k+1)$ fails for small $k$.
+\end{remark}
+
+% ============================================================
+\section{What Is an Algorithm?}
+\label{sec:what-is-algorithm}
+
+\begin{definition}[Algorithm, informal]
+An \emph{algorithm} is a finite, unambiguous sequence of elementary steps that, given any admissible input, terminates after finitely many steps and produces the required output.
+\end{definition}
+
+Knuth and later theory make this precise: an algorithm satisfies five criteria ---
+\emph{finiteness} (description is finite), \emph{definiteness} (each step is precisely defined), \emph{input} (zero or more inputs from a specified set), \emph{output} (one or more outputs with a specified relation to the inputs), \emph{effectiveness} (steps are basic enough to be carried out, in principle, by hand) --- plus, crucially, \emph{termination on every admissible input}. A procedure that may run forever is a \emph{computational method}, not an algorithm.
+
+An \emph{algorithm} is distinct from a \emph{program}: the former is an abstract idea, the latter its realisation in a programming language on concrete hardware. The same algorithm (e.g., binary search) can be implemented in Python, Java, or C with different constant-factor performance but the same asymptotic behaviour --- which is why we analyse the idea, not the code.
+
+\subsection{Pseudocode Conventions in This Book}
+We write algorithms in language-agnostic pseudocode, one-indexed for arrays (as in CLRS), with \texttt{//} comments, assignment $\gets$, comparison $=,\neq,<,\le$, and control flow \texttt{if--then--else}, \texttt{while}, \texttt{for}, \texttt{return}. Indentation denotes block structure. Procedures are named in \textsc{SmallCaps}. We count \emph{primitive operations} (defined in \S\ref{sec:ram}) rather than wall-clock time.
+
+\begin{example}[Euclid's algorithm --- the oldest non-trivial algorithm]
+\begin{quote}\ttfamily\small
+\textsc{Euclid}$(a,b)$ \quad // assume $a\ge b\ge0$, integers\\\\
+1\ \ \textbf{while} $b\neq0$ \textbf{do}\\
+2\ \ \ \ \ \ $r \gets a \bmod b$\\
+3\ \ \ \ \ \ $a \gets b$\\
+4\ \ \ \ \ \ $b \gets r$\\
+5\ \ \textbf{return} $a$
+\end{quote}
+We will prove in \S\ref{sec:invariants} that this returns $\gcd(a,b)$ and terminates, and in Chapter~2 that it runs in $O(\log\min(a,b))$ divisions --- exponentially faster than naive search.
+\end{example}
+
+% ============================================================
+\section{The Random Access Machine (RAM) Model}
+\label{sec:ram}
+
+To compare algorithms fairly we need a shared model of ``how long a step takes''. The workhorse is the \emph{Random Access Machine}, an idealised von Neumann computer that abstracts away caches, pipelines, and operating-system noise while preserving the essence of modern hardware.
+
+\subsection{Components}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, thick, rounded corners=3pt, fill=blue!5, minimum height=0.9cm, align=center, font=\small},
+  memcell/.style={draw, thick, minimum width=1.0cm, minimum height=0.55cm, font=\scriptsize, align=center},
+  arrow/.style={-{Latex}, thick},
+  tape/.style={draw, thick, minimum width=0.55cm, minimum height=0.7cm, font=\scriptsize, align=center}
+]
+% Input tape
+\node[font=\footnotesize\bfseries] at (-5.2,2.0) {Input tape};
+\foreach \i in {0,...,4} {
+  \node[tape, fill=yellow!15] (in\i) at (-6.0+\i*0.62,1.2) {};
+}
+\node[font=\scriptsize] at (-6.0,1.2) {$x_1$};
+\node[font=\scriptsize] at (-5.38,1.2) {$x_2$};
+\node[font=\scriptsize] at (-4.76,1.2) {$\cdots$};
+\node[font=\scriptsize] at (-4.14,1.2) {$x_n$};
+\node[tape, fill=gray!20] at (-3.52,1.2) {\#};
+
+% CPU box
+\node[box, minimum width=3.6cm, minimum height=3.2cm, fill=blue!7] (cpu) at (0,0) {};
+\node[font=\footnotesize\bfseries] at (0,1.25) {CPU};
+
+% Inside CPU
+\node[box, minimum width=3.0cm, minimum height=0.6cm, fill=orange!18] (ctrl) at (0,0.65) {Control Unit + Program Counter};
+\node[box, minimum width=1.35cm, minimum height=0.7cm, fill=green!15] (regs) at (-0.73,-0.25) {Registers\\{\scriptsize $R_0\ldots R_k$}};
+\node[box, minimum width=1.35cm, minimum height=0.7cm, fill=red!12] (alu) at (0.73,-0.25) {ALU\\{\scriptsize $+,-,\times,\div$}};
+
+\node[box, minimum width=3.0cm, minimum height=0.45cm, fill=blue!10] (fetch) at (0,-1.05) {\scriptsize Fetch--Decode--Execute cycle};
+
+% Memory
+\node[font=\footnotesize\bfseries] at (4.6,2.0) {Memory (RAM)};
+\foreach \i/\addr in {0/0,1/1,2/2,3/3,4/4} {
+  \pgfmathsetmacro{\y}{1.15 - \i*0.60}
+  \node[memcell, fill=blue!5] (mem\i) at (4.6,\y) {};
+  \node[font=\scriptsize] at (4.6,\y) {};
+  \node[font=\tiny, anchor=east] at (3.85,\y) {\addr};
+}
+\node[font=\scriptsize] at (4.6,1.15) {$M[0]$};
+\node[font=\scriptsize] at (4.6,0.55) {$M[1]$};
+\node[font=\scriptsize] at (4.6,-0.05) {$M[2]$};
+\node[font=\scriptsize] at (4.6,-0.65) {$\vdots$};
+\node[font=\scriptsize] at (4.6,-1.25) {$M[m-1]$};
+\node[font=\tiny, align=center] at (4.6,-1.95) {random access\\in $O(1)$};
+
+% Output tape
+\node[font=\footnotesize\bfseries] at (-5.2,-2.3) {Output tape};
+\foreach \i in {0,...,3} {
+  \node[tape, fill=yellow!15] (out\i) at (-6.0+\i*0.62,-3.05) {};
+}
+\node[font=\scriptsize] at (-6.0,-3.05) {$y_1$};
+
+% Arrows: Input -> CPU
+\draw[arrow] (-4.4,1.2) -- (-1.8,0.6) node[midway, above, font=\tiny] {read};
+% CPU <-> Memory
+\draw[arrow] (1.8,0.35) -- (3.7,0.55) node[midway, above, font=\tiny] {load};
+\draw[arrow] (3.7,-0.05) -- (1.8,-0.35) node[midway, below, font=\tiny] {store};
+% CPU -> Output
+\draw[arrow] (-1.8,-0.6) -- (-4.4,-3.05) node[midway, below, font=\tiny] {write};
+% Inside CPU arrows
+\draw[arrow, thin] (regs) -- (alu);
+\draw[arrow, thin] (alu) -- (regs);
+\node[font=\tiny, align=center] at (0,-2.05) {each primitive op costs $1$};
+
+\end{tikzpicture}
+\caption{The Random Access Machine (RAM). The CPU fetches instructions pointed to by the program counter, operates on registers and the ALU, and accesses any memory cell $M[i]$ in unit time. Input is read sequentially; output is write-only. This idealisation underlies all running-time analysis in the book.}
+\label{fig:ram-model}
+\end{figure}
+
+Figure~\ref{fig:ram-model} summarises the model. Concretely:
+\begin{itemize}
+    \item \textbf{Memory:} an array $M[0\ldots m-1]$ of \emph{words} (integers), each large enough to hold any input value or pointer ($\Theta(\log n)$ bits). Any cell is accessed in $O(1)$ time --- the ``random access''.
+    \item \textbf{CPU:} a finite set of registers, an arithmetic-logic unit (ALU), and a program counter pointing to the next instruction.
+    \item \textbf{Instruction set:} \texttt{LOAD}, \texttt{STORE}, \texttt{ADD}, \texttt{SUB}, \texttt{MUL}, \texttt{DIV}, \texttt{MOD}, \texttt{COMPARE}, \texttt{JUMP}, \texttt{JZ/JNZ}, \texttt{READ}, \texttt{WRITE}, etc. Each \emph{primitive} operation costs one unit of time (the \emph{uniform-cost} criterion).
+    \item \textbf{Program:} a finite list of instructions stored in a separate program memory; it does not count toward input size.
+\end{itemize}
+
+\subsection{Cost Model and the Word-RAM Refinement}
+Under the uniform-cost RAM, the \emph{running time} of an algorithm on an input of size $n$ is the number of primitive steps executed. Input size is measured in words (or bits when bit-complexity matters). For most of this book uniform cost is adequate because numbers fit in a word.
+
+When numbers grow huge (cryptography, arbitrary-precision arithmetic), we switch to the \emph{logarithmic-cost} or \emph{word-RAM} model: a word holds $w=\Theta(\log n)$ bits, arithmetic on $w$-bit words costs $O(1)$, but operating on $b$-bit integers costs $\Theta(b/w)$. We flag explicitly when bit-complexity matters; otherwise assume uniform cost.
+
+\subsection{Why This Model?}
+The RAM abstracts away real hardware --- no cache hierarchy, no branch prediction, no parallelism --- yet it predicts relative performance remarkably well: an $O(n\log n)$ RAM algorithm beats an $O(n^2)$ one on real machines once $n$ exceeds a modest threshold, regardless of constant factors. It also lets us reason \emph{before} implementing. Its limitations (ignoring memory hierarchy and parallelism) are addressed in advanced courses; for SC2001 it is the agreed accounting rule.
+
+\begin{example}[Cost of linear search on RAM]
+\begin{quote}\ttfamily
+\textsc{LinearSearch}$(A,n,key)$\\
+1\ \ \textbf{for} $i\gets1$ \textbf{to} $n$ \textbf{do}\\
+2\ \ \ \ \ \ \textbf{if} $A[i]=key$ \textbf{then return} $i$\\
+3\ \ \textbf{return} NIL
+\end{quote}
+Each loop iteration performs $O(1)$ RAM operations (one array access, one comparison, one branch). Hence the running time is proportional to the number of iterations --- the quantity we formalise in Chapter~2 as $O(n)$ worst-case.
+\end{example}
+
+% ============================================================
+\section{Correctness: Loop Invariants and Termination}
+\label{sec:invariants}
+
+An algorithm is useless if it returns the wrong answer or never stops. \emph{Correctness} has two parts:
+\begin{itemize}
+    \item \textbf{Partial correctness:} \emph{if} the algorithm terminates, its output satisfies the specification.
+    \item \textbf{Termination:} the algorithm terminates on every admissible input.
+\end{itemize}
+Together they give \emph{total correctness}. For iterative algorithms, partial correctness is proved via \emph{loop invariants}; termination via a \emph{variant} (a quantity that strictly decreases and is bounded below).
+
+\begin{definition}[Loop invariant]
+A predicate $I$ on the program state is a \emph{loop invariant} for a loop with guard $G$ if:
+\begin{enumerate}[label=(LI\arabic*)]
+    \item \textbf{Initialisation:} $I$ holds before the first iteration.
+    \item \textbf{Maintenance:} if $I$ holds before an iteration and $G$ is true, then $I$ holds after that iteration.
+    \item \textbf{Termination:} when the loop exits ($\neg G$), $I\land\neg G$ implies the desired postcondition.
+\end{enumerate}
+\end{definition}
+Think of $I$ as the ``inductive hypothesis travelling around the loop'' --- its proof \emph{is} an induction on the number of iterations.
+
+We also need a \emph{variant} $v$ --- an integer expression such that each iteration strictly decreases $v$ and $v$ is bounded below (usually $v\ge0$). Existence of a variant guarantees the loop cannot run forever.
+
+\begin{example}[Insertion sort --- full correctness proof]
+\begin{quote}\ttfamily
+\textsc{InsertionSort}$(A[1\ldots n])$\\
+1\ \ \textbf{for} $j\gets2$ \textbf{to} $n$ \textbf{do}\\
+2\ \ \ \ \ \ $key\gets A[j]$\\
+3\ \ \ \ \ \ $i\gets j-1$\\
+4\ \ \ \ \ \ \textbf{while} $i>0$ \textbf{and} $A[i]>key$ \textbf{do}\\
+5\ \ \ \ \ \ \ \ \ \ $A[i+1]\gets A[i]$\\
+6\ \ \ \ \ \ \ \ \ \ $i\gets i-1$\\
+7\ \ \ \ \ \ $A[i+1]\gets key$
+\end{quote}
+Specification: upon termination, $A[1\ldots n]$ is a permutation of the input and is non-decreasing.
+
+\emph{Outer-loop invariant:} At the start of each iteration $j$ ($2\le j\le n+1$), $A[1\ldots j-1]$ consists of the original elements $A_0[1\ldots j-1]$ in sorted order, and $A[j\ldots n]$ is untouched.
+
+\emph{Initialisation} ($j=2$): $A[1\ldots1]$ is trivially sorted. \emph{Maintenance:} Assume invariant at $j$. The inner while shifts the sorted block $A[1\ldots j-1]$ right until the correct position for $key=A_0[j]$ is found, then inserts $key$. Thus $A[1\ldots j]$ is sorted and contains exactly $A_0[1\ldots j]$. So invariant holds for $j+1$. \emph{Termination:} Loop exits when $j=n+1$; invariant gives $A[1\ldots n]$ sorted and a permutation of $A_0[1\ldots n]$.
+
+\emph{Inner loop:} Invariant: $A[i+2\ldots j]$ (if $i<j-1$) contains the original $A[1\ldots j-1]$ elements greater than $key$, shifted by one, and $A[1\ldots i]$ remains sorted and $\le key$ candidates. Variant: $i$, strictly decreasing and bounded below by $0$ --- so inner loop terminates. Outer loop variant is $n-j$, also decreasing. Hence total correctness.
+\end{example}
+
+\begin{example}[Euclid terminates]
+Variant $v=b$ (the second argument). Each iteration replaces $(a,b)$ by $(b, a\bmod b)$ with $0\le a\bmod b < b$, so $v$ strictly decreases and stays $\ge0$. Hence the while loop must exit. Combined with invariant ``$\gcd(a,b)$ is unchanged'' (since $\gcd(a,b)=\gcd(b,a\bmod b)$), the returned $a$ equals the original gcd.
+\end{example}
+
+\begin{remark}[Recipe for students]
+When you write a loop invariant, answer three questions: What has been done so far? What remains? Where is the boundary? The invariant should mention the boundary index and state precisely what is true on each side. Vague invariants (``array is partially sorted'') are not invariants at all.
+\end{remark}
+
+% ============================================================
+\section{Chapter Notes}
+
+The RAM model is due to Cook and Reckhow (1973) and formalised by Aho, Hopcroft, and Ullman. Our uniform-cost version follows CLRS Ch.~2; the word-RAM refinement is standard in modern algorithm theory (see Demaine, ``Cache-Oblivious Algorithms''). Loop invariants are Hoare logic in miniature (C.~A.~R.~Hoare, 1969); the full axiomatic method is covered in SC3270 Reasoning About Programs. For discrete mathematics, Rosen's \emph{Discrete Mathematics and Its Applications} and the MH1812 lecture notes remain the definitive references.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch01-exercises}
+
+\begin{enumerate}[label=E1.\arabic*, leftmargin=*, itemsep=0.8em]
+
+\item \textbf{Warm-up: logic and quantifiers.} Formalise ``Every SC2001 student who passed MH1812 can follow an induction proof'' using predicates, then write its negation without using $\neg$ directly in front of a quantifier. Explain why the negation is \emph{not} ``No SC2001 student who passed MH1812 can follow an induction proof.''
+
+\item \textbf{Induction --- weak vs.\ strong.} Prove by induction that for all $n\ge1$,
+\[
+\sum_{i=1}^{n} i^2 = \frac{n(n+1)(2n+1)}{6}.
+\]
+Then prove that every integer $n\ge12$ can be written as $4a+5b$ for non-negative integers $a,b$. Which proof needed strong induction, and why? (Hint for the second: check bases $12,13,14,15$ and step by $4$.)
+
+\item \textbf{RAM cost model.} Consider:
+\begin{quote}\ttfamily
+\textsc{SumArray}$(A[1\ldots n])$\\
+1\ \ $s\gets0$\\
+2\ \ \textbf{for} $i\gets1$ \textbf{to} $n$ \textbf{do} $s\gets s+A[i]$\\
+3\ \ \textbf{return} $s$
+\end{quote}
+(a) Count RAM primitive operations per line and give the total running time as a function of $n$ (up to constant factors). (b) Suppose each $A[i]$ is a $b$-bit integer with $b\gg\log n$. How does the answer change under the word-RAM model with word size $w=\Theta(\log n)$? (c) Would you call this algorithm $O(n)$ or $O(nb/w)$? Justify.
+
+\item \textbf{Loop invariant --- find the bug.} A student proposes this invariant for \textsc{LinearSearch}: ``At the start of iteration $i$, $key$ is not in $A[1\ldots i-1]$.'' Prove that if the loop invariant method is applied correctly, \textsc{LinearSearch} is correct. Then give a buggy variant of the algorithm where the same invariant still holds on every iteration but the algorithm is \emph{incorrect} upon termination, and explain which of (LI1)--(LI3) fails.
+
+\item \textbf{Euclid's invariant in full.} Prove the invariant ``$\gcd(a,b)$ is preserved'' for Euclid's algorithm from \S\ref{sec:what-is-algorithm}: show (a) $\gcd(a,b)=\gcd(b,a\bmod b)$ for $b>0$, (b) the invariant holds initially, is maintained, and implies the postcondition when $b=0$, and (c) the number of iterations is $O(\log b)$ by showing $a\bmod b < a/2$ when $b\le a$. This foreshadows the logarithmic analysis in Chapter~2.
+
+\end{enumerate}
+
+% ============================================================
+% End of Chapter 1
