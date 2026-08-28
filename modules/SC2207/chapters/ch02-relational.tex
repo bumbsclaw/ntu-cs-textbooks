@@ -1,0 +1,204 @@
+% SC2207 --- Chapter 2: Relational Model and Algebra (0->100)
+\chapter{The Relational Model and Relational Algebra}
+\label{ch:relational}
+
+\begin{quote}
+\emph{``Tables all the way down.''} Codd's relational insight was to represent everything---data, schemas, constraints, query results---as tables manipulated by a tiny, composable algebra. This chapter makes that world precise.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: sets to schemas.} We assume only the set notion from Ch.~1 and build relations, tuples, keys, and the algebra step by step with pictures before notation. Familiarity with ER is helpful but not required.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item define relations, schemas, tuples, domains, and keys formally;
+    \item explain integrity constraints (entity, referential, domain);
+    \item write queries in relational algebra using the six core operators;
+    \item translate between intuitive table operations and algebraic expressions;
+    \item reason about equivalence and minimality of algebra expressions.
+\end{enumerate}
+
+% ============================================================
+\section{From Sets to Relations}
+\label{sec:sets-to-relations}
+
+A \emph{domain} $D$ is a set of atomic values (integers, strings, dates). An \emph{attribute} $A$ has a domain $\mathrm{dom}(A)$.
+
+\begin{definition}[Relation, tuple, schema]
+Let attributes $A_1,\dots,A_n$ have domains $D_1,\dots,D_n$. A \emph{relation} $r$ of schema $R(A_1,\dots,A_n)$ is a finite \emph{set} of tuples, each tuple $t$ being a mapping $t[A_i]\in D_i$. We write $r(R)$ or $r\subseteq D_1\times\cdots\times D_n$. Degree $=n$; cardinality $=|r|$.
+\end{definition}
+
+Intuition: a table with named columns and no duplicate rows, where row order and column order (by name) do not matter. The schema is the header; the \emph{instance} is the current set of rows. This differs from a spreadsheet: sets have no order and no duplicates by definition.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize}]
+  % Left: domain product
+  \node[draw, thick, fill=blue!10, rounded corners, align=center, minimum width=2.2cm, minimum height=1.2cm] (d) at (0,0) {Domains\\$D_1\times D_2\times D_3$\\all combos};
+  \node[draw, thick, fill=green!14, minimum width=3.6cm, minimum height=2.0cm, align=center] (r) at (4.8,0) {\textbf{Relation } $r(R)$ (subset)\\[2pt]
+    \begin{tabular}{ccc}\toprule $A_1$&$A_2$&$A_3$\\\midrule $a_1$&$b_1$&$c_1$\\$a_2$&$b_1$&$c_2$\\\bottomrule\end{tabular}
+    \\no duplicate rows};
+  \draw[-{Stealth}, thick, violet!60!black] (d) -- (r) node[midway, above, font=\tiny] {choose subset};
+  \node[font=\tiny, align=left, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (0,-1.8) {Schema $R(A_1,A_2,A_3)$\\is the header};
+  % Keys illustration
+  \begin{scope}[xshift=9.2cm]
+    \node[draw, thick, fill=orange!13, minimum width=2.8cm, minimum height=1.8cm, align=center] (k) at (0,0) {
+      \begin{tabular}{cc}\toprule \underline{ID} & Name\\\midrule 101 & Ann\\102 & Bob\\\bottomrule\end{tabular}
+    };
+    \node[font=\tiny, fill=red!10, draw, rounded corners, inner sep=1pt, align=center] at (0,-1.35) {ID unique+not null\\$\Rightarrow$ superkey/key};
+  \end{scope}
+\end{tikzpicture}
+\caption{Left: a relation is a finite set of tuples drawn from the Cartesian product of domains. Right: a key enforces uniqueness.}
+\label{fig:relation-set}
+\end{figure}
+
+\begin{definition}[Keys and constraints]
+A set $K\subseteq R$ is a \emph{superkey} if no two distinct tuples agree on all attributes of $K$. A \emph{candidate key} is a minimal superkey; one is chosen as \emph{primary key} (underlined). $\emptyset$ cannot be a key. Domain, entity (PK not null), and referential (FK $\to$ PK) constraints are the relational integrity rules.
+\end{definition}
+
+\begin{example}[Nulls vs.\ absence]
+SQL's \texttt{NULL} is not a domain value; it means ``unknown/absent.'' In pure relational theory there are no nulls---every tuple provides a value for every attribute. SQL relaxes this but keeps PK columns non-null.
+\end{example}
+
+We also distinguish \emph{schema} (intension, the definition) from \emph{instance} (extension, the current rows). Queries map instances to instances; constraints restrict which instances are legal.
+
+% ============================================================
+\section{Relational Algebra---Core Operators}
+\label{sec:algebra-core}
+
+Algebra expressions compose operators on relations and yield relations (closure). \emph{Selection} filters rows; \emph{projection} filters columns; the rest combine relations.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\tiny}]
+  % Selection
+  \begin{scope}
+    \node[draw, thick, fill=blue!12, minimum width=1.8cm, minimum height=0.75cm, align=center] (in1) at (0,1.0) {$r$};
+    \node[draw, thick, fill=green!14, minimum width=1.8cm, minimum height=0.45cm, align=center] (op1) at (0,0) {$\sigma_\theta$};
+    \node[draw, thick, fill=blue!8, minimum width=1.8cm, minimum height=0.75cm, align=center] (out1) at (0,-1.0) {$\{t\in r\mid\theta(t)\}$};
+    \draw[-{Stealth}, thick] (in1)--(op1); \draw[-{Stealth}, thick] (op1)--(out1);
+    \node[font=\tiny, align=center] at (0,-1.65) {rows};
+  \end{scope}
+  % Projection
+  \begin{scope}[xshift=3.2cm]
+    \node[draw, thick, fill=blue!12, minimum width=1.8cm, minimum height=0.75cm, align=center] (in2) at (0,1.0) {$r$};
+    \node[draw, thick, fill=orange!16, minimum width=1.8cm, minimum height=0.45cm, align=center] (op2) at (0,0) {$\pi_{A_i,\dots}$};
+    \node[draw, thick, fill=blue!8, minimum width=1.6cm, minimum height=0.75cm, align=center] (out2) at (0,-1.0) {cols\\dups removed};
+    \draw[-{Stealth}, thick] (in2)--(op2); \draw[-{Stealth}, thick] (op2)--(out2);
+    \node[font=\tiny, align=center] at (0,-1.65) {columns};
+  \end{scope}
+  % Union / difference
+  \begin{scope}[xshift=6.4cm]
+    \node[draw, thick, fill=blue!12, minimum width=0.85cm, minimum height=0.6cm] (a) at (-0.55,1.0) {$r$};
+    \node[draw, thick, fill=blue!12, minimum width=0.85cm, minimum height=0.6cm] (b) at (0.55,1.0) {$s$};
+    \node[draw, thick, fill=violet!12, minimum width=1.2cm, minimum height=0.45cm, align=center] (op3) at (0,0) {$\cup,-,\cap$};
+    \node[draw, thick, fill=blue!8, minimum width=1.6cm, minimum height=0.75cm, align=center] (out3) at (0,-1.0) {set ops\\compat.~schemas};
+    \draw[-{Stealth}, thick] (a)--(op3); \draw[-{Stealth}, thick] (b)--(op3); \draw[-{Stealth}, thick] (op3)--(out3);
+  \end{scope}
+  % Product / Join
+  \begin{scope}[xshift=9.6cm]
+    \node[draw, thick, fill=blue!12, minimum width=0.85cm, minimum height=0.6cm] (c) at (-0.55,1.0) {$r$};
+    \node[draw, thick, fill=blue!12, minimum width=0.85cm, minimum height=0.6cm] (d) at (0.55,1.0) {$s$};
+    \node[draw, thick, fill=red!12, minimum width=1.2cm, minimum height=0.45cm, align=center] (op4) at (0,0) {$\times,\bowtie_\theta$};
+    \node[draw, thick, fill=blue!8, minimum width=1.6cm, minimum height=0.75cm, align=center] (out4) at (0,-1.0) {combine\\rows};
+    \draw[-{Stealth}, thick] (c)--(op4); \draw[-{Stealth}, thick] (d)--(op4); \draw[-{Stealth}, thick] (op4)--(out4);
+  \end{scope}
+  % Rename
+  \begin{scope}[xshift=12.4cm]
+    \node[draw, thick, fill=blue!12, minimum width=1.1cm, minimum height=0.6cm] (e) at (0,1.0) {$r$};
+    \node[draw, thick, fill=teal!12, minimum width=1.1cm, minimum height=0.45cm] (op5) at (0,0) {$\rho$};
+    \node[draw, thick, fill=blue!8, minimum width=1.1cm, minimum height=0.6cm] (out5) at (0,-1.0) {rename};
+    \draw[-{Stealth}, thick] (e)--(op5); \draw[-{Stealth}, thick] (op5)--(out5);
+  \end{scope}
+\end{tikzpicture}
+\caption{Core algebra operators. $\sigma$ filters rows, $\pi$ filters columns (and de-duplicates), set ops require union-compatible schemas, $\times$/$\bowtie$ combine.}
+\label{fig:algebra-ops}
+\end{figure}
+
+\subsection{The Six Fundamentals}
+
+\paragraph{1. Selection $\sigma_\theta(r)$.} Keep tuples satisfying predicate $\theta$ (e.g.\ $\mathit{Age}>21$ and $\mathit{Major}=\text{`CS'}$). Example: $\sigma_{\mathit{Grade}\ge 80}(\mathit{Enrolled})$.
+
+\paragraph{2. Projection $\pi_{A_{i_1},\dots,A_{i_k}}(r)$.} Keep only those columns, then de-duplicate (set semantics). $\pi_{\mathit{Name}}(\mathit{Student})$ lists names once.
+
+\paragraph{3. Union $r\cup s$, Difference $r-s$, Intersection $r\cap s = r-(r-s)$.} Require same arity and compatible domains (union compatibility). $r\cup s$ = tuples in either; $r-s$ = in $r$ but not $s$.
+
+\paragraph{4. Cartesian product $r\times s$.} Every $r$-tuple paired with every $s$-tuple (degree sums, cardinality multiplies). Usually followed by selection (which is exactly a join).
+
+\paragraph{5. Rename $\rho_{S(B_1,\dots,B_n)}(r)$ or $\rho_{S}(r)$.} Rename relation and/or attributes to resolve clashes (e.g.\ self-joins). Essential for formal correctness.
+
+These six are complete: any other operator can be derived, but we add convenient shorthands.
+
+\subsection{Derived Operators: Joins and Division}
+
+\begin{definition}[Joins]
+$\displaystyle r\bowtie_\theta s = \sigma_\theta(r\times s)$ (theta-join). When $\theta$ is equality on common attributes, it is an equi-join; if the equality attribute appears once, it is a \emph{natural join} $r\bowtie s$. Left outer join $r\mathbin{\rule[0.15ex]{0.6em}{0.4pt}\bowtie} s$ keeps unmatched $r$ tuples padded with nulls (similarly right/full).
+\end{definition}
+
+\begin{example}[Natural join vs.\ product]
+Student $\bowtie$ Enrolled matches on Student.ID $=$ Enrolled.StudID automatically, yielding one row per enrolment with student details attached. Student $\times$ Enrolled would pair every student with every enrolment indiscriminately---usually not what we want.
+\end{example}
+
+\paragraph{Division $r\div s$.} For $r(A,B)$ and $s(B)$, $r\div s = \{a\mid \forall b\in s,\,(a,b)\in r\}$. Classic ``for all'' query: students who enrolled in \emph{all} courses in $s$. Formally $r\div s = \pi_A(r)-\pi_A((\pi_A(r)\times s)-r)$.
+
+\subsection{Expression Trees and Equivalences}
+
+Algebra expressions are trees; evaluating bottom-up yields the answer. Two expressions are \emph{equivalent} if they give the same result on every instance (e.g.\ $\sigma_{p\land q}(r)\equiv\sigma_p(\sigma_q(r))$, $\sigma_p(r\bowtie s)\equiv\sigma_p(r)\bowtie s$ if $p$ mentions only $r$). Optimisers (Ch.~6) use such laws to push selections down and reduce intermediate size.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  op/.style={draw, thick, rounded corners, fill=orange!16, minimum width=1.5cm, minimum height=0.6cm},
+  rel/.style={draw, thick, fill=blue!10, minimum width=1.5cm, minimum height=0.6cm}]
+  \node[op] (pi) at (0,2.0) {$\pi_{\mathit{Name}}$};
+  \node[op] (sigma) at (0,1.0) {$\sigma_{\mathit{Grade}>80}$};
+  \node[op] (bowtie) at (0,0) {$\bowtie$};
+  \node[rel] (stu) at (-1.3,-1.1) {Student};
+  \node[rel] (enr) at (1.3,-1.1) {Enrolled};
+  \draw[-{Stealth}, thick] (sigma)--(pi);
+  \draw[-{Stealth}, thick] (bowtie)--(sigma);
+  \draw[-{Stealth}, thick] (stu)--(bowtie);
+  \draw[-{Stealth}, thick] (enr)--(bowtie);
+  \node[font=\tiny, align=center, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (4.2,0.5) {Tree evaluates\\bottom-up;\\leaves are\\base tables};
+  \node[font=\tiny, align=center] at (0,-1.85) {``Names of students with Grade$>$80''};
+\end{tikzpicture}
+\caption{Algebra expression as a tree. Pushing $\sigma$ below $\bowtie$ when possible shrinks intermediate results.}
+\label{fig:expr-tree}
+\end{figure}
+
+Useful laws: cascade $\sigma_{p}(\sigma_{q}(r))\equiv\sigma_{p\land q}(r)$; commute $\sigma_p(\pi_A(r))\equiv\pi_A(\sigma_p(r))$ if $p$ mentions only $A$; distribute $\pi_A(r\cup s)\equiv\pi_A(r)\cup\pi_A(s)$ but $\pi_A(r-s)\not\equiv\pi_A(r)-\pi_A(s)$ in general.
+
+% ============================================================
+\section{Integrity Constraints Formalised}
+\label{sec:constraints}
+
+\begin{itemize}
+    \item \textbf{Domain} $t[A]\in\mathrm{dom}(A)$ plus \texttt{CHECK} predicates.
+    \item \textbf{Entity} Primary key attributes not null and unique: if $t_1[K]=t_2[K]$ then $t_1=t_2$.
+    \item \textbf{Referential} For FK $F$ referencing PK $K$ of $s$: $\pi_F(r)\subseteq \pi_K(s)\cup\{\mathit{null}\}$ (or without null if \texttt{NOT NULL}).
+\end{itemize}
+
+Violations arise on insert/update/delete. DBMS options: reject, \texttt{CASCADE}, \texttt{SET NULL}, \texttt{SET DEFAULT}---declarative policies attached to the FK.
+
+\begin{remark}[Why sets?]
+Set semantics makes algebra simple and duplicate-free, matching Ch.~4's normalisation theory. SQL uses multisets (bags) for performance; \texttt{DISTINCT} recovers set behaviour when needed.
+\end{remark}
+
+% ============================================================
+\section{Chapter Notes}
+
+Codd's 1970 paper ``A Relational Model of Data for Large Shared Data Banks'' founded the field. Our operator set follows Silberschatz--Korth--Sudarshan and Ullman--Widom. Outer joins and division are syntactic sugar but pedagogically essential. Bag semantics vs.\ set semantics tension resurfaces in SQL (Ch.~3) and optimisation (Ch.~6).
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch02-ex}
+\begin{enumerate}[label=E2.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Warm-up: schemas.} Given $R(A,B,C)$ with 2+3+2 distinct values per domain, what are max $|r|$ and degree? Give an instance where $A$ is a key but $B$ is not.
+    \item \textbf{Core algebra.} Using Student(ID,Name,Major) and Enrolled(StudID,Code,Grade), write algebra for: (a) CS majors, (b) names of students with Grade$>$85, (c) students enrolled in no course, (d) courses with at least one enrolment.
+    \item \textbf{Joins vs.\ product.} Prove $r\bowtie_\theta s\equiv\sigma_\theta(r\times s)$. Give $r,s$ where $r\times s\neq r\bowtie s$ and explain row counts.
+    \item \textbf{Division.} Let Takes(StudID,Code) and Required(Code) contain core courses. Write (i) $T\div Required$ in words, (ii) an equivalent expression without $\div$, (iii) why $\pi_{\mathit{StudID}}(T)$ is wrong.
+    \item \textbf{Equivalences.} Show $\sigma_{p}(r\cup s)\equiv\sigma_p(r)\cup\sigma_p(s)$ but $\pi_A(r\cup s)\not\equiv\pi_A(r)\cup\pi_A(s)$ in general? Actually prove or disprove the projection case; give a counterexample if it fails.
+\end{enumerate}
+% End of Chapter 2

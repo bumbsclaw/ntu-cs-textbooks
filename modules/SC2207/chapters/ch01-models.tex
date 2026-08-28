@@ -1,0 +1,203 @@
+% SC2207 --- Chapter 1: Data Models and ER Design (0->100 ground-up)
+\chapter{Data Models, ER Diagrams, and ER-to-Relational Mapping}
+\label{ch:models}
+
+\begin{quote}
+\emph{``Data knows the truth---if you model it faithfully.''} Before writing a single SQL statement we must decide what entities exist, how they relate, and what constraints govern them. This chapter builds that conceptual foundation from first principles.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no database assumed.} We start from everyday records (a student list, a library) and build every notion---entity, attribute, relationship, key, abstraction level---from pictures and intuition before any formalism. No prior database course is needed. Later chapters depend only on what is built here.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item distinguish physical, logical, and conceptual abstraction levels;
+    \item define and draw Entity--Relationship diagrams with cardinality and participation;
+    \item Identify keys, weak entities, and relationship attributes correctly;
+    \item map any ER diagram to a relational schema using the standard rules;
+    \item critique a design for redundancy and constraint loss.
+\end{enumerate}
+
+% ============================================================
+\section{Why a Database?}
+\label{sec:why-db}
+
+Consider keeping student grades in a spreadsheet shared by email. Soon copies diverge, two tutors overwrite the same cell, and nobody knows which file is authoritative. A file system stores bytes; a \emph{database management system} (DBMS) adds structure, integrity, concurrency, durability, and a declarative query language on top.
+
+\begin{definition}[Database and DBMS]
+A \emph{database} is a structured collection of related data modelling some enterprise. A \emph{DBMS} is software that stores, queries, and manages that data while enforcing consistency and supporting concurrent access.
+\end{definition}
+
+Think of the DBMS as a disciplined librarian: it catalogues every item, enforces who may borrow what, resolves conflicts when two people request the same book, and guarantees no record is lost even if the lights go out.
+
+Key advantages over flat files: \emph{data independence} (change storage without rewriting apps), \emph{declarative access} (say what you want, not how to fetch it), \emph{transactional guarantees} (Ch.~7), and \emph{centralised control} (security, backup, schema evolution).
+
+\subsection{Levels of Data Abstraction}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.75, every node/.style={font=\scriptsize},
+  box/.style={draw, thick, rounded corners=4pt, align=center, minimum width=3.4cm, minimum height=0.95cm}]
+  \node[box, fill=blue!13] (ext) at (0,3.2) {\textbf{External / View level}\\{\tiny user-specific views, e.g.\ student portal}};
+  \node[box, fill=green!14] (con) at (0,1.7) {\textbf{Conceptual / Logical level}\\{\tiny ER + relational schema, constraints}};
+  \node[box, fill=orange!16] (phy) at (0,0.2) {\textbf{Physical level}\\{\tiny files, indexes, pages on disk (Ch.~5)}};
+  \draw[-{Stealth}, thick, blue!60!black] (ext) -- (con) node[midway, right, font=\tiny] {maps};
+  \draw[-{Stealth}, thick, blue!60!black] (con) -- (phy) node[midway, right, font=\tiny] {maps};
+  \node[align=left, font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=3pt] at (5.2,1.7) {\textbf{Data independence}:\\change physical\\without touching\\conceptual/external};
+  \draw[dashed, violet!60!black, thick] (4.0,0.7) -- (4.0,2.7);
+\end{tikzpicture}
+\caption{Three abstraction levels. Views shield users; conceptual schema is the contract; physical layer optimises storage.}
+\label{fig:abstraction}
+\end{figure}
+
+Like architectural drawings: the owner's sketch (view), the architect's blueprint (conceptual), and the engineer's construction detail (physical). The blueprint insulates the two.
+
+\subsection{Data Models---A Taxonomy}
+
+A \emph{data model} is the language in which a design is expressed.
+
+\begin{itemize}
+    \item \textbf{Hierarchical / Network} (1960s--70s)---trees or graphs of records navigated via pointers (IMS, CODASYL). Fast but rigid; program coupled to traversal path.
+    \item \textbf{Relational} (Codd, 1970)---data as tables (relations); queried declaratively by algebra/SQL. Dominant for OLTP.
+    \item \textbf{Entity--Relationship}---conceptual picture of entities and relationships; not implemented directly but mapped to relational.
+    \item \textbf{Semi-structured / Object models}---JSON, XML, objects (Ch.~8) for flexible or graph-shaped data.
+\end{itemize}
+
+This book takes ER $\to$ relational $\to$ SQL $\to$ internals. Start with ER because it thinks in enterprise concepts, not tables.
+
+% ============================================================
+\section{The Entity--Relationship Model}
+\label{sec:er-model}
+
+An \emph{entity} is a distinguishable object (a particular student). An \emph{entity set} is a collection of similar entities (all students). Each entity has \emph{attributes} (properties like ID, name).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.76, every node/.style={font=\scriptsize},
+  ent/.style={draw, thick, fill=blue!12, minimum width=1.6cm, minimum height=0.75cm, align=center},
+  rel/.style={draw, thick, diamond, aspect=1.8, fill=orange!18, inner sep=2pt, align=center},
+  attr/.style={draw, thick, ellipse, fill=green!12, inner sep=3pt, align=center}]
+  % Left: entity sets
+  \node[ent] (stu) at (0,2.2) {Student};
+  \node[ent] (crs) at (5.0,2.2) {Course};
+  \node[rel] (enr) at (2.5,2.2) {Enrolled};
+  \node[attr] (sid) at (-1.3,3.5) {ID};
+  \node[attr] (sname) at (0,3.5) {Name};
+  \node[attr] (cid) at (5.0,3.5) {Code};
+  \node[attr] (ctitle) at (6.5,3.5) {Title};
+  \node[attr] (grade) at (2.5,0.85) {Grade};
+  \draw[thick] (stu) -- (sid); \draw[thick] (stu) -- (sname);
+  \draw[thick] (crs) -- (cid); \draw[thick] (crs) -- (ctitle);
+  \draw[thick] (stu) -- (enr) node[midway, above, font=\tiny] {(0..*, 0..*)};
+  \draw[thick] (crs) -- (enr);
+  \draw[thick] (enr) -- (grade);
+  % Underline key
+  \draw[thick] (-1.55,3.28) -- (-1.05,3.28);
+  \draw[thick] (4.75,3.28) -- (5.25,3.28);
+  % Weak entity example on right bottom
+  \node[ent, double, fill=violet!10] (sec) at (5.0,0.15) {Section};
+  \node[rel, fill=red!12] (has) at (2.5,0.15) {Has};
+  \node[ent] (dept) at (0,0.15) {Dept};
+  \draw[thick, double] (sec) -- (has); \draw[thick] (dept) -- (has);
+  \node[font=\tiny, fill=white, inner sep=1pt] at (2.5,0.55) {identifying};
+  \node[font=\tiny, align=center] at (2.5,-0.65) {Double rectangle = weak entity (Section needs Course)};
+\end{tikzpicture}
+\caption{ER elements: rectangles = entity sets, diamonds = relationships, ovals = attributes, underlining = key; double diamond/rectangle = identifying relationship / weak entity. Grade is a relationship attribute.}
+\label{fig:er-elements}
+\end{figure}
+
+\subsection{Attributes, Keys, and Domains}
+
+Each attribute has a \emph{domain} (allowed values). Attribute types: \emph{simple} vs.\ \emph{composite} (Address $\to$ Street/City), \emph{single-valued} vs.\ \emph{multi-valued} (double oval), \emph{derived} (dashed oval, e.g.\ age from DOB).
+
+A \emph{superkey} uniquely identifies entities; a \emph{key} is a minimal superkey; a \emph{candidate key} is any minimal key, one chosen as \emph{primary key} (underlined). Weak entities (e.g.\ Section identified only via Course) use a \emph{discriminator} (partial key) plus the owner's key.
+
+\subsection{Relationships, Cardinality, Participation}
+
+A \emph{relationship set} associates entities. \emph{Degree}: binary (most common), ternary, etc. Each entity set's participation has:
+
+\begin{itemize}
+    \item \textbf{Cardinality ratio}---1:1, 1:N, N:1, M:N (how many of the other side one entity may relate to). Example: a Course \emph{has} many Sections (1:N).
+    \item \textbf{Participation constraint}---\emph{total} (double line: every entity must participate) vs.\ \emph{partial} (single line: optional).
+\end{itemize}
+
+An arrow to an entity set means \emph{at most one}; a double line means \emph{at least one}. So a thick arrow-headed double line = exactly one.
+
+\begin{remark}[Attributes on relationships]
+Place an attribute on a relationship when it describes the association, not either entity alone (e.g.\ Grade belongs to Enrolled, not to Student or Course). If in doubt, ask: ``Would this value exist without the relationship?''
+\end{remark}
+
+% ============================================================
+\section{From ER to Relational Schema}
+\label{sec:er-to-relational}
+
+Mapping is mechanical once constraints are understood.
+
+\begin{enumerate}
+    \item \textbf{Strong entity set} $\to$ table with same attributes; primary key as declared.
+    \item \textbf{Weak entity set} $\to$ table with owner's PK + discriminator; PK is composite.
+    \item \textbf{Binary 1:N} $\to$ add the ``one'' side's PK as foreign key to the ``many'' side (no separate table). Place relationship attributes on the many side.
+    \item \textbf{Binary M:N} $\to$ new join table with PKs of both sides (composite PK); relationship attributes go here.
+    \item \textbf{Binary 1:1} $\to$ either side may hold the other's PK (choose the total-participation side to avoid nulls); or a separate table if both partial.
+    \item \textbf{Multi-valued attribute} $\to$ separate table (PK of entity + value).
+    \item \textbf{N-ary relationship} $\to$ new table with FKs to all participating entity sets.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\tiny}]
+  \node[draw, thick, fill=blue!10, minimum width=5.2cm, minimum height=0.85cm, align=left] (s) at (0,2.0) {\textbf{Student}(\underline{ID}, Name)};
+  \node[draw, thick, fill=orange!12, minimum width=5.2cm, minimum height=0.85cm, align=left] (c) at (0,0.9) {\textbf{Course}(\underline{Code}, Title)};
+  \node[draw, thick, fill=green!12, minimum width=5.8cm, minimum height=0.85cm, align=left] (e) at (0,-0.2) {\textbf{Enrolled}(\underline{StudID, Code}, Grade)~~FKs $\to$ Student, Course};
+  \node[draw, thick, fill=violet!10, minimum width=5.8cm, minimum height=0.85cm, align=left] (sec) at (0,-1.3) {\textbf{Section}(\underline{Code, SecNo}, Room)~~FK Code $\to$ Course};
+  \draw[-{Stealth}, thick, blue!60!black] (e.north) -- ++(0,0.18) -| (s.south);
+  \draw[-{Stealth}, thick, blue!60!black] (e.north) -- ++(0.4,0.18) -| (c.south);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt, align=left] at (5.2,0.35) {Rule of thumb:\\1:N $\to$ FK on N-side\\M:N $\to$ join table\\Weak $\to$ composite PK};
+\end{tikzpicture}
+\caption{Relational schema resulting from Figure~\ref{fig:er-elements}. Underline = primary key; FKs preserve relationships; null avoidance guides FK placement.}
+\label{fig:er-to-rel}
+\end{figure}
+
+\begin{example}[Worked mapping]
+ER: Student(M)---Enrolled(N)---Course, plus Course 1:N Section (weak). Relational: Student, Course as above; Enrolled join table captures M:N + Grade; Section reuses Course.Code. Cardinalities preserved via keys and foreign-key constraints; total participation becomes \texttt{NOT NULL} on FK.
+\end{example}
+
+\begin{remark}[What can be lost?]
+ER participation (``every student must enrol in at least one course'') is not enforceable by keys alone---it needs assertions or triggers beyond basic DDL. Flag such constraints when mapping.
+\end{remark}
+
+\subsection{Keys in the Relational Target}
+
+After mapping, keys become concrete constraints. A \emph{primary key} (PK) is a minimal set of columns whose values are unique and non-null for every row---exactly the ER key now enforced by the DBMS. A \emph{foreign key} (FK) is a column set whose values must appear as a PK in the referenced table (referential integrity). An FK may be \texttt{NOT NULL} to enforce total participation, or nullable to allow partial participation. This is how the conceptual cardinality survives into tables.
+
+\begin{example}[Keys survive mapping]
+In Figure~\ref{fig:er-to-rel}, Enrolled's composite PK $(\mathit{StudID},\mathit{Code})$ prevents a student enrolling twice in the same course. Each column is also an FK, so you cannot enrol a non-existent student. If Course---Section is 1:N total on the Section side, Section.Code is \texttt{NOT NULL} FK.
+\end{example}
+
+\subsection{Design Pitfalls to Avoid}
+
+\begin{itemize}
+    \item \textbf{Redundancy}---storing Course.Title inside every Enrolled row. Update one copy and miss another: inconsistency.
+    \item \textbf{Overloaded keys}---using Name as key when names collide; always prefer stable surrogate or matric number.
+    \item \textbf{Misplaced attributes}---putting building capacity on Room when it belongs to Building.
+\end{itemize}
+A quick sanity check: can you state each attribute as ``X's Y'' with X being the entity/relationship that owns it? If not, ownership is likely wrong.
+
+% ============================================================
+\section{Chapter Notes}
+
+The ER model is due to Peter Chen (1976); the abstraction-level view follows ANSI/SPARC (1975). Relational mapping rules are those of Elmasri--Navathe and Silberschatz et al. Modern practice often models first in ER/UML, then generates DDL automatically.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch01-ex}
+\begin{enumerate}[label=E1.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Warm-up: abstraction.} Give a concrete view, conceptual, and physical example for an NTU course-registration system. Why does changing the physical index not require rewriting the student view?
+    \item \textbf{ER drawing.} Model NTU's ``Student enrols in Course Offerings taught by Instructor in a Room at a Timeslot.'' Identify entities, keys, the ternary relationship, and where Grade and Capacity belong. Mark cardinalities.
+    \item \textbf{Weak entities.} Why is Room not weak but Section is? Design the tables for a weak entity Building $\to$ Room (RoomNo only unique within Building) and state its primary key.
+    \item \textbf{Mapping choices.} An ER says Every Course has exactly one Coordinator (Lecturer) but a Lecturer may coordinate zero or one Course. Show two relational mappings (FK on Course vs.\ FK on Lecturer vs.\ separate table) and argue which minimises nulls.
+    \item \textbf{Critique.} A novice puts StudentPhone as an attribute of Student (single-valued). Give an instance where this loses information, then redesign using a separate table. Which rule justifies it?
+\end{enumerate}
+% End of Chapter 1

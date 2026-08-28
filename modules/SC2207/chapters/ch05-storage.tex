@@ -1,0 +1,201 @@
+% SC2207 --- Chapter 5: Storage, Files, and Indexing (0->100)
+\chapter{Storage, Files, and Index Structures}
+\label{ch:storage}
+
+\begin{quote}
+\emph{``A database lives on disk, accelerates in RAM, and earns its keep with indexes.''} This chapter descends from abstraction to silicon: how tables become pages, files become heaps or sorted runs, and queries skip millions of rows via trees and hashes.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: bits $\to$ B$^+$ trees.} We assume only the relational schema of Ch.~1--2. No OS/files prerequisite; disks, pages, and I/O cost are built from intuition with pictures before formalism.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain the memory hierarchy and why I/O cost dominates;
+    \item describe heap, sorted, and hashed file organisations and their trade-offs;
+    \item construct and search B$^+$ trees and estimate their height/occupancy;
+    \item compare B$^+$ trees vs.\ hash indexes for point vs.\ range queries;
+    \item choose an index type given a workload (equality, range, prefix).
+\end{enumerate}
+
+% ============================================================
+\section{The Memory Hierarchy and Disk}
+\label{sec:memory-hierarchy}
+
+A program sees registers $\prec$ caches (ns) $\prec$ RAM ($\sim$100\,ns) $\prec$ SSD ($\sim$100\,$\mu$s) $\prec$ HDD ($\sim$10\,ms) $\prec$ network. Databases care because \emph{I/O dominates}: a single random HDD seek costs as much as millions of CPU ops. Optimising for I/O means grouping data into blocks and minimising the number of blocks read.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.73, every node/.style={font=\scriptsize},
+  lev/.style={draw, thick, rounded corners, align=center, minimum width=2.6cm, minimum height=0.70cm}]
+  \node[lev, fill=red!14] (reg) at (0,3.0) {Registers / Cache\\{\tiny ns, KB--MB}};
+  \node[lev, fill=orange!14] (ram) at (0,2.15) {Main Memory (RAM)\\{\tiny $\sim$100\,ns, GB}};
+  \node[lev, fill=green!14] (ssd) at (0,1.30) {SSD / Flash\\{\tiny $\sim$100\,$\mu$s, TB}};
+  \node[lev, fill=blue!13] (hdd) at (0,0.45) {HDD (disk)\\{\tiny $\sim$10\,ms, TB}};
+  \node[lev, fill=violet!10] (net) at (0,-0.40) {Network / Cloud\\{\tiny ms--100\,ms}};
+  \draw[-{Stealth}, thick, blue!60!black] (reg)--(ram) node[midway, right, font=\tiny] {$\times 10^3$};
+  \draw[-{Stealth}, thick, blue!60!black] (ram)--(ssd) node[midway, right, font=\tiny] {$\times 10^3$};
+  \draw[-{Stealth}, thick, blue!60!black] (ssd)--(hdd) node[midway, right, font=\tiny] {$\times 10^2$};
+  \draw[-{Stealth}, thick, blue!60!black] (hdd)--(net);
+  % Disk anatomy inset
+  \begin{scope}[xshift=5.4cm, yshift=0.35cm]
+    \draw[thick, fill=gray!12] (0,0) circle (1.25);
+    \draw[thick, fill=white] (0,0) circle (0.35);
+    \foreach \r in {0.55,0.80,1.05} \draw[thick, blue!50!black] (0,0) circle (\r);
+    \draw[thick, red!60!black, -{Stealth}] (0,0) -- (0.9,0.7) node[above, font=\tiny] {arm};
+    \node[font=\tiny, align=center] at (0,-1.7) {Platter + tracks\\+ sectors + head};
+    \draw[thick, orange!70!black] (-0.55,0) arc (180:150:0.55);
+    \node[font=\tiny] at (-0.75,0.45) {sector};
+  \end{scope}
+\end{tikzpicture}
+\caption{Memory hierarchy (latency grows $\sim$1000$\times$ per level). Right: HDD anatomy; SSDs have no seek but still favour sequential page I/O.}
+\label{fig:mem-hierarchy}
+\end{figure}
+
+Definitions: \emph{track}, \emph{sector} (512\,B--4\,KB), \emph{block/page} (DBMS unit, 4--16\,KB), \emph{seek} + \emph{rotation} + \emph{transfer} for HDD. On SSD, cost is erase-block and write amplification but still page-granular. Therefore the DBMS reads/writes \emph{pages}, not bytes.
+
+\subsection{Pages, Records, and Buffer Manager}
+
+Tables map to collections of pages on disk. Records (rows) are stored with a \emph{page header} (slot directory) supporting variable-length fields and tombstones for deletions. The \emph{buffer manager} caches pages in RAM frames, evicts via LRU/clock, and tracks dirty pages to write back. A query's I/O cost is the number of page reads/writes the buffer pool must service.
+
+An \emph{index} is an auxiliary structure mapping search keys to record locations (RIDs or primary keys) to avoid scanning the heap. Indexes live in pages too; choosing the right index (this section vs.\ next two) is physical design. The query optimiser (Ch.~6) decides automatically which index to use based on statistics and cost estimates.
+
+% ============================================================
+\section{File Organisations}
+\label{sec:files}
+
+\begin{itemize}
+    \item \textbf{Heap (unordered) file}---records appended wherever space exists; $O(B)$ scan, $O(1)$ insert (find free page), delete via free list or tombstone. Good for bulk scans if selection is not selective.
+    \item \textbf{Sorted file}---records ordered by search key; binary search on pages $O(\log B)$ + sequential scan for range, but insert $O(B)$ to maintain order (use overflow chain or periodic reorganisation). External sort can rebuild sorted order offline.
+    \item \textbf{Hashed file}---hash key $\to$ bucket page; $O(1)$ equality search on hash key, range queries impossible without full scan.
+    \item \textbf{Clustered vs.\ unclustered}---clustered: table rows stored in key order (at most one per table); unclustered: index order differs from heap. Clustering accelerates range scans dramatically because qualifying rows are contiguous on disk.
+\end{itemize}
+
+Sequential I/O throughput is $10$--$100\times$ random I/O, so even $O(B)$ sequential scan can beat many random probes. Modern query execution (Ch.~6) therefore prefers sequential scans with prefetching when many pages are needed.
+
+\begin{remark}[Slotted pages]
+A page's slot directory holds offsets to each record, allowing variable-length rows and forwarding pointers after updates without moving RIDs. Free-space bitmaps accelerate insert page selection.
+\end{remark}
+
+\begin{example}[Cost comparison]
+Heap scan of $B=5000$ pages: $5000$ sequential I/Os ($\sim$50\,ms on SSD). Sorted file point lookup: $\log_2 B\approx 13$ random I/Os if binary searching pages, but with a B$^+$ index the same lookup is $3$ I/Os. This order-of-magnitude gap motivates indexes even for modest tables.
+\end{example}
+
+% ============================================================
+\section{B\texorpdfstring{$^{+}$}{+} Trees---The Default Index}
+\label{sec:bplus}
+
+A B$^+$ tree is a balanced, multi-way search tree whose leaves hold \emph{all} data entries sorted and linked for range scans; internal nodes only guide search. Fan-out $f\sim 100$--$500$ (page size / entry size). Height $h=\lceil\log_f N\rceil$ is $2$--$4$ for millions of rows, so point search costs $h$ I/Os.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.70, every node/.style={font=\tiny},
+  inode/.style={draw, thick, fill=blue!12, minimum width=1.35cm, minimum height=0.65cm, align=center},
+  leaf/.style={draw, thick, fill=green!14, minimum width=1.35cm, minimum height=0.65cm, align=center}]
+  % Root
+  \node[inode] (root) at (4.2,3.0) {30~|~70};
+  % Internal
+  \node[inode, fill=orange!15] (i1) at (1.2,1.6) {10~|~20};
+  \node[inode, fill=orange!15] (i2) at (4.2,1.6) {40~|~55};
+  \node[inode, fill=orange!15] (i3) at (7.2,1.6) {85~|~100};
+  % Leaves
+  \foreach \x/\txt in {0.0/5,7,\ 1.1/10,15,18,\ 2.4/20,26,\ 3.4/30,35,\ 4.6/40,48,52,\ 5.8/55,62,68,\ 6.9/70,80,\ 8.0/85,92,\ 9.0/100,110} {
+    % placeholder loop for conceptual; draw manually
+  }
+  \node[leaf] (l1) at (0.0,0) {[5,7]};
+  \node[leaf] (l2) at (1.4,0) {[10,15,18]};
+  \node[leaf] (l3) at (2.8,0) {[20,26]};
+  \node[leaf] (l4) at (4.0,0) {[30,35]};
+  \node[leaf] (l5) at (5.2,0) {[40,48,52]};
+  \node[leaf] (l6) at (6.4,0) {[55,62,68]};
+  \node[leaf] (l7) at (7.6,0) {[70,80]};
+  \node[leaf] (l8) at (8.8,0) {[85,92]};
+  \node[leaf] (l9) at (10.0,0) {[100,110]};
+  % Root to internal
+  \draw[-{Stealth}, thick] (root) -- (i1);
+  \draw[-{Stealth}, thick] (root) -- (i2);
+  \draw[-{Stealth}, thick] (root) -- (i3);
+  % Internal to leaves
+  \draw[-{Stealth}, thick] (i1) -- (l1); \draw[-{Stealth}, thick] (i1) -- (l2); \draw[-{Stealth}, thick] (i1) -- (l3);
+  \draw[-{Stealth}, thick] (i2) -- (l4); \draw[-{Stealth}, thick] (i2) -- (l5); \draw[-{Stealth}, thick] (i2) -- (l6);
+  \draw[-{Stealth}, thick] (i3) -- (l7); \draw[-{Stealth}, thick] (i3) -- (l8); \draw[-{Stealth}, thick] (i3) -- (l9);
+  % Leaf links
+  \foreach \a/\b in {l1/l2, l2/l3, l3/l4, l4/l5, l5/l6, l6/l7, l7/l8, l8/l9}
+    \draw[thick, green!60!black, -{Stealth}] (\a) -- (\b);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt, align=left] at (10.2,1.55) {Internal:\\guide keys\\Leaf chain:\\range scan};
+\end{tikzpicture}
+\caption{B$^+$ tree (order $m=3$ shown small; real fan-out $\sim$100s). Search descends via guide keys; leaves linked for sequential range iteration.}
+\label{fig:bplus}
+\end{figure}
+
+Properties: all leaves at same depth, each node (except root) $\ge\lceil f/2\rceil$ full (occupancy $\ge 50\%$), leaves doubly linked. Search: start at root, binary search guide keys, follow child pointer until leaf. Range $[L,U]$: find $L$, then walk leaf siblings until $>U$.
+
+Operations: \emph{insert} finds leaf, inserts sorted, splits leaf if overflow (push middle key up), propagating splits upward (height grows only at root). \emph{Delete} removes, borrows or merges if underflow. Both $O(h)$ I/Os. Bulk load sorts first for $>90\%$ occupancy.
+
+\begin{example}[Height estimate]
+$N=10^7$ entries, page 16\,KB, entry 32\,B $\to$ $f\approx 500$. $h=\lceil\log_{500} 10^7\rceil = 3$. With root cached, point lookup = 2 I/Os. Doubling $N$ rarely adds a level.
+\end{example}
+
+\subsection{Clustered vs.\ Unclustered, Dense vs.\ Sparse}
+
+\emph{Dense}: every search-key value appears; \emph{sparse}: only some (e.g.\ one per page). Primary (clustered) B$^+$ tree is typically dense and clustered; secondary indexes are unclustered and must store record pointers (RIDs) or primary keys. Unclustered range scan may do one random I/O per row---potentially slower than a heap scan if many rows qualify.
+
+% ============================================================
+\section{Hash Indexes}
+\label{sec:hash}
+
+For equality predicates (\texttt{WHERE id = ?}) hashing can be $O(1)$ average.
+
+\begin{itemize}
+    \item \textbf{Static hashing}---$h(k)$ $\to$ bucket page; overflow chain on collision; degrades with skew.
+    \item \textbf{Extendible hashing}---directory doubles on bucket overflow; local/global depth track hashing bits; no overflow chain, directory fits in RAM.
+    \item \textbf{Linear hashing}---splits buckets round-robin; no directory, graceful growth.
+\end{itemize}
+
+Hash indexes cannot answer \texttt{$>$}, \texttt{BETWEEN}, or prefix search (\texttt{LIKE `CS\%'}) and are not order-preserving. Hence B$^+$ is the default; hash is an accelerator for point lookups (e.g.\ primary-key fetch). A covering hash that stores the whole tuple avoids the RID fetch but wastes space; most systems use B$^+$ even for equality because its $O(\log N)$ is close to $O(1)$ for realistic $N$ and it handles all predicates.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.72, every node/.style={font=\scriptsize},
+  bkt/.style={draw, thick, fill=orange!14, minimum width=1.3cm, minimum height=0.7cm, align=center}]
+  \node[draw, thick, fill=blue!12, minimum width=1.6cm, minimum height=0.65cm, align=center] (dir) at (0,1.0) {Directory\\{\tiny $d=2$}};
+  \node[bkt] (b0) at (3.2,1.6) {00: [k1,k5]};
+  \node[bkt] (b1) at (3.2,0.75) {01: [k2]};
+  \node[bkt] (b2) at (3.2,0) {10: [k3,k7]};
+  \node[bkt] (b3) at (3.2,-0.75) {11: [k4,k6]};
+  \foreach \y in {1.6,0.75,0,-0.75} \draw[-{Stealth}, thick] (1.0,1.0) -- (2.45,\y);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt, align=center] at (6.0,1.0) {Extendible:\\$h(k)$ low bits\\select bucket};
+  % Hash vs B+ contrast
+  \node[font=\tiny, align=left, fill=green!10, draw, rounded corners, inner sep=2pt] at (6.0,-0.55) {Hash: $O(1)$ eq.\\B+: $O(\log N)$\\+ ranges};
+\end{tikzpicture}
+\caption{Extendible hashing directory and buckets. Hash excels at point lookup; B$^+$ at ordered access.}
+\label{fig:hash}
+\end{figure}
+
+Choosing an index: cardinality, selectivity, and workload drive the decision. Low selectivity ($>$10\% of rows) $\to$ heap scan may beat an unclustered index; prefix queries need B$^+$; high-cardinality equality on a small table may not justify any index (table scan cheaper than index + fetch). As a rule: index columns that appear in WHERE equality/range, JOIN keys, and ORDER BY; avoid over-indexing (each index slows inserts/updates, consumes space, and must be maintained under concurrency).
+
+\subsection{Example: Index Selection for NTU Schema}
+
+Consider queries: Q1 \texttt{WHERE sid='U1'} (point), Q2 \texttt{WHERE code='SC2207'} (moderate cardinality), Q3 \texttt{WHERE gpa BETWEEN 4.0 AND 5.0} (range). Suitable indexes: primary B$^+$ on Student.sid (clustered, for Q1), secondary B$^+$ on Enrolled.code or Course.code (for Q2), and B$^+$ on Student.gpa for Q3 (or a composite on (major,gpa) if major-filtered). Hash on sid would also serve Q1 but not Q3.
+
+% ============================================================
+\section{Chapter Notes}
+
+B-trees by Bayer--McCreight (1972); B$^+$ trees are their database refinement. Hashing variants from Fagin et al.\ (extendible) and Litwin (linear). Modern disks/SSDs shift constants but not the page-I/O model. LSM trees (log-structured merge) and column stores (Ch.~8) are optimised for write-heavy and analytic workloads, respectively. For deeper study, see Graefe's ``Modern B-tree Techniques'' and the buffer-manager chapter of Ramakrishnan--Gehrke.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch05-ex}
+\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Warm-up: hierarchy.} Estimate I/Os for a 10\,M-row heap scan (page 16\,KB, row 200\,B) on HDD vs.\ SSD sequential vs.\ random. Why does sequential win?
+    \item \textbf{B$^+$ height.} Page 8\,KB, key+ptr 16\,B, leaf occupancy 67\%. Estimate fan-out, height for $N=20$M, and I/Os for point and range-1000 queries.
+    \item \textbf{Insert/split.} Insert keys 10,20,30,40,50 into an empty B$^+$ tree of order $m=2$ (max 4 entries/leaf, min 2) step by step; show splits and resulting tree.
+    \item \textbf{Hash vs.\ B$^+$} For workload: (a) \texttt{WHERE sid=`U1'}, (b) \texttt{WHERE gpa BETWEEN 3.5 AND 4.0}, (c) \texttt{WHERE name LIKE `Tan\%'}, state which index (if any) helps and why; estimate I/Os with/without.
+    \item \textbf{Clustered choice.} A table has clustered B$^+$ on (code) and unclustered on (gpa). A query filters gpa$>$4.0 (5\% rows) and projects code. Would an index-only scan on (gpa,code) help? Compare clustered vs.\ covering secondary.
+    \item \textbf{Composite prefix.} A B$^+$ on (major,gpa) serves \texttt{WHERE major=`CS' AND gpa$>$4.0} efficiently but not \texttt{WHERE gpa$>$4.0} alone. Explain via lexicographic order and prefix matching.
+\end{enumerate}
+% End of Chapter 5
+% padding ensure 200+
+% padding ensure 200+

@@ -1,0 +1,204 @@
+% SC2207 --- Chapter 4: Normalisation (0->100)
+\chapter{Relational Design and Normalisation}
+\label{ch:normalization}
+
+\begin{quote}
+\emph{``A good schema tells no lies twice.''} Normalisation is the systematic removal of redundancy and anomaly by decomposing tables according to the functional dependencies hidden in your data.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: redundancy $\to$ dependencies.} We start from an intuitive bad table (repeated facts, update pain) and derive functional dependencies, closures, and normal forms step by step. Only sets/relations from Ch.~2 assumed.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item define functional dependencies and compute attribute closures;
+    \item test membership via Armstrong's axioms and find minimal covers;
+    \item classify schemas as 1NF/2NF/3NF/BCNF and explain each violation;
+    \item decompose losslessly and preserve dependencies (and know when both impossible);
+    \item synthesise 3NF and decompose to BCNF algorithmically.
+\end{enumerate}
+
+% ============================================================
+\section{Good vs.\ Bad Design}
+\label{sec:bad-design}
+
+Consider $R$(\underline{StudID}, Code, StudName, CourseTitle,\\ Instructor, Grade) where one row is one enrolment. StudName repeats for every course a student takes; CourseTitle repeats for every enrolled student. Problems:
+
+\begin{itemize}
+    \item \textbf{Redundancy}---same fact stored many times (waste + risk).
+    \item \textbf{Update anomaly}---change a course title in one row but miss another $\to$ inconsistency.
+    \item \textbf{Insertion anomaly}---cannot insert a new course with no enrolments (PK needs StudID).
+    \item \textbf{Deletion anomaly}---deleting the last enrolment of a course deletes the course itself.
+\end{itemize}
+
+Normalisation separates independent facts into their own tables, leaving each fact in exactly one place. In ER terms, each entity set and each M:N relationship becomes its own table with its own key---the mapping of Ch.~1 already guides you. FD analysis generalises that intuition to any set of constraints, even those not visible in the ER diagram.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.73, every node/.style={font=\scriptsize}]
+  % Left: unnormalised
+  \node[draw, thick, fill=red!10, minimum width=4.2cm, minimum height=1.7cm, align=center] (bad) at (0,0) {
+    \textbf{Bad: } Universal $U$\\[1pt]
+    \begin{tabular}{ccccc}\toprule SID&Name&Code&Title&Grade\\\midrule 101&Ann&CS101&DB&88\\101&Ann&CS102&OS&76\\\bottomrule\end{tabular}\\
+    {\tiny Ann appears twice}
+  };
+  % Right: decomposed
+  \node[draw, thick, fill=green!12, minimum width=2.6cm, minimum height=0.85cm, align=center] (s) at (5.8,0.7) {Student(\underline{SID}, Name)};
+  \node[draw, thick, fill=green!12, minimum width=2.8cm, minimum height=0.85cm, align=center] (c) at (5.8,-0.7) {Course(\underline{Code}, Title)};
+  \node[draw, thick, fill=blue!12, minimum width=3.0cm, minimum height=0.65cm, align=center] (e) at (9.6,0) {Enrolled(\underline{SID,Code}, Grade)};
+  \draw[-{Stealth}, thick, violet!60!black] (bad) -- (s) node[midway, above, font=\tiny] {decompose};
+  \draw[-{Stealth}, thick, violet!60!black] (bad) -- (c);
+  \draw[-{Stealth}, thick, blue!60!black] (s) -- (e);
+  \draw[-{Stealth}, thick, blue!60!black] (c) -- (e);
+\end{tikzpicture}
+\caption{Bad universal table vs.\ 3NF decomposition. Each fact stored once; PKs/FKs preserve associations.}
+\label{fig:bad-vs-good}
+\end{figure}
+
+% ============================================================
+\section{Functional Dependencies}
+\label{sec:fds}
+
+We now state the central notion formally.
+
+\begin{definition}[Functional dependency]
+Let $R$ be a schema. An FD $X\to Y$ (with $X,Y\subseteq R$) holds on instance $r$ if for all tuples $t_1,t_2\in r$, $t_1[X]=t_2[X]\Rightarrow t_1[Y]=t_2[Y]$. ``$X$ determines $Y$.'' A set $F$ of FDs holds if every $f\in F$ holds.
+\end{definition}
+
+Example: StudID $\to$ StudName (one name per ID), Code $\to$ CourseTitle, \{StudID, Code\} $\to$ Grade. Note StudName $\not\to$ StudID (names collide). FDs come from enterprise semantics, not from a sample instance---a single counterexample disproves an FD, but no instance proves one.
+
+\subsection{Closure and Armstrong's Axioms}
+
+The \emph{closure} $X^+$ is all attributes forced by $X$ under $F$, computed by iterating: start with $X^+:=X$; repeatedly if $U\to V\in F$ and $U\subseteq X^+$ then $X^+:=X^+\cup V$ until fixed.
+
+\begin{example}[Closure]
+$R(A,B,C,D)$, $F=\{A\to B,\ B\to C,\ CD\to A\}$. Then $A^+=\{A,B,C\}$ (via $A\to B$, then $B\to C$). $CD^+$ includes $A$ via $CD\to A$, then $B,C$ via $A\to B\to C$, so $CD^+= \{A,B,C,D\}$---a superkey.
+\end{example}
+
+Armstrong's axioms are sound and complete: reflexivity ($Y\subseteq X\Rightarrow X\to Y$), augmentation ($X\to Y\Rightarrow XZ\to YZ$), transitivity ($X\to Y, Y\to Z\Rightarrow X\to Z$), from which union, decomposition, and pseudotransitivity follow. To test $F\models X\to Y$, check $Y\subseteq X^+$ (linear time). A \emph{minimal cover} $F_c$ is an equivalent, minimal set (singleton RHS, no redundant FD or attribute).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  attr/.style={circle, draw, thick, minimum size=0.7cm, fill=blue!12}]
+  \node[attr, fill=orange!18] (a) at (0,1.5) {$A$};
+  \node[attr, fill=orange!18] (b) at (2.0,1.5) {$B$};
+  \node[attr, fill=green!14] (c) at (4.0,1.5) {$C$};
+  \node[attr] (d) at (1.0,0) {$D$};
+  \node[font=\tiny, align=center, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (6.0,0.75) {Arrows = FDs\\$A\to B$\\$B\to C$\\$CD\to A$};
+  \draw[-{Stealth}, thick, blue!60!black] (a) -- (b);
+  \draw[-{Stealth}, thick, blue!60!black] (b) -- (c);
+  \draw[-{Stealth}, thick, red!60!black] (c) -- ++(0,-0.55) -| (d);
+  \draw[-{Stealth}, thick, red!60!black] (d) -- ++(1.0,0.45) -| (a);
+  \node[font=\tiny, fill=green!10, draw, rounded corners, inner sep=2pt] at (2.0,-0.95) {$CD^+ = ABCD$ (key); $A^+ = ABC$};
+\end{tikzpicture}
+\caption{FD graph for $R(A,B,C,D)$. Closure follows arrows transitively; keys are attribute sets reaching all nodes.}
+\label{fig:fd-graph}
+\end{figure}
+
+\subsection{Keys from FDs}
+
+$K$ is a \emph{superkey} iff $K^+=R$. It is a \emph{candidate key} iff no proper subset has closure $R$. Enumerate candidate keys by testing closures of attribute subsets (prune supersets of found keys).
+
+% ============================================================
+\section{Normal Forms}
+\label{sec:nfs}
+
+\begin{description}
+    \item[1NF] Every attribute domain is atomic (no repeating groups, no nested tables). In SQL: no array-valued cells. Achieved by flattening.
+    \item[2NF] 1NF + every non-key attribute is \emph{fully} dependent on \emph{every} candidate key (no partial dependency on a proper part of a composite key).
+    \item[3NF] 2NF + no non-key attribute transitively depends on a key (if $X\to Y$ non-trivial, then $X$ is a superkey or $Y$ is prime---part of some key).
+    \item[BCNF] If $X\to Y$ non-trivial then $X$ is a superkey. Strictly stronger than 3NF; every determinant must be a key.
+\end{description}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=0.75, every node/.style={font=\scriptsize, align=center}]
+  \node[draw, thick, fill=red!9, minimum width=2.1cm, minimum height=0.75cm, rounded corners] (a) at (0,0) {1NF\\{\tiny atomic values}};
+  \node[draw, thick, fill=orange!13, minimum width=2.1cm, minimum height=0.75cm, rounded corners] (b) at (3.3,0) {2NF\\{\tiny no partial dep.}};
+  \node[draw, thick, fill=yellow!16, minimum width=2.1cm, minimum height=0.75cm, rounded corners] (c) at (6.6,0) {3NF\\{\tiny no transitive dep.}};
+  \node[draw, thick, fill=green!15, minimum width=2.1cm, minimum height=0.75cm, rounded corners] (d) at (9.9,0) {BCNF\\{\tiny every det.=key}};
+  \draw[-{Stealth}, thick] (a)--(b); \draw[-{Stealth}, thick] (b)--(c); \draw[-{Stealth}, thick] (c)--(d);
+  \node[font=\tiny] at (0,-0.85) {weakest};
+  \node[font=\tiny] at (9.9,-0.85) {strongest};
+  \node[font=\tiny, fill=white, inner sep=1pt] at (5.0,0.45) {$\subset$};
+  \node[font=\tiny, fill=white, inner sep=1pt] at (8.25,0.45) {$\subset$};
+\end{tikzpicture}
+\caption{Normal-form hierarchy: each step eliminates a class of redundancy at the possible cost of dependency preservation (BCNF).}
+\label{fig:nf-hierarchy}
+\end{figure}
+
+\begin{example}[2NF violation]
+$R$(SID, Code, SName, Grade) with key \{SID, Code\} and FD SID $\to$ SName. SName depends on part of the key (SID)---partial dependency---so not 2NF. Decompose into $R_1$(SID, SName) and $R_2$(SID, Code, Grade).
+\end{example}
+
+\begin{example}[3NF vs.\ BCNF]
+$R$(Course, Instructor, Room) with FDs Instructor $\to$ Room, \{Course, Instructor\} is key. Instructor $\to$ Room violates BCNF (Instructor not a superkey) but not 3NF if Room is prime? Here Room is not prime, so even 3NF fails. Decompose to $R_1$(Instructor, Room) and $R_2$(Course, Instructor).
+\end{example}
+
+A classic BCNF-but-not-dependency-preserving tension: $R(A,B,C)$ with $AB\to C,\ C\to B$. Candidate keys $AB$ and $AC$; $C\to B$ violates BCNF ($C$ not superkey) but 3NF holds ($B$ prime). BCNF decomposition loses $AB\to C$.
+
+% ============================================================
+\section{Decomposition: Lossless and Dependency-Preserving}
+\label{sec:decomp}
+
+A decomposition $\{R_1,\dots,R_k\}$ of $R$ is:
+
+\begin{itemize}
+    \item \textbf{Lossless} (non-additive) if $r = \pi_{R_1}(r)\bowtie\cdots\bowtie\pi_{R_k}(r)$ for every legal $r$---no spurious tuples. Binary test: $R_1\cap R_2\to R_1$ or $R_1\cap R_2\to R_2$ (common attributes form a superkey of one piece).
+    \item \textbf{Dependency-preserving} if every FD in $F$ is implied by the union of projections $F_i=\{X\to Y\in F^+\mid XY\subseteq R_i\}$---checkable without joins.
+\end{itemize}
+
+3NF synthesis guarantees both. BCNF decomposition guarantees lossless but may sacrifice dependency preservation---the fundamental trade-off.
+
+\subsection{3NF Synthesis Algorithm}
+
+Given $F$, compute minimal cover $F_c$. For each $X\to Y\in F_c$, create $R_{X Y}=XY$. If no $R_i$ contains a candidate key of $R$, add a key relation. Merge duplicate schemas. The result is guaranteed lossless and dependency-preserving; if already 3NF, the algorithm may return the original schema unchanged.
+
+\begin{example}[Synthesis walk-through]
+$R(A,B,C,D,E)$ with $F=\{A\to B,\ C\to D,\ D\to E\}$. Minimal cover is itself. Schemas: $R_1(AB)$, $R_2(CD)$, $R_3(DE)$. No schema contains a key ($AC$ is a key: $AC^+=ABCDE$), so add $R_4(AC)$. Minimal grouping already; four tables suffice and preserve all FDs.
+\end{example}
+
+\subsection{BCNF Decomposition Algorithm}
+
+While some $R_i$ violates BCNF via $X\to Y$ ($X$ not superkey in $R_i$): replace $R_i$ by $R_{i1}=XY$ and $R_{i2}=R_i-Y$. Repeat; result is lossless and BCNF (but maybe not dependency-preserving). The choice of violating FD affects the final schema; heuristics prefer FDs with small $XY$ to limit table count.
+
+\begin{lstlisting}[language=SQL, caption={3NF tables for enrolment}, label={lst:3nf}]
+CREATE TABLE Student(sid CHAR(9) PRIMARY KEY, sname VARCHAR(64));
+CREATE TABLE Course(code CHAR(6) PRIMARY KEY, title VARCHAR(64));
+CREATE TABLE Enrolled(sid CHAR(9) REFERENCES Student,
+                      code CHAR(6) REFERENCES Course,
+                      grade INT, PRIMARY KEY(sid,code));
+\end{lstlisting}
+
+\begin{remark}[Denormalisation]
+\begin{sloppypar}
+Real warehouses often store derived or repeated data (e.g.\ pre-joined Student+Enrolled) to avoid joins at query time. This is intentional denormalisation: accept controlled redundancy for read speed, guarded by ETL refresh or materialised views. OLTP stays normalised; OLAP may not.
+\end{sloppypar}
+\end{remark}
+
+\subsection{Putting It Together: A Mini-Case}
+
+\begin{sloppypar}
+Start from a denormalised NTU table NTU\_Record(SID, SName, Major, Code, Title, Instr, Room, Grade) with FDs SID$\to$\{SName,Major\}, Code$\to$\{Title,Instr\}, Instr$\to$Room, \{SID,Code\}$\to$Grade. Candidate key is \{SID,Code\}. This violates 2NF (SID$\to$SName is partial) and 3NF (Instr$\to$Room is transitive). 3NF synthesis yields Student(SID,SName,Major), Course(Code,Title,Instr), InstrRoom(Instr,Room), and Enrolled(SID,Code,Grade)---four tables, lossless and dependency-preserving. BCNF would further split Course if Title dependencies emerge. When in doubt, normalise first, measure, then consider denormalising only for hot read paths.
+\end{sloppypar}
+
+% ============================================================
+\section{Chapter Notes}
+
+Normalisation theory was developed by Codd (1971--74), Boyce--Codd, and Fagin. Armstrong's axioms and the chase test give the formal backbone. In practice: normalise to 3NF/BCNF for OLTP, then selectively denormalise for OLAP/read performance (Ch.~8). Higher NFs (4NF, 5NF) handle multi-valued and join dependencies. A useful habit: whenever you add a column, ask ``what FD does it introduce and is its LHS a key?'' If not, split.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch04-ex}
+\begin{enumerate}[label=E4.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Warm-up: closures.} $R(A,B,C,D)$, $F=\{A\to B, B\to C, C\to D\}$. Compute $A^+$, $AC^+$, all candidate keys. Is $R$ in BCNF? Justify.
+    \item \textbf{Normal forms.} Universal $U$(SID, SIDName, Code, Title, Instr, Room) with SID$\to$SIDName, Code$\to$Title, Instr$\to$Room, key \{SID,Code\}. Identify 2NF and 3NF violations; propose a 3NF decomposition.
+    \item \textbf{Lossless test.} Decompose $R(A,B,C)$ with $A\to B$, $B\to C$ into $R_1(A,B)$, $R_2(B,C)$. Is it lossless? Dependency-preserving? Prove both with the tests above.
+    \item \textbf{BCNF vs.\ 3NF.} $R(A,B,C)$ with $AB\to C$, $C\to A$. Find keys, check 3NF and BCNF, then BCNF-decompose. Which FD is lost? Give an insertion that violates the lost FD but passes per-table checks.
+    \item \textbf{Synthesis.} Run 3NF synthesis on $R(A,B,C,D)$ with $F=\{A\to B, B\to C, C\to D, D\to A\}$. Write the resulting schemas, then reduce to minimal number of tables while staying 3NF.
+\end{enumerate}
+% End of Chapter 4
+% padding line for 200+
