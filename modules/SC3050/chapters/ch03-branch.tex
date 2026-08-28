@@ -1,0 +1,201 @@
+\chapter{Branch Prediction, Speculation and BTB}\label{ch:branch}
+\begin{center}\small\textit{Predict, fetch, speculate, recover: pay the price of being wrong rarely to win big when you are right.}\end{center}
+
+\section{Why Control Hazards Dominate}
+With forwarding, data hazards cost at most one cycle. Control hazards scale with pipeline depth: a 5-stage pipeline pays 1--2 cycles per mispredict, a 15-stage OOO superscalar pays 10--20 cycles of flushed work. Branches are frequent ($15$--$25\%$ of instructions) and their direction and target are unknown until late. The gap is filled by \textbf{prediction} (guess early) and \textbf{speculation} (execute speculatively, commit only if correct).
+
+Without prediction, even perfect forwarding leaves CPI $\approx 1.2$--$1.5$ on branch-heavy code. With a $95\%$ accurate predictor that drops to $\approx1.03$--$1.07$, worth dozens of percent in performance.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule Pipeline & Stages & Mispredict penalty $c$ & CPI overhead ($b=0.18, p=0.95$) \\ \midrule
+Classic 5-stage & 5 & 1--2 & $0.009$--$0.018$ \\
+Modern 10-stage scalar & 10 & 6--8 & $0.054$--$0.072$ \\
+OOO deep (fetch--commit 15) & 15 & 10--14 & $0.09$--$0.13$ \\ \bottomrule
+\end{tabular}
+\end{center}
+Deeper means more instructions in flight to flush, so prediction matters more as pipelines deepen: frequency scaling past $\approx 4$\,GHz stopped partly because $c$ grew faster than $p$ could improve.
+
+\section{Branch Outcomes to Predict}
+A branch has two things to know: \textit{direction} (taken/not-taken) and \textit{target} (where to fetch next). Conditional branches (\texttt{BEQ, BNE, BLT, \dots}) need both; unconditional jumps (\texttt{JAL, JALR}) have fixed taken direction but may need target prediction (especially \texttt{JALR} for returns).
+
+Prediction happens in fetch, before decode: given the PC, predict taken/not-taken and the next PC. Two structures cooperate: the \textbf{direction predictor} (counters, tables) and the \textbf{BTB} (branch target buffer) that remembers target addresses.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule Type & Direction & Target & How predicted \\ \midrule
+Conditional (BEQ etc.) & taken/not & PC+imm vs PC+4 & direction + BTB \\
+Uncond. direct (JAL) & always taken & PC+imm & BTB only \\
+Indirect (JALR) & always taken & register value & BTB / RAS / indirect predictor \\
+Return (RET) & always taken & stack pop & RAS \\ \bottomrule
+\end{tabular}
+\end{center}
+An I-cache miss, a TLB miss, or a BTB miss can all stall fetch even with a perfect direction predictor: the frontend is a chain of small caches.
+
+\section{Bimodal and 2-Bit Saturating Counters}
+The simplest adaptive predictor indexes a table of 2-bit saturating counters by PC (or PC xored with history). The FSM has hysteresis: it takes two consecutive mispredicts to flip the prediction, which damps oscillation on loops.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.95, auto]
+\node[draw, fill=red!14, circle, minimum size=1.35cm, align=center] (SN) at (0,2) {Strong\\Not\\Taken\\{\tiny 00}};
+\node[draw, fill=orange!14, circle, minimum size=1.35cm, align=center] (WN) at (4,2) {Weak\\Not\\Taken\\{\tiny 01}};
+\node[draw, fill=yellow!15, circle, minimum size=1.35cm, align=center] (WT) at (4,0) {Weak\\Taken\\{\tiny 10}};
+\node[draw, fill=green!14, circle, minimum size=1.35cm, align=center] (ST) at (0,0) {Strong\\Taken\\{\tiny 11}};
+\draw[-{Stealth}, thick, green!60!black] (SN) -- (WN) node[midway, above] {T};
+\draw[-{Stealth}, thick, red!60!black] (WN) -- (SN) node[midway, below, xshift=0.6cm] {NT};
+\draw[-{Stealth}, thick, green!60!black] (WN) -- (WT) node[midway, right] {T};
+\draw[-{Stealth}, thick, green!60!black] (WT) -- (ST) node[midway, below] {T};
+\draw[-{Stealth}, thick, red!60!black] (ST) -- (WT) node[midway, above, xshift=-0.6cm] {NT};
+\draw[-{Stealth}, thick, red!60!black] (WT) -- (WN) node[midway, left] {NT};
+\draw[-{Stealth}, thick, green!60!black] (ST) to[loop left] node[left] {T} (ST);
+\draw[-{Stealth}, thick, red!60!black] (SN) to[loop left] node[left] {NT} (SN);
+\node[below=0.6cm of ST, font=\tiny, text=gray!60!black] {predict taken if state $\ge$10};
+\end{tikzpicture}
+\end{center}
+
+A 1-bit counter mispredicts twice on a loop-closing branch (taken $n-1$ times, not taken once); the 2-bit counter mispredicts only once. Table size: 4K entries $\times$2 bits $=1$\,KB, 90--93\% accurate on many workloads. Aliasing (different branches sharing a counter) degrades it, motivating two-level and gshare.
+
+\section{Two-Level, Gshare, Tournament and TAGE}
+\textbf{Two-level / pattern history}: keep a shift register of last $h$ branch outcomes (global or per-branch), use it to index a second table. \textbf{Gshare}: XOR the PC with global history to index the counter table, mixing path and address.
+
+\textbf{Tournament}: run two predictors in parallel (e.g., bimodal + gshare) and select the winner via a meta-counter updated on which was correct. \textbf{TAGE} (tagged geometric): multiple tables indexed with different history lengths, each entry tagged; the longest matching entry wins. TAGE with 20--60\,KB dominates modern predictors at $>96\%$ direction accuracy.
+
+Static prediction (before any history is learned) uses heuristics: forward branches (loop exits) predicted not-taken, backward branches (loop backs) predicted taken, or the compiler can emit a taken hint bit. Modern cores use static only for cold BTB misses; once the predictor warms, dynamic tables dominate. A cold branch that has been seen but whose counter is still weakly taken may still mispredict on its first taken occurrence, which is why Branch Target Buffers eagerly update on taken branches.
+
+\textit{Example}: pattern T,T,N,T,T,N,\dots\ needs $h=2$ to learn that N follows T,T. A bimodal counter without history aliases all occurrences and mispredicts each N, while a GHR=11 predictor learns to use a different counter for the N case and can predict perfectly after warm-up. Correlated branches in e.g.\ \texttt{if (x<0) \{...\}; if (x<0 \&\& y) \{...\}} are the textbook win for history-based predictors.
+
+\section{Branch Target Buffer and Return Address Stack}
+Knowing the direction is not enough; fetch needs the target address next cycle. The \textbf{BTB} is a cache keyed by branch PC, storing target PC, type, and sometimes fall-through. Look up BTB in parallel with the direction predictor: if hit and predicted taken, fetch from target; otherwise fetch PC+4 (or next sequential block for wide fetch).
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, minimum width=2.4cm, minimum height=0.8cm] (pc) at (0,2.0) {Fetch PC};
+\node[draw, fill=green!14, minimum width=2.6cm, minimum height=1.2cm, align=center] (btb) at (0,0.6) {BTB\\{\tiny tag | target | type}\\{\tiny LRU, 1--4K entries}};
+\node[draw, fill=orange!16, minimum width=2.2cm, minimum height=0.8cm, align=center] (pred) at (4.5,0.6) {Dir. Predictor\\{\tiny 2-bit / TAGE}};
+\node[draw, fill=red!12, minimum width=2.2cm, minimum height=0.8cm, align=center] (ras) at (4.5,2.0) {RAS\\{\tiny return stack}};
+\node[draw, fill=violet!12, minimum width=1.8cm, minimum height=0.8cm] (mux) at (0,-0.9) {Next PC mux};
+\draw[-{Stealth}, thick, blue!60!black] (pc) -- (btb.north);
+\draw[-{Stealth}, thick, gray] (pc.east) -| (pred.north);
+\draw[-{Stealth}, thick, violet!70!black] (btb.east) -- (mux.north |- btb.east) node[midway, above, font=\tiny] {target};
+\draw[-{Stealth}, thick, orange!70!black] (pred.west) -- (btb.east |- pred.west) node[midway, above, font=\tiny] {T/NT};
+\draw[-{Stealth}, thick, red!60!black] (ras.south) -- (pred.north);
+\node[right=0.3cm of mux, font=\tiny, text=gray!60!black] {PC+4 / BTB / RAS};
+\draw[-{Stealth}, thick, green!50!black] (mux.east) -- ++(0.8,0) |- (pc.east);
+\end{tikzpicture}
+\end{center}
+
+Indirect branches (\texttt{JALR}, virtual calls, switches) have varying targets. The \textbf{Return Address Stack (RAS)} is a small hardware stack (8--32 entries) pushed on \texttt{CALL} and popped on \texttt{RET}, predicting returns with near-perfect accuracy. Indirect target predictors and Branch Target Address Caches (BTAC) handle the rest.
+
+On a BTB hit and predicted taken, fetch redirects in the next cycle; on a miss, the branch is initially treated as not-taken (or target is computed after decode) costing one extra cycle even if direction was correct. BTB organisation matters: direct-mapped is small and fast but aliases; 2--4-way set-associative with LRU improves hit rate at the cost of parallel tag compares. Some cores fold the BTB into the L1 I-cache (branch decoded from predecode bits attached to each cache line) to save a separate array.
+
+Fetch bandwidth for superscalar width $w$ needs contiguous bytes. A taken branch in the middle of a fetch block wastes the tail, and a branch that spans a cache-line boundary may need two I-cache accesses. The instruction queue between fetch and decode smooths bubbles from BTB misses and from taken branches that were not predicted.
+
+\begin{center}
+\begin{tabular}{lcp{6.5cm}}
+\toprule Case & Next PC & Cost if predicted correctly \\ \midrule
+Hit, predicted taken & BTB target & 0 cycles (fetch continues) \\
+Hit, predicted not-taken & PC + block & 0 cycles \\
+Miss, actually taken & target after decode & 1--2 cycles redirect \\
+Miss, actually not-taken & PC+4 & 0 cycles (lucky) \\
+RAS hit for \texttt{RET} & RAS top & 0 cycles; miss stalls BTB path \\ \bottomrule
+\end{tabular}
+\end{center}
+
+\section{Speculative Execution and Recovery}
+A predicted branch is \textit{speculative}: fetch, decode, rename and even execute instructions from the predicted path, but do not commit architectural state until the branch resolves. The ROB holds speculative results; a mispredict flushes all younger ROB entries, restores the RAT via checkpoints or a reorder stack, and redirects fetch. The deeper the speculation, the larger the flush penalty but also the larger the window for ILP.
+
+\begin{lstlisting}[language=Python, caption={2-bit predictor simulation (per branch)}, label={lst:bimodal}]
+state = 2  # 0 SN, 1 WN, 2 WT, 3 ST
+def predict(): return state >= 2   # taken if WT or ST
+def update(taken):
+    global state
+    if taken: state = min(3, state+1)
+    else:     state = max(0, state-1)
+# Loop: T,T,T,N repeats -> 1 mispredict per iteration
+for taken in [True,True,True,False]*10:
+    pred = predict()
+    # mispredict = pred != taken
+    update(taken)
+\end{lstlisting}
+
+\textbf{Precise exceptions with speculation}: exceptions are also deferred to commit, so a speculative instruction that page-faults down a wrong path never raises the fault if it is flushed. Meltdown/Spectre showed that microarchitectural side effects (caches, port contention) before the flush can leak speculative data, motivating speculation barriers, invisible speculation, and partitioning.
+
+\subsection{Speculative Pipeline and Flush Cost}
+In fetch, the predictor steers the next PC; decoded instructions carry a speculation tag and a snapshot of the RAT. When the branch resolves in EX (or later for complex branches), the tag is checked:
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=blue!14, minimum width=1.6cm, minimum height=0.75cm] (f) at (0,0) {Fetch + Predict};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.75cm, align=center] (d) at (3.2,0) {Decode/Rename\\{\tiny checkpoint RAT}};
+\node[draw, fill=orange!16, minimum width=2.0cm, minimum height=0.75cm] (rob) at (6.4,0) {ROB (speculative)};
+\node[draw, fill=red!14, minimum width=1.6cm, minimum height=0.75cm] (ex) at (6.4,-1.6) {Branch EX};
+\node[draw, fill=violet!14, minimum width=1.6cm, minimum height=0.75cm] (c) at (9.6,0) {Commit};
+\draw[-{Stealth}, thick, blue!60!black] (f) -- (d) node[midway, above, font=\tiny] {predicted PC};
+\draw[-{Stealth}, thick, green!50!black] (d) -- (rob);
+\draw[-{Stealth}, thick, orange!70!black] (rob) -- (ex) node[midway, right, font=\tiny] {resolve};
+\draw[-{Stealth}, thick, green!60!black] (rob) -- (c) node[midway, above, font=\tiny] {in-order};
+\draw[-{Stealth}, thick, red!60!black, dashed] (ex.west) -- ++(-1.4,0) |- (d.south) node[pos=0.25, below, font=\tiny] {mispredict: flush + restore RAT};
+\node[below=0.4cm of f, font=\tiny, text=gray!60!black] {BTB+dir};
+\node[below=0.4cm of c, font=\tiny, text=gray!60!black] {only non-spec};
+\end{tikzpicture}
+\end{center}
+
+Flush cost $c$ equals the number of stages between predict and resolve plus any ROB drain. With early resolve in ID, $c\approx1$--$2$ (classic 5-stage); with OOO and late resolve, $c\approx10$--$15$. Deeper speculation increases both the benefit (larger window) and the mispredict penalty.
+
+Checkpoints avoid copying the whole RAT: on each branch a copy of RAT mappings and a ROB tail pointer are saved; on flush the checkpoint is restored in one cycle. Without checkpointing recovery would need to walk the ROB to undo mappings serially.
+
+\subsection{History-Based Correlation}
+A global history register (GHR) of the last $h$ taken/not-taken bits captures correlation: \texttt{if(a) \dots; if(b) \dots} where $b$ depends on $a$'s path. Gshare xors PC with GHR to choose a counter, so the same branch sees different counters for different path histories. TAGE takes this further: tables $T_0$ (history 0), $T_1$ (history 4), $T_2$ (history 10), $T_3$ (history 25) each tagged; the longest matching tagged entry predicts. TAGE's geometric history gives both fast warm-up (short history) and long correlation capture.
+
+\begin{lstlisting}[language=Python, caption={Gshare index and BTB lookup (sketch)}, label={lst:gshare}]
+GHR = 0  # h=8 bits
+PHT = [2]*1024  # 2-bit counters, init weakly taken
+BTB = {}  # pc -> target
+def gshare_predict(pc):
+    idx = (pc ^ GHR) & 0x3FF
+    return PHT[idx] >= 2
+def fetch(pc):
+    if pc in BTB and gshare_predict(pc):
+        return BTB[pc]  # predicted taken target
+    return pc + 4
+def update(pc, taken, target):
+    idx = (pc ^ GHR) & 0x3FF
+    PHT[idx] = min(3, PHT[idx]+1) if taken else max(0, PHT[idx]-1)
+    if taken: BTB[pc] = target
+    GHR = ((GHR << 1) | int(taken)) & 0xFF
+\end{lstlisting}
+
+\subsection{Predictor Accuracy Landscape}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule Predictor & Storage & Accuracy (SPECint) & Warm-up \\ \midrule
+Always not-taken & 0 & $ \approx 55\%$ & none \\
+Bimodal 4K$\times$2b & 1\,KB & $90$--$93\%$ & 100s branches \\
+Gshare 8K$\times$2b, $h=12$ & 2\,KB & $93$--$95\%$ & 1000s \\
+Tournament 2-level & 4--8\,KB & $94$--$96\%$ & longer \\
+TAGE 32\,KB & 32\,KB & $96$--$97.5\%$ & thousands \\ \bottomrule
+\end{tabular}
+\end{center}
+Accuracy numbers shift with workload: loops are easy, indirect branches and data-dependent conditions are hard. Hybrid predictors win on average because different branches favour different history lengths.
+
+\section{Performance: Putting Numbers Together}
+Let $b$ be branch frequency, $p$ accuracy, $c$ flush cost. Then stall cycles per instruction $\approx b(1-p)c$. Example: $b=0.18$, $p=0.95$, $c=12$ (deep OOO) $\Rightarrow$ $0.108$ CPI overhead. At $p=0.85$ overhead doubles to $0.32$. Every $1\%$ accuracy is $\approx 0.02$ CPI on this model. BTB miss adds $\approx 1$ cycle even when direction is correct because the target is unknown.
+
+On a 3.5\,GHz OOO core, a 12-cycle flush is $\approx 3.4$\,ns of wasted fetch bandwidth ($\approx 40$ instructions of width 4 flushed). Cutting $c$ by early branch resolution (branch predictor + fast ALU) is as valuable as raising $p$, which is why Branch ALUs are placed early in the pipeline and why BTB and instruction prefetch are tightly integrated.
+
+\subsection{Window and Frontend Interaction}
+A large ROB (e.g., 224 entries) can hide a 14-cycle mispredict if the predictor is accurate enough: the window refills after the redirect before the oldest flushed instructions would have committed. If the predictor is weak, the window fills with wrong-path instructions that are then flushed, wasting energy and polluting caches. That is why predictor accuracy and ROB size are co-optimised: doubling ROB without improving $p$ yields little gain on branchy code. Loop unrolling and if-conversion (replacing a hard-to-predict branch with predicated moves) reduce $b$, which helps regardless of $p$.
+
+\section{Key Takeaways}
+Control stalls dominate deep pipelines, so prediction is performance-critical. The 2-bit counter already captures hysteresis; gshare and TAGE add correlation and history length adaptation. BTB/RAS deliver the target; speculation executes ahead and uses ROB+RAT checkpoints to recover precisely on a mispredict. Accuracy and flush cost jointly set the control component of CPI.
+
+\textit{Bridge}: prediction hides control stalls, but the memory system still stalls the pipeline on every L1 miss. Chapter~4 adds coherence so multiple cores can share memory without stalling on every sharing miss, while keeping the programmer's view of memory sane.
+
+% SC3050 ch03 branch prediction complete.
+
+\section{Exercises}
+\begin{exercise}Loop with 100 iterations (branch taken 99$\times$, not taken once, then next loop). Compare 1-bit vs.\ 2-bit bimodal total mispredicts over 3 consecutive runs. Explain the extra mispredict in the 1-bit case.\end{exercise}
+\begin{exercise}For a predictor with 1024 2-bit counters indexed by PC[11:2] (no tag), two branches at 0x1000 and 0x5000 alias to the same entry. Construct an interleaved execution order where they interfere and estimate extra mispredicts. How does gshare or a tagged table reduce aliasing?\end{exercise}
+\begin{exercise}BTB has 512 entries, direct-mapped, $b=0.20$, BTB miss rate $8\%$, miss costs 3 cycles (use target after decode) versus 1 cycle on hit with correct prediction. Compute extra CPI due to BTB misses. If a RAS handles $12\%$ of branches (calls/returns) at $99\%$ accuracy, recalc.\end{exercise}
+\begin{exercise}Pipeline depth 16, mispredict penalty = depth-2 cycles. Branch frequency $22\%$, predictor P1 $90\%$ vs.\ P2 $96\%$. Compute CPI control overhead for each and the speedup of P2 over P1. Relate to wall-clock for a 3\,GHz core.\end{exercise}
+\begin{exercise}Spectre v1: a speculative load down the wrong path brings a secret-dependent line into cache; later a probe leaks it even after the flush. Describe which structures must be partitioned or rolled back (BTB, caches, TLBs, port contention) to close the channel and the performance cost of each fix.\end{exercise}

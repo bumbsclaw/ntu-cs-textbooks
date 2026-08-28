@@ -1,0 +1,200 @@
+\chapter{Superscalar, Out-of-Order and Tomasulo}\label{ch:superscalar}
+\begin{center}\small\textit{One per cycle is not the ceiling: fetch more, execute when ready, and commit in order.}\end{center}
+
+\section{Why Go Wider and Out-of-Order?}
+An in-order 5-stage pipeline tops out at IPC $=1$ (instructions per cycle). Real programs have parallel work, but hazards force stalls. Two ideas raise throughput: (1) \textbf{superscalar} --- fetch, decode and execute $w$ instructions per cycle ($w=2$--$8$ in 2026 cores), and (2) \textbf{out-of-order execution} --- let a ready instruction overtake a stalled one, then restore program order at commit.
+
+Wider without OOO wastes slots: a cache miss or RAW stalls the whole bundle. OOO without width leaves execution units idle. Together they exploit instruction-level parallelism (ILP) limited only by true data dependences (RAW); WAR and WAW are name dependences removable by renaming.
+
+\section{Superscalar Organisation}
+A $w$-way superscalar duplicates decode logic and has multiple functional units (e.g., 2 ALU, 1 load/store, 1 branch, 1 FP). In each cycle up to $w$ instructions are fetched (needs wide I-cache and branch prediction), decoded, checked for dependences, and issued if operands and units are available.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.86]
+\node[draw, fill=blue!14, minimum width=1.6cm, minimum height=0.8cm] (fetch) at (0,2.0) {Fetch $w$};
+\node[draw, fill=green!14, minimum width=1.6cm, minimum height=0.8cm] (dec) at (0,0.9) {Decode \& Rename};
+\node[draw, fill=orange!16, minimum width=1.6cm, minimum height=0.8cm] (issue) at (0,-0.2) {Issue Queue};
+\node[draw, fill=red!14, minimum width=1.5cm, minimum height=0.7cm] (alu0) at (-1.4,-1.5) {ALU0};
+\node[draw, fill=red!12, minimum width=1.5cm, minimum height=0.7cm] (alu1) at (1.4,-1.5) {ALU1};
+\node[draw, fill=violet!12, minimum width=1.5cm, minimum height=0.7cm] (lsu) at (-1.4,-2.5) {LSU};
+\node[draw, fill=yellow!14, minimum width=1.5cm, minimum height=0.7cm] (bru) at (1.4,-2.5) {BRU};
+\node[draw, fill=blue!10, minimum width=3.2cm, minimum height=0.7cm] (rob) at (0,-3.6) {Reorder Buffer (commit in order)};
+\draw[-{Stealth}, thick, blue!60!black] (fetch) -- (dec);
+\draw[-{Stealth}, thick, blue!60!black] (dec) -- (issue);
+\draw[-{Stealth}, thick, orange!70!black] (issue) -- (alu0.north);
+\draw[-{Stealth}, thick, orange!70!black] (issue) -- (alu1.north);
+\draw[-{Stealth}, thick, orange!70!black] (issue) -- (lsu.north);
+\draw[-{Stealth}, thick, orange!70!black] (issue) -- (bru.north);
+\draw[-{Stealth}, thick, green!50!black] (alu0.south) |- (rob.north);
+\draw[-{Stealth}, thick, green!50!black] (alu1.south) |- (rob.north);
+\draw[-{Stealth}, thick, green!50!black] (lsu.south) |- (rob.north);
+\node[right=0.4cm of issue, font=\tiny, text=gray!60!black] {out-of-order};
+\node[right=0.4cm of rob, font=\tiny, text=gray!60!black] {in-order};
+\end{tikzpicture}
+\end{center}
+
+Key hazards at width: data dependences within the bundle (need bypass within the group), structural misses (not enough ALUs), and control (one taken branch per group limits fetch). Issue logic must wake and select among ready instructions each cycle; selection priority affects performance but not correctness.
+
+Typical server mix at width 4: two integer ALUs, one FP/vector, one branch, two load/store ports (one for address generation). Compiler and predictor must supply enough independent instructions; otherwise issue slots waste as \texttt{nop}. Fetch alignment matters: a taken branch in the middle of a 16-byte fetch block discards the tail, and an unaligned $w$-wide fetch may cross two I-cache lines.
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule Resource & Count at $w=4$ & Request per cycle (typical) & Stall if exceeded \\ \midrule
+Integer ALU & 2 & 1.2 & structural \\
+Load/store ports & 2 (1 AGU) & 0.8 & address queue backs up \\
+Branch unit & 1 & 0.2 & fetch caps at one taken \\ \bottomrule
+\end{tabular}
+\end{center}
+
+\section{Register Renaming Removes False Dependences}
+WAR and WAW arise only because ISA registers are reused. Renaming maps each write to a fresh physical register; later readers get the latest mapping. Example:
+\begin{lstlisting}[language={[x86masm]Assembler}, caption={Renaming eliminates WAR/WAW}, label={lst:rename}]
+# ISA registers (before)          # after renaming (physical p)
+ADD  x1, x2, x3     # x1=W      -> ADD  p10, p2, p3
+SUB  x1, x4, x5     # WAW on x1 -> SUB  p11, p4, p5  (no conflict with p10)
+LW   x6, 0(x1)      # WAR on x1 -> LW   p12, 0(p11)  (uses new p11)
+ADD  x7, x1, x6                  -> ADD  p13, p11, p12
+\end{lstlisting}
+A Register Alias Table (RAT) holds the current ISA$\to$physical mapping; a free list supplies new physical registers on each rename. Reclamation happens at commit. With enough physical registers, only RAW remains.
+
+\begin{definition}[Precise state]
+Precise exceptions require that when an instruction traps, all earlier instructions have committed and no later instruction has changed architectural state. OOO hardware achieves this by committing in order via the ROB, discarding speculative results on a trap.
+\end{definition}
+
+Without renaming, even a tiny loop \texttt{for(i) a[i]=b[i]+c} would serialize on reuse of temporaries. Renaming lets successive iterations overlap in the window, which is why unrolling is less critical on OOO than on in-order VLIW. The number of physical registers (e.g., 128 integers + 128 FP in a modern core) directly bounds how far ahead the window can see.
+
+\section{Tomasulo's Algorithm}
+Robert Tomasulo (IBM 360/91, 1967) invented the first OOO scheme that also handles renaming implicitly via reservation stations (RS) and a Common Data Bus (CDB).
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.84]
+\node[draw, fill=blue!14, minimum width=1.8cm, minimum height=0.8cm, rounded corners] (iq) at (0,2.2) {Instruction Queue};
+\node[draw, fill=green!14, minimum width=2.0cm, minimum height=1.2cm, align=center] (rs) at (0,0.8) {Reservation\\Stations\\{\tiny (with tags + values)}};
+\node[draw, fill=orange!16, minimum width=1.4cm, minimum height=0.7cm] (aluT) at (-1.6,-0.7) {ALU};
+\node[draw, fill=red!14, minimum width=1.4cm, minimum height=0.7cm] (memT) at (1.6,-0.7) {MEM};
+\node[draw, fill=violet!14, minimum width=2.2cm, minimum height=0.6cm] (cdb) at (0,-1.8) {Common Data Bus (CDB)};
+\node[draw, fill=yellow!15, minimum width=2.0cm, minimum height=0.7cm] (rf2) at (0,-2.9) {Register File + RAT};
+\node[draw, fill=gray!16, minimum width=2.0cm, minimum height=0.7cm] (rob2) at (4.5,0.8) {ROB / Commit};
+\draw[-{Stealth}, thick, blue!60!black] (iq) -- (rs) node[midway, right, font=\tiny] {issue if RS free};
+\draw[-{Stealth}, thick, green!50!black] (rs) -- (aluT.north);
+\draw[-{Stealth}, thick, green!50!black] (rs) -- (memT.north);
+\draw[-{Stealth}, thick, red!60!black] (aluT.south) -- (cdb.north |- aluT.south);
+\draw[-{Stealth}, thick, red!60!black] (memT.south) -- (cdb.north |- memT.south);
+\draw[-{Stealth}, thick, violet!70!black] (cdb.west) -| (rs.south) node[pos=0.75, left, font=\tiny] {broadcast tag};
+\draw[-{Stealth}, thick, violet!70!black] (cdb.west) -| (rf2.north);
+\draw[{Stealth}-{Stealth}, thick, gray] (rs.east) -- (rob2.west) node[midway, above, font=\tiny] {allocate/complete};
+\end{tikzpicture}
+\end{center}
+
+Each RS entry holds: busy, opcode, $V_j$/$V_k$ (values) or $Q_j$/$Q_k$ (tags of producers), destination tag, and address/immediate. Issue stalls if no RS is free. An instruction waits in RS until both operands are ready (either present at issue or arriving via CDB). It then executes, broadcasts its result and tag on the CDB, and every waiting RS and the RAT snoops the CDB to capture the value and clear its tag. Later, the ROB retires results in program order.
+
+\begin{lstlisting}[language=Python, caption={Tomasulo wake-up and select (simplified)}, label={lst:tomasulo}]
+# Each cycle:
+for rs in reservation_stations:
+    if rs.Qj == completed_tag: rs.Vj, rs.Qj = CDB.value, None
+    if rs.Qk == completed_tag: rs.Vk, rs.Qk = CDB.value, None
+# select ready
+ready = [rs for rs in RS if rs.busy and rs.Qj is None and rs.Qk is None]
+if ready: execute(choose_oldest(ready))  # priority by age
+# CDB broadcast (one per cycle in classic design)
+broadcast(tag, value)  # all RS + RAT update
+\end{lstlisting}
+
+Modern cores generalise Tomasulo: separate issue queues per functional unit, multiple CDBs/bypass networks, and a physical register file with the RAT. The ROB (or retirement register file) integrates speculation support.
+
+\section{Reservation Station Fields and Lifecycle}
+Each RS entry is a tiny dataflow node:
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule Field & Meaning \\ \midrule
+\texttt{Busy} & entry in use \\
+\texttt{Op} & operation (ADD, MUL, LD, \dots) \\
+\texttt{Vj, Vk} & operand values when ready \\
+\texttt{Qj, Qk} & tags of producers when not ready (0 $\Rightarrow$ ready) \\
+\texttt{Dest} & tag for this result (ROB index or physical register) \\
+\texttt{A} & immediate / address offset \\ \bottomrule
+\end{tabular}
+\end{center}
+
+Lifecycle: \textbf{Issue}: allocate RS+ROB, read RAT for sources (if RAT maps to a pending tag, copy tag to Q; otherwise copy value to V), write destination tag into RAT. \textbf{Wait}: snoop CDB; when Q matches broadcast tag, latch value and clear Q. \textbf{Execute}: when Qj=Qk=0 and FU free, launch. \textbf{Write-back}: broadcast Dest tag + result on CDB; RS marked free but ROB entry holds result until commit. \textbf{Commit}: in-order, copy ROB result to architectural state (or mark physical register as committed) and free the old physical mapping.
+
+The ROB decouples OOO execution from in-order commit and provides buffering for precise exception recovery: on a mispredict or exception, ROB entries after the fault are flushed, RAT is rolled back via a checkpoint, and RS entries are cleared.
+
+\section{Superscalar Hazards in a Bundle}
+Within one $w$-wide fetch group, RAW can be intra-bundle. Example $w=2$:
+\begin{center}
+\begin{tabular}{clp{6.2cm}}
+\toprule Slot 0 & Slot 1 & Issue? \\ \midrule
+\texttt{ADD x1,x2,x3} & \texttt{ADD x4,x1,x5} & RAW intra-bundle: second needs forwarding from first within same cycle or must issue next cycle \\
+\texttt{LW x1,0(x2)} & \texttt{ADD x3,x1,x4} & load-use even stricter: 1-cycle bubble even across bundles \\
+\texttt{ADD x1,x2,x3} & \texttt{MUL x6,x7,x8} & no dependence: dual issue OK if FU available \\ \bottomrule
+\end{tabular}
+\end{center}
+Complexity of dependence checking grows as $O(w^2)$; that is why $w$ beyond 6--8 gives diminishing returns relative to power and bypass network cost. Compilers help by scheduling independent instructions together.
+
+\section{Memory Disambiguation and LSQ}
+Loads and stores must respect memory order. A Load-Store Queue (LSQ) tracks addresses: a load may bypass an earlier store only if addresses are known distinct; otherwise it waits. Store-to-load forwarding allows a load to take its value directly from an earlier store in the LSQ before the store reaches cache.
+
+The LSQ is itself a reservation-station-like structure split into a load queue and store queue. Stores sit in the store queue until commit, then write to cache; loads can execute speculatively and may be replayed if a later-resolved store is found to alias. Memory dependence prediction (store sets) learns which loads tend to collide with which stores to avoid replays.
+
+\section{Performance and ILP Limits}
+Ideal ILP is limited by RAW chains. A classic estimate: IPC $\le w$ but also $\le 1/\text{average dependence distance}$ and $\le \text{FU count}$. Loops with cross-iteration dependences (\texttt{x[i]=x[i-1]+c}) expose little ILP; unrolling or vectorisation helps. Real cores sustain IPC $\approx 1.5$--$3.5$ on integer code, $2$--$4$ on FP, far below $w$ because of branches and cache misses. Larger ROBs (224 entries in Apple M2, 512 in Intel Golden Cove) cover more miss latency and expose more ILP at the cost of power and wake-up selection complexity ($O(n^2)$ wake-up).
+
+\section{Scoreboard versus Tomasulo, and Modern Hybrids}
+The CDC 6600 \textit{scoreboard} centralises hazard detection: issue stalls when WAR or WAW would occur, operands are read from the register file when available, and forwarding is explicit. Tomasulo distributes waiting into RS entries and uses tags to wait for data wherever it is produced, implicitly renaming registers so WAR/WAW never stall issue (only RAW and structural do). The price is associative wake-up and the CDB broadcast network. Modern cores use a hybrid: a physical register file with explicit RAT (like classic renaming) plus per-FU issue queues that behave like distributed RS. The key invariant remains: any instruction whose sources are ready may execute, regardless of program order, as long as commit is in order.
+
+\section{Putting It Together: OOO Pipeline Stages}
+Fetch $\to$ Decode $\to$ Rename $\to$ Dispatch (allocate RS+ROB) $\to$ Issue (out-of-order) $\to$ Execute $\to$ Write-back (CDB) $\to$ Commit (in-order). Only issue and write-back are OOO; fetch/decode/rename/commit remain in order to maintain precise state. IPC $=w \times \text{utilisation}$; utilisation depends on ILP, predictor accuracy and memory latency.
+
+The front end (fetch/decode/rename) must deliver $w$ instructions per cycle to keep the back end fed. A single mispredicted branch can empty the front end for 10--20 cycles in a deep pipeline, which is why branch prediction (Ch.~3) and a large instruction window (ROB+RS) are co-designed: bigger windows tolerate longer front-end stalls and longer memory latencies.
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, scale=0.86]
+\node[draw, fill=blue!12, minimum width=1.2cm, minimum height=0.6cm] (f) at (0,0) {F};
+\node[draw, fill=green!12, minimum width=1.2cm, minimum height=0.6cm] (d) at (1.6,0) {D/R};
+\node[draw, fill=orange!16, minimum width=1.2cm, minimum height=0.6cm] (s) at (3.2,0) {I*};
+\node[draw, fill=red!12, minimum width=1.2cm, minimum height=0.6cm] (e) at (4.8,0) {E};
+\node[draw, fill=violet!12, minimum width=1.2cm, minimum height=0.6cm] (w) at (6.4,0) {WB*};
+\node[draw, fill=gray!18, minimum width=1.2cm, minimum height=0.6cm] (c) at (8.0,0) {C};
+\foreach \a/\b in {f/d, d/s, s/e, e/w, w/c} {\draw[-{Stealth}, thick, blue!50!black] (\a) -- (\b);}
+\node[above=0.4cm of s, font=\tiny, text=orange!70!black] {OOO};
+\node[above=0.4cm of w, font=\tiny, text=orange!70!black] {OOO};
+\node[below=0.4cm of d, font=\tiny, text=gray!60!black] {in-order};
+\node[below=0.4cm of c, font=\tiny, text=gray!60!black] {in-order};
+\end{tikzpicture}
+\end{center}
+
+\begin{remark}[Design intuition]
+Width is about how many you fetch; window size (ROB+RS+LSQ) is about how far you can look ahead. Performance is often window-limited before it is width-limited, especially on cache misses. Balancing the two under a power budget defines a microarchitecture generation.
+\end{remark}
+
+\section{Walk-Through: OOO Hides a Cache Miss}
+Consider: \texttt{LW x1,0(x2)} misses (10 cycles), \texttt{ADD x3,x4,x5} and \texttt{SUB x6,x7,x8} are independent, \texttt{ADD x9,x1,x10} needs the load. In-order stalls all after the LW for 10 cycles. OOO renames, dispatches all four, executes the two independent ALU ops while the load waits, and only the final ADD waits for the load's CDB broadcast. IPC $\approx 3/12\approx0.25$ in-order versus $\approx 3/11\approx0.27$? Actually the hide is small here; with a 64-entry window and many independent instructions the miss is fully hidden and IPC approaches width. This is why large windows matter for memory-bound code.
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule Cycle & In-order & & OOO & Hidden? \\ \midrule
+1 & LW (miss) & & LW / ADD / SUB dispatched & --- \\
+2--10 & stall & & ADD, SUB complete on CDB & yes \\
+11 & ADD x9 waits & & ADD x9 wakes and issues & --- \\ \bottomrule
+\end{tabular}
+\end{center}
+
+The same mechanism also tolerates branch mispredicts when combined with speculation (Ch.~3): instructions after a predicted branch enter the ROB speculatively and are flushed on mispredict, wasting window slots but not correctness.
+
+\section{Key Takeaways}
+Superscalar provides width; OOO fills it by executing the next ready instruction. Renaming removes WAR/WAW so only RAW constrains scheduling. Tomasulo's RS+CDB is the archetype: distributed waiting, tag-based dataflow, and in-order commit for precision. Modern cores scale this with larger ROBs (200--500 entries), deeper LSQs, and aggressive memory speculation.
+
+\textit{Forward link}: width and OOO still stall on branches. Without predicting the next fetch address correctly, even a 4-wide OOO window empties. Chapter~3 adds the predictor, BTB, and speculation support that keep it full.
+
+% This chapter covered superscalar issue, renaming, Tomasulo RS/CDB and LSQ.
+% End of chapter 2 material.
+% SC3050 ch02 complete.
+
+\section{Exercises}
+\begin{exercise}Sequence \texttt{MUL x1,x2,x3}; \texttt{ADD x4,x1,x5}; \texttt{SUB x6,x1,x7}; \texttt{ADD x1,x8,x9}.\\ Identify RAW/WAR/WAW. Show how renaming to physical registers removes WAR/WAW and draw the dataflow graph of true dependences.\end{exercise}
+\begin{exercise}For a 2-way superscalar with one ALU and one LSU, schedule \texttt{LW x5,0(x1)}; \texttt{ADD x6,x5,x2}; \texttt{SUB x7,x8,x9}; \texttt{SW x7,4(x1)} for minimal cycles. Identify structural and data stalls and show which cycle each instruction issues and completes if OOO is allowed.\end{exercise}
+\begin{exercise}Tomasulo RS has two entries; instructions need tags T1 (MUL, 4 cycles) and T2 (ADD, 1 cycle). ADD depends on T1. Trace RS state cycle by cycle from issue through CDB broadcast, showing Qj/Qk, Vj/Vk and when ADD wakes. Why does ADD wait even though its RS is allocated early?\end{exercise}
+\begin{exercise}Explain why a single CDB becomes a bottleneck at width $>2$. How do multiple CDBs or a bypass network help, and what new hazard arises for RS wake-up if two producers complete in the same cycle targeting the same consumer operand?\end{exercise}
+\begin{exercise}A loop body has 6 independent ALU ops and 2 independent loads (all distinct addresses). With width 4 and infinite RS/ROB, estimate steady-state IPC. What limits it: width, dependences, or memory? How does LSQ disambiguation affect load issue?\end{exercise}

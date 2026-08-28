@@ -1,0 +1,201 @@
+\chapter{Advanced Memory: Coherence and Consistency}\label{ch:memory-advanced}
+\begin{center}\small\textit{Many caches, one memory: keep them coherent without strangling performance, and define what ``correct'' sharing means.}\end{center}
+
+\section{Why Coherence Matters}
+A chip has multiple cores, each with private L1/L2 caches sharing an address space. Without intervention, two cores can hold different values for the same address, violating the programmer's expectation of a single memory. \textbf{Coherence} ensures all cores eventually agree on each location's value; \textbf{consistency} defines when different locations' updates become visible and in what order.
+
+Example failure without coherence:
+\begin{center}\begin{tabular}{lcc}
+\toprule Step & Core 0 & Core 1 \\ \midrule
+0 & \texttt{x}=0 in DRAM, both caches empty & \\
+1 & write \texttt{x=1}, hits L1 & reads \texttt{x} $\to$ 0 from DRAM (stale) \\
+2 & evicts dirty line later & still holds stale 0 \\ \bottomrule
+\end{tabular}\end{center}
+Coherence protocols track who has a copy and who may write; consistency models restrict how cores may reorder loads and stores.
+
+\section{Coherence Properties}
+For a single address $A$, coherence enforces: (1) write propagation (a write eventually visible to all), (2) write serialization (all cores see writes to $A$ in the same order), and (3) read returns the latest serialized write (before any later write overwrites it). Mechanisms are \textbf{snooping} (bus broadcast, all caches listen) or \textbf{directory} (a home node tracks sharers and forwards requests).
+
+Write policy interacts: write-back caches keep dirty copies and must write back on eviction or when another core wants the data; write-through would simplify but costs bandwidth.
+
+\begin{center}
+\begin{tabular}{llp{7cm}}
+\toprule Message & Source & Effect \\ \midrule
+\texttt{BusRd} & cache on read miss & directory / snoop asks sharers; supplier provides data \\
+\texttt{BusRdX} & cache on write miss & read-exclusive + invalidate sharers \\
+\texttt{Invalidate} & writer in S$\to$M & sharers move S$\to$I, send Ack \\
+\texttt{Ack / Data} & sharer / memory & completes the transition, may supply dirty data \\ \bottomrule
+\end{tabular}
+\end{center}
+
+A cache miss stalls the core (or at least that load) until the coherence transaction completes. Modern cores allow hits under miss (non-blocking caches, MSHRs) so other accesses to different lines proceed, but dependences on the missing line still stall.
+
+\begin{definition}[Stable vs.\ transient states]
+Stable states are M/E/S/I as seen between transactions. Internally a line passes through transient states (e.g., \texttt{IS} waiting for data, \texttt{SM} waiting for acks) while messages are in flight. Verification must check that transient states never deadlock and that write serialization is preserved despite overlapping transactions.
+\end{definition}
+
+\section{MSI Protocol}
+The base three-state protocol attaches to each cache line one of: \textbf{M}odified (exclusive dirty, must write back), \textbf{S}hared (may be replicated, clean), \textbf{I}nvalid (no valid copy).
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.92, auto]
+\node[draw, fill=red!14, rounded corners, minimum width=1.8cm, minimum height=0.9cm] (I) at (0,0) {\textbf{I}};
+\node[draw, fill=green!14, rounded corners, minimum width=1.8cm, minimum height=0.9cm] (S) at (5,0) {\textbf{S}};
+\node[draw, fill=orange!16, rounded corners, minimum width=1.8cm, minimum height=0.9cm] (M) at (5,2.2) {\textbf{M}};
+\draw[-{Stealth}, thick, blue!60!black] (I) -- (S) node[midway, below, font=\tiny] {Rd miss, others have it};
+\draw[-{Stealth}, thick, blue!60!black, bend left] (I) to node[midway, right, font=\tiny] {Rd miss, no sharer} (M);
+\draw[-{Stealth}, thick, green!50!black] (S) -- (I) node[midway, right, font=\tiny] {Invalidate / evict};
+\draw[-{Stealth}, thick, violet!70!black] (S) -- (M) node[midway, right, font=\tiny] {Wr hit + invalidate};
+\draw[-{Stealth}, thick, red!60!black] (M) -- (I) node[midway, left, font=\tiny] {Wr miss / evict + writeback};
+\draw[-{Stealth}, thick, orange!70!black] (M) to[bend left=20] node[midway, above, font=\tiny] {Rd from other: supply + $\to$S} (S);
+\draw[-{Stealth}, thick, gray, loop left] (S) to node[left, font=\tiny] {Rd hit} (S);
+\draw[-{Stealth}, thick, gray, loop above] (M) to node[above, font=\tiny] {Rd/Wr hit} (M);
+\node[below=0.7cm of I, font=\tiny, align=center, text=gray!60!black] {Invalid: no copy\\must fetch};
+\end{tikzpicture}
+\end{center}
+
+Events from the core (Rd, Wr) and from the bus (BusRd, BusRdX, Invalidate) drive transitions. On a write miss (\texttt{Wr miss}) the cache issues \texttt{BusRdX} (read-exclusive), invalidates sharers, and enters M. On a read miss where another core holds M, that core supplies the data and both end in S (or the supplier writes back).
+
+MSI allows sharing for reads but a write requires invalidating all sharers first, costing bus traffic on every write to shared data.
+
+\subsection{MSI Walk-Through}
+Initial: DRAM x=0, both caches I.
+
+\begin{center}
+\begin{tabular}{cllccc}
+\toprule Step & Core action & Bus action & Core0 & Core1 & Data from \\ \midrule
+1 & C0 Rd x & BusRd & S & I & DRAM \\
+2 & C1 Rd x & BusRd & S & S & LLC / C0 \\
+3 & C0 Wr x=1 & BusRdX (invalidate) & M & I & --- \\
+4 & C1 Rd x & BusRd & S (downgrade, supply) & S & C0 cache-to-cache \\ \bottomrule
+\end{tabular}
+\end{center}
+At step 3 Core0 must collect ack from Core1 before completing; the store stalls in the store buffer until acks arrive. At step 4 Core0 supplies the dirty line and writes back; both end S with the new value. Repeating this with MESI would keep the line in E after step 1 (no sharer), so step 3 would be silent (E$\to$M, no BusRdX).
+
+\section{MESI: Adding Exclusive}
+MSI cannot distinguish ``shared clean with one copy'' from ``shared clean with many copies'': a core that brings a line from DRAM to an empty system still enters S and must issue an invalidate on its first write, even though no sharer exists. MESI adds \textbf{E}xclusive (clean, sole copy): a line fetched with no other sharer enters E and can be silently upgraded to M on a write without bus traffic.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.90, auto]
+\node[draw, fill=red!12, rounded corners, minimum width=1.6cm, minimum height=0.85cm] (I2) at (0,0) {I};
+\node[draw, fill=yellow!15, rounded corners, minimum width=1.6cm, minimum height=0.85cm] (E) at (3.0,0) {E};
+\node[draw, fill=green!14, rounded corners, minimum width=1.6cm, minimum height=0.85cm] (S2) at (6.0,0) {S};
+\node[draw, fill=orange!18, rounded corners, minimum width=1.6cm, minimum height=0.85cm] (M2) at (3.0,2.2) {M};
+\draw[-{Stealth}, thick, blue!60!black] (I2) -- (E) node[midway, below, font=\tiny] {Rd miss, no sharer};
+\draw[-{Stealth}, thick, blue!60!black] (I2) to[bend left=18] node[midway, above, font=\tiny] {Rd miss, sharer exists} (S2);
+\draw[-{Stealth}, thick, violet!70!black] (E) -- (S2) node[midway, below, font=\tiny] {BusRd from other};
+\draw[-{Stealth}, thick, green!60!black] (E) -- (M2) node[midway, left, font=\tiny] {Wr hit (silent)};
+\draw[-{Stealth}, thick, orange!70!black] (S2) -- (M2) node[midway, right, font=\tiny] {Wr hit + inval};
+\draw[-{Stealth}, thick, red!60!black] (S2) -- (I2) node[midway, below, font=\tiny] {Invalidate/evict};
+\draw[-{Stealth}, thick, red!60!black] (M2) -- (I2) node[midway, left, font=\tiny] {evict + wb / BusRdX};
+\draw[-{Stealth}, thick, gray, loop below] (S2) to node[below, font=\tiny] {Rd hit} (S2);
+\draw[-{Stealth}, thick, gray, loop above] (M2) to node[above, font=\tiny] {Rd/Wr hit} (M2);
+\end{tikzpicture}
+\end{center}
+
+E is the performance win: private data and stack lines stay in E/M without coherence traffic. Transitions: E$\to$S on snooped BusRd (now shared), E$\to$M on \texttt{Wr hit} silently (no invalidate needed), M$\to$I on eviction or when another core's \texttt{BusRdX} requests it (supply data and write back if needed).
+
+MOESI (Adds \textbf{O}wned: dirty but shared, supplier without writeback) and MESIF (Adds \textbf{F}orward: designated responder) further optimise sharing of dirty lines and reduce broadcasts on read misses to shared data. Directory protocols scale similarly but the directory replaces bus snooping with point-to-point messages.
+
+\section{Snooping versus Directory}
+Snooping broadcasts every coherence request on a bus or ring; every cache checks its tags. Simple but bandwidth-limited to $\approx 8$--$16$ cores. Directory keeps a per-line sharer vector at the home node (often LLC/ memory controller); requests go to the directory, which forwards only to sharers. Directory scales to hundreds of cores but adds an indirection hop and directory storage overhead.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, minimum width=1.8cm, minimum height=0.7cm] (c0) at (0,1.5) {Core 0 / L1};
+\node[draw, fill=green!14, minimum width=1.8cm, minimum height=0.7cm] (c1) at (4,1.5) {Core 1 / L1};
+\node[draw, fill=orange!16, minimum width=2.6cm, minimum height=0.8cm] (dir) at (2,0) {Directory / LLC};
+\node[draw, fill=gray!16, minimum width=1.8cm, minimum height=0.7cm] (mem) at (2,-1.2) {DRAM};
+\draw[{Stealth}-{Stealth}, thick, blue!60!black] (c0.south) -- (dir.north west) node[midway, left, font=\tiny] {request/forward};
+\draw[{Stealth}-{Stealth}, thick, green!60!black] (c1.south) -- (dir.north east);
+\draw[{Stealth}-{Stealth}, thick, gray] (dir.south) -- (mem.north);
+\node[right=0.4cm of c1, font=\tiny, text=gray!60!black] {snoop bus also shown as arrows via directory};
+\end{tikzpicture}
+\end{center}
+
+\section{False Sharing, Granularity and MOESI Extensions}
+Coherence acts on whole lines (64\,B). Two independent variables on the same line cause \textbf{false sharing}: cores ping-pong the line between M states even though they touch disjoint bytes. Example: \texttt{int cnt[2]} with \texttt{cnt[0]} on Core0 and \texttt{cnt[1]} on Core1 still bounces every write because the line is one coherence unit. Fixes: pad structures to line boundaries, align thread-local data, or use per-core partitioning.
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule Extension & Extra state & Meaning & When it helps \\ \midrule
+MOESI & O (Owned) & dirty but shared, owner supplies without writeback & producer--consumer sharing \\
+MESIF & F (Forward) & designated sharer to reply & many readers, one supplier \\
+MESI & E (Exclusive) & clean sole copy & private/stack data \\ \bottomrule
+\end{tabular}
+\end{center}
+
+Owned (MOESI, AMD) lets a dirty line be shared without writing back: the owner (O) supplies data on snooped reads and remembers to write back on eviction. Forward (MESIF, Intel) picks one sharer as responder so multiple S copies do not all try to respond. Neither changes correctness, only traffic. Directory with MOESI can keep O in the LLC and serve reads without going to the owning core's L1.
+
+Coherence granularity also affects bandwidth: a write to one byte still invalidates the whole line. Sector caches and write-combining buffers mitigate by merging multiple writes to the same line before issuing a single invalidate.
+
+\section{Coherence Performance}
+Misses to shared lines cost more than private misses: a read miss to an S line may be served from LLC ($\approx 10$\,ns) but a read miss needing data from another core's M line costs a cache-to-cache transfer ($\approx 20$--$40$\,ns plus coherence messages). Invalidations are on the critical path for writes to shared data: the store cannot commit until all sharers acknowledge invalidation, which the LSQ and write buffer must track. Large sharing (many sharers) therefore stalls the writer longer.
+
+A rule of thumb: minimise sharing, maximise private/E-state data, and align synchronisation variables (locks, flags) on their own lines away from payload data. Tools like false-sharing detectors sample coherence misses via performance counters (e.g., \texttt{MESI\_Snoop\_Hit}, \texttt{Offcore\_Response}) to guide padding.
+
+\section{Memory Consistency}
+Coherence says each location is serialized; consistency says how different locations' accesses interleave as seen by different cores. Consider initial \texttt{x=y=0}:
+
+\begin{lstlisting}[language={[x86masm]Assembler}, caption={Classic litmus test (store buffering)}, label={lst:litmus1}]
+# Core 0              # Core 1
+SW  x1, 0(a0) # x=1    SW  x1, 0(a1) # y=1
+LW  x2, 0(a1) # y=?    LW  x2, 0(a0) # x=?
+# Under SC, at least one load sees 1. Under x86-TSO or weaker, both may see 0.
+\end{lstlisting}
+
+\textbf{Sequential Consistency (SC)}: there exists a global interleaving of all cores' operations that respects each core's program order and where each load sees the latest store in that interleaving. Intuitive but expensive: it forbids most OOO and buffering optimisations.
+
+\textbf{Total Store Order (TSO, x86)}: loads may be reordered before earlier stores to different addresses (store buffer), but stores stay ordered with stores, loads with loads. The store-buffer litmus above is allowed to see (0,0); earlier litmus where both stores are seen is still forbidden.
+
+\textbf{Weak / release consistency (ARM, RISC-V) }: almost any reordering is allowed except when the programmer inserts fences. RISC-V RVWMO defines \texttt{FENCE}, \texttt{acquire} and \texttt{release} annotations: a release store makes prior accesses visible before it, an acquire load makes later accesses start after it. Data-race-free programs with proper synchronisation appear SC; racy code has no guarantee.
+
+\begin{lstlisting}[language={[x86masm]Assembler}, caption={Fences restore ordering in RISC-V}, label={lst:fence}]
+# Core 0: producer                    # Core 1: consumer
+SW  x1, 0(a0)      # data=1              LW  t0, 0(a1)  # flag ?
+FENCE  w, w                            FENCE  r, r
+SW  x1, 0(a1)      # flag=1              LW  t1, 0(a0)  # data
+# Without fences on weak model, consumer could see flag=1 but data=0.
+# FENCE w,w orders stores; FENCE r,r orders loads.
+\end{lstlisting}
+
+Fences flush or order store buffers and drain load queues; they cost tens of cycles, so place them only at synchronisation points. Compilers map C++ \texttt{std::atomic} with \texttt{memory\_order\_release/acquire} to exactly these fences.
+
+\subsection{What Each Model Allows to Reorder}
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule Reordering & SC & TSO & ARMv8 & RVWMO \\ \midrule
+Store $\to$ later Load (diff addr) & No & Yes (SB) & Yes & Yes \\
+Store $\to$ later Store & No & No & Yes* & Yes* \\
+Load $\to$ later Load & No & No & Yes* & Yes* \\
+Load $\to$ later Store & No & No & Yes* & Yes* \\ \bottomrule
+\end{tabular}
+\end{center}
+{\footnotesize *Allowed unless ordered by \texttt{FENCE} or \texttt{acquire/release} annotations. SC allows none; TSO only relaxes Store$\to$Load via store buffer; weak models relax all four.}
+
+The classic store-buffer allows core 0 to buffer \texttt{x=1} while loading \texttt{y} before the store is globally visible; both cores can then see (0,0). Under SC the store buffer must drain before the load, so at least one load sees 1. On RISC-V, a \texttt{FENCE RW,RW} between the store and load would restore SC for that pair. Acquire/release is lighter than a full fence: \texttt{AMOSWAP.aq} (acquire) orders later ops after it, \texttt{AMOSWAP.rl} (release) orders earlier ops before it, matching C++ atomics without a heavyweight \texttt{FENCE}.
+
+A second litmus is \textit{message passing}: \texttt{data=1; flag=1} on Core0, \texttt{if(flag) load data} on Core1. Without \texttt{FENCE W,W} after data and \texttt{FENCE R,R} before the data load, flag=1 does not imply data=1 on a weak model. With fences, or with \texttt{SW.rl flag} and \texttt{LW.aq flag}, the ordering is enforced.
+
+\section{Putting It Together: Coherence vs.\ Consistency}
+Coherence is per-location and enforced by MSI/MESI; consistency is cross-location and enforced by fences and store-buffer draining. A core with aggressive OOO may reorder a load past an earlier store (TSO-allowed) but must not reorder two stores to the same address (coherence violation). Modern cores speculate past fences and roll back on violation detection via the LSQ and coherence invalidations.
+
+Speculative coherence adds nuance: a core may speculatively read a line in S, but if another core invalidates it before the speculative load commits, the LSQ must detect the invalidation and replay. Store buffers also interact: a store sits in the buffer until its line is in M/E; only then does it become globally visible. Draining the buffer is the consistency action; invalidating sharers is the coherence action.
+
+\section{Key Takeaways}
+MSI is the minimal coherent protocol; MESI's Exclusive state eliminates unnecessary invalidates for private data. Snooping versus directory is a scalability trade-off. Coherence is necessary but not sufficient: the consistency model (SC/TSO/RVWMO) specifies which cross-address reorderings the hardware may perform. Programmers rely on synchronisation (locks, fences, acquire/release) to restore intuitive ordering where it matters, paying fence cost only on those paths.
+
+\begin{remark}[Checklist]
+For any litmus test, ask: (1) is coherence violated (per-location order)? (2) is consistency violated (cross-location order)? (3) would a fence or an \texttt{.aq/.rl} fix it, and at what cost? Answering all three is the exam pattern for \texttt{flag/data} and store-buffer tests.
+\end{remark}
+
+\textit{Next}: with coherence and consistency in hand, Chapter~5 extends the hierarchy to LLC, interconnect and real SoC implications.
+
+% SC3050 ch04 coherence and consistency complete.
+
+\section{Exercises}
+\begin{exercise}Two cores, line \texttt{A} initially I in both, DRAM=0. Trace MSI states cycle by cycle: Core0 Rd A, Core1 Rd A, Core0 Wr A, Core1 Rd A. List bus transactions (BusRd/BusRdX/invalidate), data supplier, and final states. Repeat for MESI and highlight where E avoids a transaction.\end{exercise}
+\begin{exercise}For a snooping bus, explain why a write to a line in S must broadcast an invalidate even under TSO. What would break if the invalidation were deferred to the store buffer drain? Give a litmus test where deferral violates coherence.\end{exercise}
+\begin{exercise}Store-buffer litmus from Listing~1: both cores see 0 under TSO but not under SC. Show a TSO execution with store buffers where both loads bypass their own buffered stores. Draw the global order that SC would require and why it cannot include (0,0).\end{exercise}
+\begin{exercise}RISC-V weak model: thread 0 does \texttt{SW data=1; FENCE w,w; SW flag=1}, thread 1 does \texttt{LW flag; FENCE r,r; LW data}. Prove that if thread 1 sees \texttt{flag=1} it must see \texttt{data=1}. What happens without the fences? Give an interleaving where \texttt{flag=1, data=0} is visible.\end{exercise}
+\begin{exercise}Directory vs.\ snooping: a 64-core chip runs a read-sharing workload (all cores read line \texttt{A} repeatedly). Compare bus traffic per read miss for snooping (broadcast to 63) vs.\ directory (ask directory, get data). Now consider a private-data workload (each core writes its own line). Which scales better and why does MESI E state matter more for private data?\end{exercise}

@@ -1,0 +1,212 @@
+\chapter{Natural Language for Requirements}\label{ch:requirements}
+\begin{center}\small\textit{Requirements are wishes written in human language --- beautiful, messy, and famously misunderstood. NLP helps us read them faithfully.}\end{center}
+
+\begin{quote}\small\textbf{From zero: no NLP or RE background assumed.} We start from ``what is a requirement?'' and build up ambiguity, classification, and traceability before any model or formula. Pictures first, then pipelines.\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{Learning Outcomes.} After this chapter you will be able to (1)~distinguish functional and non-functional requirements; (2)~name and detect ambiguity types; (3)~apply NLP steps to requirements text; (4)~formulate traceability as link recovery; (5)~evaluate an RE-NLP tool with precision/recall.}}
+\vspace{0.4em}
+
+% ============================================================
+\section{Intuition: Why Requirements Are Hard}\label{sec:req-intuition}
+Every project starts with language,
+\begin{quote}\small\emph{``The system shall allow premium users to export reports quickly.''}\end{quote}
+What does \emph{quickly} mean? Two seconds? Ten? Is ``export'' a download or an email? Who counts as \emph{premium}? One sentence smuggles three ambiguities.
+
+\textbf{Requirements Engineering (RE)} is the discipline of turning such wishes into verifiable statements. It has two halves: \textbf{elicitation} (finding out what stakeholders want) and \textbf{specification} (writing it so builders and testers agree on done). Between them lies natural language --- expressive enough for any wish, and vague enough to hide every misunderstanding until it becomes a bug.
+
+Classically we distinguish \textbf{functional requirements} (FR: what the system \emph{does} --- ``export as CSV'') from \textbf{non-functional requirements} (NFR: how well it does it --- ``in under 2\,s for 10k rows,'' security, usability, availability). NFRs are where language is vaguest and AI helps most.
+
+% ============================================================
+\section{Ambiguity: A Taxonomy You Can Act On}\label{sec:ambiguity}
+Not all ambiguity is the same; different types need different detectors.
+
+\begin{itemize}[leftmargin=1.2em, itemsep=0.35em]
+  \item \textbf{Lexical} --- a word has multiple senses. \emph{``The system shall process the order''} (purchase order? execution order?).
+  \item \textbf{Syntactic} --- grammar admits two parses. \emph{``Notify managers of users who failed login''} --- who failed?
+  \item \textbf{Semantic / scope} --- quantifiers and conditions are unclear. \emph{``All premium reports shall be exported''} (all reports belonging to premium users, or a report type called premium?).
+  \item \textbf{Pragmatic / vagueness} --- adjectives without thresholds. \emph{``Fast,'' ``user-friendly,'' ``sufficient.''}
+  \item \textbf{Referential} --- pronouns or definite descriptions lack a clear antecedent. \emph{``It shall be encrypted''} (what is \emph{it}?).
+\end{itemize}
+
+A classic remedy is boilerplates and controlled language (EARS: \emph{When \textless trigger\textgreater, the system shall \textless action\textgreater}). NLP detectors can flag deviations from such templates and suggest a rewrite with explicit thresholds and actors.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.88]
+  \node[draw, fill=blue!10, rounded corners, minimum width=3.0cm, minimum height=0.85cm, align=center] (sent) at (0,0) {Requirement sentence\\{\tiny ``Export quickly''}};
+  \node[draw, fill=orange!14, rounded corners, minimum width=2.6cm, minimum height=0.85cm, align=center] (lex) at (4.2,1.2) {Lexical\\{\tiny quick = ?}};
+  \node[draw, fill=green!12, rounded corners, minimum width=2.6cm, minimum height=0.85cm, align=center] (syn) at (4.2,0) {Syntactic / scope\\{\tiny who does what?}};
+  \node[draw, fill=violet!12, rounded corners, minimum width=2.6cm, minimum height=0.85cm, align=center] (vag) at (4.2,-1.2) {Vagueness\\{\tiny no threshold}};
+  \node[draw, fill=red!10, rounded corners, minimum width=2.8cm, minimum height=0.85cm, align=center] (fix) at (8.2,0) {Suggested rewrite\\{\tiny ``in $<2$\,s for 10k rows''}};
+  \draw[->, thick, blue!60!black] (sent) -- (lex);
+  \draw[->, thick, blue!60!black] (sent) -- (syn);
+  \draw[->, thick, blue!60!black] (sent) -- (vag);
+  \draw[->, thick, green!50!black] (lex) -- (fix);
+  \draw[->, thick, green!50!black] (syn) -- (fix);
+  \draw[->, thick, violet!60!black] (vag) -- (fix);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (8.2,1.5) {Detector $\to$ measurable NFR};
+\end{tikzpicture}
+\end{center}
+
+% ============================================================
+\section{NLP Pipeline for Requirements}\label{sec:nlp-pipeline}
+Turning prose into actionable structure needs a pipeline. Inputs are raw requirement documents, user stories, app reviews, or interview transcripts; output is classified, structured, and linked artefacts.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.85, stage/.style={draw, rounded corners, minimum width=1.75cm, minimum height=0.85cm, align=center}]
+  \node[stage, fill=blue!10] (tok) at (0,0) {Tokenise\\\& normalise};
+  \node[stage, fill=green!12] (pos) at (2.9,0) {POS \&\\parsing};
+  \node[stage, fill=orange!14] (ner) at (5.8,0) {NER / SRL\\{\tiny actors, actions}};
+  \node[stage, fill=violet!12] (cls) at (8.7,0) {Classify\\{\tiny FR/NFR}};
+  \node[stage, fill=red!10] (det) at (11.6,0) {Ambiguity\\\& smell\\detection};
+  \draw[->, thick, blue!60!black] (tok) -- (pos);
+  \draw[->, thick, blue!60!black] (pos) -- (ner);
+  \draw[->, thick, green!50!black] (ner) -- (cls);
+  \draw[->, thick, orange!70!black] (cls) -- (det);
+  % embedding annotation
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt, align=center] at (5.8,-1.4) {Embeddings: TF-IDF / Word2Vec /\\Transformer (BERT) $\to$ vector $\mathbf{v}\in\mathbb{R}^d$};
+  \draw[dashed, gray!50!black] (tok.south) -- ++(0,-0.4) -| (det.south);
+\end{tikzpicture}
+\end{center}
+
+Key steps in plain language:
+
+\begin{enumerate}[leftmargin=1.2em, itemsep=0.3em]
+  \item \textbf{Tokenisation \& normalisation} --- split text into tokens, lemmatise (\emph{exporting}$\to$\emph{export}), handle domain jargon.
+  \item \textbf{POS tagging \& parsing} --- label nouns/verbs and recover grammatical structure; features for syntactic-ambiguity detection.
+  \item \textbf{Named-entity / semantic-role labelling} --- find \emph{who} acts on \emph{what} (actor, action, object, condition).
+  \item \textbf{Vectorisation} --- map each requirement to a vector $\mathbf{v}$: sparse TF-IDF for baselines, dense BERT embeddings for state of the art. Similarity is then $\cos(\mathbf{v}_i,\mathbf{v}_j)=\mathbf{v}_i^{\!\top}\mathbf{v}_j/(\|\mathbf{v}_i\|\|\mathbf{v}_j\|)$.
+  \item \textbf{Classification \& detection} --- FR vs.\ NFR vs.\ sub-classes (security, performance, usability), and binary flag \emph{ambiguous?} plus span highlighting.
+\end{enumerate}
+
+\begin{example}[Lightweight RE classifier and vagueness spotter]\label{ex:req-nlp}
+\begin{lstlisting}[language=Python,caption={TF-IDF + logistic regression for FR/NFR; rule-assisted vagueness check.},label={lst:req-nlp}]
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+reqs = [
+    "System shall export report as CSV.",          # FR
+    "Export shall complete in under 2 seconds.",   # NFR-performance
+    "System shall allow premium users to export quickly.",  # vague NFR
+    "User can filter reports by date range.",      # FR
+    "Data at rest shall be AES-256 encrypted.",    # NFR-security
+]
+labels = ["FR","NFR","NFR","FR","NFR"]  # toy supervision
+
+vec = TfidfVectorizer(ngram_range=(1,2), stop_words="english")
+X = vec.fit_transform(reqs)
+clf = LogisticRegression().fit(X, labels)
+print(clf.predict(vec.transform(["Export shall be fast."])))  # likely NFR
+
+# Rule-assisted vagueness dictionary (complements ML)
+VAGUE = {"quickly","fast","user-friendly","sufficient","efficient","robust"}
+def flag_vague(sent: str):
+    toks = sent.lower().split()
+    hits = [t.strip(".,") for t in toks if t.strip(".,") in VAGUE]
+    return hits  # e.g. ["quickly"] -> suggest numeric threshold
+
+print("vague terms:", flag_vague(reqs[2]))
+# cosine similarity between two requirements (for traceability preview)
+from sklearn.metrics.pairwise import cosine_similarity
+sims = cosine_similarity(vec.transform([reqs[0]]), vec.transform([reqs[3]]))
+print(f"similarity FR-FR: {sims[0,0]:.2f}")
+\end{lstlisting}
+\end{example}
+
+Transformers (BERT, RoBERTa) fine-tuned on labelled RE corpora (e.g., PROMISE NFR dataset) beat TF-IDF on FR/NFR classification by 5--15\,pp, but they need more data and calibration. A practical compromise is \emph{hybrid}: rules for high-precision vagueness lists, ML for broader classification, and humans to adjudicate flagged cases.
+
+% ============================================================
+\section{Traceability: Linking Wishes to Code and Tests}\label{sec:trace}
+A \textbf{trace link} connects a requirement to the artefact that implements or verifies it: design, code file, or test case. The full set of links is the \textbf{traceability matrix} $T\in\{0,1\}^{|R|\times|A|}$ where $R$ are requirements and $A$ artefacts. Maintained well, $T$ answers ``if we change requirement $r_i$, what breaks?'' and ``is every requirement covered by a test?''
+
+Manual tracing is tedious and rots as code evolves. \textbf{Automated traceability} is an information-retrieval and classification problem: given $(r_i,a_j)$, predict $P(\text{link}\mid r_i,a_j)$.
+
+Approaches in order of power:
+
+\begin{itemize}[leftmargin=1.2em, itemsep=0.3em]
+  \item \textbf{Textual similarity (IR)} --- compute $\cos(\mathbf{v}_{r_i},\mathbf{v}_{a_j})$ using TF-IDF or embeddings of requirement plus code comments/identifiers. Threshold to propose links. Simple, surprisingly effective.
+  \item \textbf{Supervised classification} --- train on confirmed links (positive) and sampled non-links (negative); features include textual similarity, co-change history, and file proximity.
+  \item \textbf{Deep bi-encoders} --- encode requirement and artefact with separate Transformers, score by dot product; fine-tuned on project links with contrastive loss.
+  \item \textbf{LLM-assisted} --- prompt an LLM with requirement + candidate file excerpt and ask ``does this file implement $r_i$?'' with chain-of-thought; useful when code identifiers are cryptic.
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.88]
+  % bipartite trace
+  \foreach \i/\lab in {1/$r_1$ urgent,2/$r_2$ export,3/$r_3$ encrypt} {
+    \node[draw, fill=blue!12, rounded corners, minimum width=2.2cm, minimum height=0.6cm, align=center] (r\i) at (0,-\i*1.05+0.55) {\lab};
+  }
+  \foreach \i/\lab in {1/export.py,2/auth.py,3/test\_export.py} {
+    \node[draw, fill=green!12, rounded corners, minimum width=2.2cm, minimum height=0.6cm, align=center] (a\i) at (7,-\i*1.05+0.55) {\lab};
+  }
+  \draw[->, thick, green!55!black] (r2) -- node[above, font=\tiny, fill=white, inner sep=1pt] {$\cos=0.82$} (a1);
+  \draw[->, thick, green!55!black] (r2) -- node[below, font=\tiny, fill=white, inner sep=1pt] {$0.71$} (a3);
+  \draw[->, thick, blue!60!black] (r3) -- node[above, font=\tiny, fill=white, inner sep=1pt] {$0.78$} (a2);
+  \draw[->, thick, dashed, red!60!black] (r1) -- node[above, sloped, font=\tiny, fill=white, inner sep=1pt] {weak $0.31$} (a1);
+  \node[draw, fill=orange!10, rounded corners, font=\tiny, align=center, inner sep=3pt] at (3.5,-3.3) {Threshold $\tau=0.5$ $\to$ solid links kept,\\dashed link suppressed or sent for review};
+  \node[font=\tiny, text=gray!60!black] at (3.5,0.45) {Requirements $R$ \qquad\qquad Artefacts $A$};
+\end{tikzpicture}
+\end{center}
+
+Evaluation mirrors information retrieval: for a requirement $r_i$, let $L_i$ be true linked artefacts and $\hat L_i(\tau)$ those predicted above threshold $\tau$,
+\[
+  \text{Precision}=\frac{|L_i\cap\hat L_i|}{|\hat L_i|},\quad
+  \text{Recall}=\frac{|L_i\cap\hat L_i|}{|L_i|},\quad
+  F_1=\frac{2PR}{P+R}.
+\]
+In practice recall matters more than precision for traceability (missing a link hides impact), so teams favour thresholds that keep recall $\ge 0.8$ and let humans prune false positives. Maintain links incrementally: re-score only changed artefacts on each commit.
+
+% ============================================================
+\section{Putting It Together: An RE Assistant}\label{sec:re-assistant}
+A lightweight RE assistant chains the pieces: on every commit or spec edit, it (i)~classifies new sentences as FR/NFR, (ii)~flags ambiguous spans with suggested rewrites, and (iii)~proposes trace links to code/tests for a human to confirm. The human stays in the loop --- the tool reduces the search space from hundreds of candidates to a shortlist, and it explains each suggestion (highlighted vague term, similarity score, or co-change evidence).
+
+% ============================================================
+\section{Worked Example: End-to-End on a Sprint}\label{sec:req-worked}
+A team receives five new user stories. We run the pipeline:
+
+\begin{enumerate}[leftmargin=1.2em, itemsep=0.3em]
+  \item Classifier labels: two FR (``filter by date,'' ``export CSV''), three NFR (``encrypt at rest,'' ``complete in $<2$\,s,'' ``support SSO'').
+  \item Ambiguity detector flags ``quickly'' in an older story and suggests ``in $<2$\,s for 10k rows on p95'' --- the product owner confirms the threshold, removing a future performance bug.
+  \item Traceability proposes links: FR~``export CSV'' $\to$ \texttt{export.py} (cos $0.82$) and \texttt{test\_export.py} ($0.71$); NFR~``encrypt'' $\to$ \texttt{auth.py} ($0.78$). The weak $0.31$ link to \texttt{export.py} from an unrelated reliability story is suppressed for manual review.
+\end{enumerate}
+
+A second listing verifies the links with a readable helper:
+
+\begin{lstlisting}[language=Python,caption={Thresholding trace links and reporting $P/R/F_1$.},label={lst:req-eval}]
+def prf(true_links, pred_links):
+    tp = len(true_links & pred_links)
+    prec = tp / len(pred_links) if pred_links else 0.0
+    rec  = tp / len(true_links) if true_links else 0.0
+    f1 = 2*prec*rec/(prec+rec) if (prec+rec) else 0.0
+    return prec, rec, f1
+
+true = {("r2","export.py"), ("r2","test_export.py"), ("r3","auth.py")}
+pred_05 = {("r2","export.py"), ("r2","test_export.py"), ("r3","auth.py")}  # tau=0.5
+pred_08 = {("r2","export.py"), ("r3","auth.py")}  # tau=0.8
+print("tau=0.5", prf(true, pred_05))  # (1.0, 1.0, 1.0) on this toy set
+print("tau=0.8", prf(true, pred_08))  # (1.0, 0.67, 0.80) -- recall drops
+\end{lstlisting}
+
+% ============================================================
+\section{Common Pitfalls}\label{sec:req-pitfalls}
+\begin{itemize}[leftmargin=1.2em, itemsep=0.3em]
+  \item \textbf{Evaluating on shuffled data.} Requirements evolve; random splits leak future vocabulary into training. Split temporally (train on past releases, test on next).
+  \item \textbf{Ignoring class imbalance.} NFR sub-classes (e.g., security) are rare; accuracy looks high while the rare class is never predicted. Report per-class $F_1$ and macro-$F_1$.
+  \item \textbf{Over-trusting similarity.} High cosine similarity can come from shared boilerplate (``the system shall'') rather than semantic overlap. Down-weight boilerplate via IDF or remove it before embedding.
+  \item \textbf{Trace decay.} Links rot when files move. Re-score incrementally on each rename or refactor and flag orphaned requirements with no surviving artefact.
+\end{itemize}
+
+% ============================================================
+\section{Chapter Summary}\label{sec:req-summary}
+Requirements live in language, and language is ambiguous. By naming ambiguity types, applying a standard NLP pipeline (tokenise $\to$ parse $\to$ embed $\to$ classify), and framing traceability as ranked link recovery evaluated with precision/recall/$F_1$, we turn subjective reading into measurable engineering. The best results are hybrid: rules where precision matters, learned embeddings where coverage matters, and human confirmation always.
+
+% ============================================================
+\section{Exercises}\label{sec:req-ex}
+\begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.75em]
+  \item \textbf{Classify and rewrite.} Label each as FR, NFR, or ambiguous NFR and rewrite the vague one measurably: (a)~``System shall support single sign-on via SAML.'' (b)~``Dashboard shall load quickly.'' (c)~``Logs shall be retained for audit purposes.''
+  \item \textbf{Ambiguity types.} For ``Notify admins of users who exceeded quota,'' identify which ambiguity type(s) apply and give two distinct readings. Propose an EARS-style sentence that removes the ambiguity.
+  \item \textbf{Embeddings by hand.} With TF-IDF vectors $\mathbf{v}_1=[0.7,0.2,0]$, $\mathbf{v}_2=[0.6,0.3,0.1]$, $\mathbf{v}_3=[0,0,0.9]$ for three requirements, compute all pairwise cosine similarities. Which pair should be linked by a na\"ive $\tau=0.5$ thresholder, and is that sensible?
+  \item \textbf{Traceability metrics.} Requirement $r$ truly links to $\{a_1,a_2,a_3\}$. Your tool predicts $\{a_1,a_2,a_4\}$ at $\tau=0.6$ and $\{a_1,a_4\}$ at $\tau=0.8$. Compute $P,R,F_1$ at both thresholds. Which threshold would you ship, and why?
+  \item \textbf{Mini pipeline.} Extend Listing~\ref{lst:req-nlp} to add an NFR sub-classifier (security vs.\ performance vs.\ usability) on a toy dataset of 12 sentences. Report accuracy with 3-fold cross-validation and list the top vague terms flagged but misclassified.
+\end{enumerate}
+% End of Chapter 6

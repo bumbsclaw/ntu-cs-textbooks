@@ -1,0 +1,207 @@
+\chapter{Code Quality and Intelligent Review}\label{ch:quality}
+\begin{center}\small\textit{If software is a bridge, code quality is its structural integrity --- and AI is the inspector that never blinks.}\end{center}
+
+\begin{quote}\small\textbf{From zero: no quality background assumed.} We start from ``what makes code good?'' and build up metrics, inspection, automated review, and ML-enhanced analysis step by step. Every term is defined before use; pictures precede formulas.\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{Learning Outcomes.} After this chapter you will be able to (1)~define and compute classic quality metrics; (2)~contrast static analysis, dynamic analysis, and testing; (3)~explain how ML augments static analysis; (4)~describe AI-assisted code review pipelines; (5)~evaluate trade-offs of automated quality gates.}}
+\vspace{0.4em}
+
+% ============================================================
+\section{Intuition: What Is ``Good'' Code?}\label{sec:good-code}
+A program can be \emph{correct} and still be terrible: a 500-line function with nested \texttt{if}s, cryptic names, and no tests will break the moment someone else touches it. Quality captures how well code supports \textbf{change}. Three lenses help.
+
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{External quality} --- does it do what users need? Correctness, reliability, performance, security.
+  \item \textbf{Internal quality} --- can developers understand and modify it? Readability, modularity, complexity, testability.
+  \item \textbf{Process quality} --- can the team deliver it sustainably? Review thoroughness, build health, defect escape rate.
+\end{itemize}
+
+AI for Software Engineering (AI4SE) targets all three, but this chapter focuses on internal quality where AI has made the fastest progress: measuring it, analysing it, and reviewing it before humans spend time.
+
+% ============================================================
+\section{Measuring Quality: Metrics that Matter}\label{sec:metrics}
+Metrics turn vague worry (``this file feels risky'') into numbers. The oldest still dominates.
+
+\begin{definition}[Cyclomatic Complexity --- McCabe 1976]
+For a control-flow graph with $E$ edges, $N$ nodes, and $P$ connected components,
+\[
+  M = E - N + 2P.
+\]
+Equivalently, $M$ is one plus the number of decision points (\texttt{if}, \texttt{while}, \texttt{case}, \texttt{\&\&}, \texttt{||}). A straight-line function has $M=1$; each branch adds one independent path.
+\end{definition}
+
+Teams often gate on $M\le 10$--$15$ per function; above $20$, testing every path becomes impractical. Other staples include \textbf{coupling} (how many modules depend on you), \textbf{cohesion} (do a module's members belong together), \textbf{code churn} (lines added/removed recently --- churn predicts bugs), and \textbf{maintainability index} (a composite of $M$, Halstead volume, and lines of code).
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.88]
+  % Radar-like quality dashboard
+  \node[draw, fill=blue!12, rounded corners, minimum width=2.2cm, minimum height=0.7cm, align=center] (c) at (0,0) {Code change\\{\tiny commit / PR}};
+  \node[draw, fill=green!14, rounded corners, minimum width=2.0cm, minimum height=0.7cm, align=center] (m) at (4.2,0) {Metrics\\{\tiny $M$, churn, coupling}};
+  \node[draw, fill=orange!15, rounded corners, minimum width=2.0cm, minimum height=0.7cm, align=center] (q) at (8.2,0) {Quality gate\\{\tiny pass / warn / block}};
+  \draw[->, thick, blue!60!black] (c) -- (m);
+  \draw[->, thick, blue!60!black] (m) -- (q);
+  \node[draw, fill=violet!10, rounded corners, minimum width=2.0cm, minimum height=0.7cm, align=center] (a) at (4.2,-1.6) {AI risk score\\{\tiny learned threshold}};
+  \draw[->, thick, dashed, violet!60!black] (m) -- (a);
+  \draw[->, thick, dashed, violet!60!black] (a) -- (q);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt, align=left] at (4.2,1.2) {Static metrics + history + learned model $\to$ gate};
+  % Complexity illustration below
+  \begin{scope}[shift={(0,-3.2)}]
+    \draw[fill=green!10, draw=green!40!black, rounded corners] (0,0) rectangle (2.4,1.0) node[midway, align=center] {$M=2$\\{\tiny one \texttt{if}}};
+    \draw[fill=orange!14, draw=orange!50!black, rounded corners] (3.0,0) rectangle (5.4,1.0) node[midway, align=center] {$M=7$\\{\tiny nested branches}};
+    \draw[fill=red!12, draw=red!50!black, rounded corners] (6.0,0) rectangle (8.4,1.0) node[midway, align=center] {$M=18$\\{\tiny needs split}};
+    \node[below, font=\tiny, text=gray!60!black] at (1.2,-0.1) {safe};
+    \node[below, font=\tiny, text=gray!60!black] at (4.2,-0.1) {review};
+    \node[below, font=\tiny, text=gray!60!black] at (7.2,-0.1) {refactor};
+  \end{scope}
+\end{tikzpicture}
+\end{center}
+
+Metrics alone do not fix code; they \emph{flag} where to look. The next two sections give the eyes and the judgement.
+
+% ============================================================
+\section{Static Analysis: Traditional to Learning-Augmented}\label{sec:static}
+\emph{Static analysis} inspects code without running it: parsing, building an abstract syntax tree (AST), a control-flow graph (CFG), or a data-flow lattice, then checking rules.
+
+Classic analysers are \textbf{rule-based}: ``never compare \texttt{==} on floats,'' ``close every opened file,'' ``no SQL string concatenation.'' Tools like ESLint, SpotBugs, SonarQube, and Infer encode thousands of such patterns. They are precise on what they encode and blind to everything else, producing many false positives on idiomatic code.
+
+ML augments static analysis in three ways:
+
+\begin{enumerate}[leftmargin=1.2em, itemsep=0.35em]
+  \item \textbf{Learned detectors.} Train a classifier on AST/CFG embeddings to flag bug-prone patterns the rule writer never anticipated. Graph neural networks (GNNs) over CFGs and Transformers over token streams are common encoders.
+  \item \textbf{Ranking and triage.} A model scores each warning by likelihood of being a true bug, suppressing noise. Developers see the top-$k$ most actionable findings.
+  \item \textbf{Automated repair hints.} Given a flagged snippet, a generative model proposes a fix (``add null check at line~42'') trained on past human fixes.
+\end{enumerate}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.88]
+  \node[draw, fill=blue!10, rounded corners, minimum width=2.0cm, minimum height=0.85cm, align=center] (src) at (0,0) {Source\\{\tiny AST + CFG + diff}};
+  \node[draw, fill=green!12, rounded corners, minimum width=2.2cm, minimum height=0.85cm, align=center] (trad) at (3.8,0.9) {Rule engine\\{\tiny patterns}};
+  \node[draw, fill=violet!12, rounded corners, minimum width=2.2cm, minimum height=0.85cm, align=center] (ml) at (3.8,-0.9) {ML model\\{\tiny GNN / Transformer}};
+  \node[draw, fill=orange!14, rounded corners, minimum width=2.0cm, minimum height=0.85cm, align=center] (fuse) at (7.5,0) {Fusion \\ranker\\{\tiny $P(\text{bug}\mid\text{code})$}};
+  \node[draw, fill=red!10, rounded corners, minimum width=2.0cm, minimum height=0.85cm, align=center] (out) at (10.8,0) {Ranked\\warnings + fixes};
+  \draw[->, thick, blue!60!black] (src) -- (trad);
+  \draw[->, thick, violet!60!black] (src) -- (ml);
+  \draw[->, thick, green!50!black] (trad) -- (fuse);
+  \draw[->, thick, violet!60!black] (ml) -- (fuse);
+  \draw[->, thick, orange!70!black] (fuse) -- (out);
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (7.5,1.7) {Learns from labelled warnings};
+\end{tikzpicture}
+\end{center}
+
+A practical hybrid: run the rule engine first (sound, fast, explainable), then let the ML ranker re-order and annotate. Teams that tried pure ML quickly learned that developers distrust black-box flags with no rule-like explanation; hybrids keep the explanatory rule trace.
+
+% ============================================================
+\section{AI-Assisted Code Review}\label{sec:review}
+Code review is where judgement scales least: a senior engineer reads a diff, imagines executions, and comments. AI reviewers do not replace that, but they \emph{pre-review} --- catching style, common bugs, missing tests, and even design smells before a human is asked.
+
+A modern review pipeline looks like this:
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.87, box/.style={draw, rounded corners, minimum width=1.85cm, minimum height=0.85cm, align=center}]
+  \node[box, fill=blue!12] (pr) at (0,0) {Pull request\\opened};
+  \node[box, fill=green!12] (ci) at (2.8,0) {CI checks\\{\tiny build + tests}};
+  \node[box, fill=violet!12] (ai) at (5.6,0) {AI reviewer\\{\tiny style, bugs, missing tests}};
+  \node[box, fill=orange!14] (hu) at (8.5,0) {Human reviewer\\{\tiny design, intent}};
+  \node[box, fill=red!10] (merge) at (11.2,0) {Merge /\\request changes};
+  \draw[->, thick, blue!60!black] (pr) -- (ci);
+  \draw[->, thick, blue!60!black] (ci) -- node[above, font=\tiny] {pass} (ai);
+  \draw[->, thick, violet!60!black] (ai) -- node[above, font=\tiny] {annotated diff} (hu);
+  \draw[->, thick, orange!70!black] (hu) -- (merge);
+  % feedback loop
+  \draw[->, thick, dashed, gray!60!black, bend left=18] (ai) to node[below, font=\tiny, fill=white, inner sep=1pt] {auto-fix suggestion} (pr.south);
+  \node[draw, fill=yellow!10, rounded corners, font=\tiny, align=left, inner sep=3pt] at (5.6,-1.5) {AI model: fine-tuned LLM on\\past reviews + static warnings + diffs};
+\end{tikzpicture}
+\end{center}
+
+What AI reviewers do well: surface duplicates, flag missing edge-case tests, suggest clearer names, detect API misuse, and check that new code follows project conventions learned from history. What they still need humans for: Is this the \emph{right} abstraction? Does the change match the requirement's intent? Is the added dependency worth it?
+
+\begin{example}[Linter + ML ranker in Python]\label{ex:linter-ml}
+\begin{lstlisting}[language=Python,caption={Rule check plus a toy ML ranker for warning triage.},label={lst:quality-rank}]
+import ast, re
+
+# --- Rule-based: flag bare except and high-complexity functions ---
+def rule_warnings(source: str):
+    tree = ast.parse(source)
+    warns = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            for h in node.handlers:
+                if h.type is None:  # bare except:
+                    warns.append((node.lineno, "bare-except",
+                                  "Avoid bare except: catches SystemExit/KeyboardInterrupt"))
+    # naive complexity: count branching keywords
+    complexity = len(re.findall(r'\b(if|for|while|and|or|except)\b', source))
+    if complexity > 12:
+        warns.append((1, "high-complexity",
+                      f"Complexity ~{complexity}: consider splitting function"))
+    return warns
+
+# --- ML-style ranker (toy: score by churn + complexity) ---
+def rank_warnings(warns, churn_lines=0, complexity=0):
+    scored = []
+    for line, kind, msg in warns:
+        # learned weights would come from a trained model; here heuristic
+        score = 0.7 * (kind == "bare-except") + 0.3 * (complexity / 20.0) + 0.1 * (churn_lines > 50)
+        scored.append((score, line, kind, msg))
+    return sorted(scored, reverse=True)  # highest risk first
+
+src = "try:\n    x = int(input())\nexcept:\n    pass\n"
+for s, l, k, m in rank_warnings(rule_warnings(src), churn_lines=80, complexity=14):
+    print(f"[{s:.2f}] L{l} {k}: {m}")
+\end{lstlisting}
+\end{example}
+
+Evaluation of review AI uses \emph{precision@$k$} (are the top-$k$ flags real?), \emph{developer acceptance rate} (did the author apply the suggestion?), and \emph{time saved} (does pre-review shorten human review latency?). The best systems optimise acceptance, not just accuracy --- a correct but pedantic comment that developers dismiss helps no one.
+
+% ============================================================
+\section{Quality Gates and Developer Experience}\label{sec:gates}
+A \textbf{quality gate} is an automated check that blocks or warns on merge when thresholds are breached: coverage drops below 80\%, new $M\!>\!15$ functions appear, or AI risk score exceeds a learned cutoff. Gates should be \emph{fast} (seconds, not minutes), \emph{explainable} (link to the rule or example that triggered), and \emph{tunable} (teams set their own thresholds).
+
+The danger is alert fatigue: too many gates and developers route around them. Good practice is to (i)~start with warnings, promote to blocks only after false-positive rate is low, (ii)~show the fix, not just the flag, and (iii)~measure whether the gate actually reduces escaped defects in the next release.
+
+% ============================================================
+\section{Worked Example: From Metric to Action}\label{sec:quality-worked}
+Consider a Python function that grew organically:
+
+\begin{lstlisting}[language=Python,caption={A function whose complexity is easy to misjudge.},label={lst:quality-ex}]
+def process(order, user, cfg):
+    if not order: return None
+    if user.is_admin or user.id == order.owner:
+        if cfg.get("fast"):
+            if order.priority > 5 and order.value > 1000:
+                return expedite(order)
+            else:
+                return queue(order)
+        else:
+            validate(order)
+            return store(order)
+    else:
+        raise PermissionError
+\end{lstlisting}
+
+Decision points: \texttt{if not order} (1), \texttt{or} in the admin check (2), outer \texttt{if/else} (3), \texttt{if cfg fast} (4), \texttt{and} with two comparators (5,6). So $M\approx7$ by counting, or $E=14,N=9,P=1\Rightarrow M=14-9+2=7$. That is still reviewable, but adding one more nested condition would push it past $10$. The fix is mechanical: extract \texttt{can\_access(user,order)} and \texttt{route\_fast(order,cfg)} as helpers. Each helper drops to $M\le3$, becomes unit-testable, and the ranker score falls because churn on a smaller function is less risky.
+
+% ============================================================
+\section{Common Pitfalls}\label{sec:quality-pitfalls}
+\begin{itemize}[leftmargin=1.2em, itemsep=0.3em]
+  \item \textbf{Goodhart's law on metrics.} If you gate strictly on $M\le10$, developers game it by splitting functions without improving design. Pair metric gates with review of cohesion and naming.
+  \item \textbf{Ignoring false positives.} A ranker at precision $0.3$ wastes two-thirds of review time. Calibrate on your repo; do not copy thresholds from a paper's open-source corpus.
+  \item \textbf{ML without provenance.} A black-box ``high risk'' flag without a linked rule or example is dismissed. Always attach evidence: which pattern, which similar past bug, which file history.
+  \item \textbf{Autofix without tests.} Auto-applying an LLM fix that passes lint but breaks a hidden invariant is worse than no fix. Every auto-fix must run the relevant tests before surfacing.
+\end{itemize}
+
+% ============================================================
+\section{Chapter Summary}\label{sec:quality-summary}
+Quality is changeability. Metrics like $M=E-N+2P$ map structure to testability; static analysis checks rules without execution; ML adds learned detection, ranking, and repair hints; and AI reviewers pre-screen diffs before humans weigh in. The future is hybrid: deterministic rules for soundness, learned models for coverage and prioritisation, and humans for design judgement.
+
+% ============================================================
+\section{Exercises}\label{sec:quality-ex}
+\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.75em]
+  \item \textbf{Complexity by hand.} Draw the CFG for \texttt{if a and b: x=1 elif c: x=2 else: x=3} and compute $M=E-N+2P$. Count decision points and verify both methods agree. At what $M$ would you recommend splitting the function?
+  \item \textbf{Rule vs.\ learned.} Give one bug a rule-based linter catches reliably and one it cannot, then sketch how a GNN over the CFG could catch the second. What training data would you need for the GNN?
+  \item \textbf{Review pipeline.} Trace a PR that adds a function with $M=19$ and a bare \texttt{except} through the pipeline in Fig.~3. Which stage flags which issue, and what happens if the AI reviewer is bypassed?
+  \item \textbf{Ranking metric.} You have 200 warnings, 30 are true bugs. Your ranker puts 12 true bugs in the top 20. Compute precision@20, recall@20, and $F_1$@20. Is this good enough to auto-block merges? Justify.
+  \item \textbf{Gate design.} Design a quality gate for a team that currently has 200 \texttt{SonarQube} warnings on \texttt{main}. Propose thresholds ($M$, coverage, AI risk score), a rollout plan (warn $\to$ block), and how you would measure whether escaped defects fall.
+\end{enumerate}
+% End of Chapter 5

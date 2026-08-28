@@ -1,0 +1,201 @@
+\chapter{Review: Single-Cycle, Pipelining and Hazards}\label{ch:review}
+\begin{center}\small\textit{From one long clock to an assembly line: why we pipeline, and what breaks when we do.}\end{center}
+
+\section{SC1006 Recap and Roadmap}
+SC1006 built the RV32I machine from the ground up: ISA formats, single-cycle datapath, hardwired control, and the classic 5-stage pipeline. SC3050 starts where overlap stops being free. This chapter distils the single-cycle baseline, the ideal pipeline, and the three hazard families that force real hardware to stall, forward, or predict.
+
+We assume RV32I, 32 registers ($x_0\equiv0$), and byte-addressed memory. All timing numbers are illustrative; only the structure matters.
+
+\section{Single-Cycle Baseline}
+In a single cycle every instruction traverses the same unified datapath: PC $\to$ instruction memory $\to$ register file $\to$ ALU $\to$ data memory $\to$ register file write-back. Control is purely combinational: opcode, funct3 and funct7 select \texttt{RegWrite}, \texttt{ALUSrc}, \texttt{MemRead}, \texttt{MemWrite}, \texttt{MemToReg}, \texttt{Branch} and \texttt{Jump}.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, minimum width=1.0cm, minimum height=0.7cm, rounded corners] (pc) at (0,0) {PC};
+\node[draw, fill=green!14, minimum width=1.7cm, minimum height=0.9cm, align=center] (im) at (2.3,0) {Instr Mem};
+\node[draw, fill=orange!16, minimum width=2.0cm, minimum height=1.3cm, align=center] (rf) at (5.0,0) {Reg File\\{\tiny 2R/1W, $x_0=0$}};
+\node[draw, fill=yellow!15, minimum width=1.2cm, minimum height=0.8cm] (imm) at (5.0,1.6) {ImmGen};
+\node[draw, fill=red!14, trapezium, trapezium angle=72, minimum width=1.5cm, minimum height=1.1cm] (alu) at (7.8,0) {ALU};
+\node[draw, fill=violet!12, minimum width=1.6cm, minimum height=0.9cm, align=center] (dm) at (10.0,0) {Data Mem};
+\draw[-{Stealth}, thick, blue!60!black] (pc) -- (im);
+\draw[-{Stealth}, thick] (im) -- (rf) node[midway, above, font=\tiny] {instr[31:0]};
+\draw[-{Stealth}, thick, gray] (im.north) |- (imm.west);
+\draw[-{Stealth}, thick, orange!70!black] (rf.east) -- (alu.west |- {$(alu.west)+(0,0.35)$}) node[midway, above, font=\tiny] {A};
+\draw[-{Stealth}, thick, violet!70!black] (imm.east) -| (alu.west |- {$(alu.west)+(0,-0.35)$}) node[pos=0.75, right, font=\tiny] {imm};
+\draw[-{Stealth}, thick, red!60!black] (alu.east) -- (dm.west) node[midway, above, font=\tiny] {addr};
+\draw[-{Stealth}, thick, green!50!black] (dm.east) -- ++(0.7,0) |- (rf.east) node[pos=0.75, right, font=\tiny] {WB};
+\node[below=0.45cm of pc, font=\tiny, text=gray!60!black] {+4 / branch};
+\node[below=0.45cm of dm, font=\tiny, text=gray!60!black] {load/store only};
+\end{tikzpicture}
+\end{center}
+
+\begin{definition}[Critical path]
+$T_{\text{clk}}\ge t_{\text{IM}}+t_{\text{RF}}+t_{\text{ALU}}+t_{\text{DM}}+t_{\text{setup}}$ for single-cycle. \texttt{LW} traverses every block and therefore sets the period; \texttt{ADD} and \texttt{BEQ} finish early but still wait.
+\end{definition}
+
+Throughput is $1/T_{\text{clk}}$ instructions per second; CPI $=1$ by construction but $T_{\text{clk}}$ is long and utilisation is poor: the ALU idles during IF, memory idles during EX for R-type, and so on.
+
+The immediate generator and PC logic illustrate the combinational depth. RV32I has six immediate formats (I, S, B, U, J, and the shamt variant); ImmGen is a network of muxes and sign-extenders selected by opcode. The PC source mux chooses among PC+4, branch target (PC + sign-extended B-imm) when \texttt{Branch}$\land$\texttt{Zero}, and jump target for \texttt{JAL}/\texttt{JALR}. In single-cycle all of this settles before the rising edge that writes the register file. Any setup or hold violation would corrupt state, so $T_{\text{clk}}$ includes Worst-case margins.
+
+\begin{center}
+\begin{tabular}{lcp{6.2cm}}
+\toprule Stage in single-cycle & Active blocks & What happens in that fraction of $T_{\text{clk}}$ \\ \midrule
+Fetch & PC, I-Mem, adder & PC drives I-Mem, word fetched, PC+4 computed \\
+Decode & ImmGen, RegFile read & opcode decoded, rs1/rs2 read, imm formed \\
+Execute & ALU, comparator & ALU computes, branch condition evaluated \\
+Memory & D-Mem & load/store touches memory; others idle \\
+Write-back & RegFile write & result selected by \texttt{MemToReg} and written if \texttt{RegWrite} \\ \bottomrule
+\end{tabular}
+\end{center}
+
+Splitting this monolith is what creates the pipeline. Each stage becomes a clock domain separated by a register, and $T_{\text{clk}}$ shrinks to the worst stage rather than the sum.
+
+\section{The Ideal 5-Stage Pipeline}
+Insert registers IF/ID, ID/EX, EX/MEM, MEM/WB between the five logical stages. Each holds the instruction word, PC+4, register operands, immediates, and control bits for the next stage.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=blue!14, minimum width=1.45cm, minimum height=0.85cm, align=center] (IF) at (0,0) {\textbf{IF}\\{\tiny fetch}};
+\node[draw, fill=green!14, minimum width=1.45cm, minimum height=0.85cm, align=center] (ID) at (2.4,0) {\textbf{ID}\\{\tiny decode/RF}};
+\node[draw, fill=orange!18, minimum width=1.45cm, minimum height=0.85cm, align=center] (EX) at (4.8,0) {\textbf{EX}\\{\tiny ALU}};
+\node[draw, fill=red!14, minimum width=1.45cm, minimum height=0.85cm, align=center] (ME) at (7.2,0) {\textbf{MEM}\\{\tiny DMem}};
+\node[draw, fill=violet!14, minimum width=1.45cm, minimum height=0.85cm, align=center] (WB) at (9.6,0) {\textbf{WB}\\{\tiny RF write}};
+\foreach \a/\b in {IF/ID, ID/EX, EX/ME, ME/WB} {\draw[-{Stealth}, thick, blue!60!black] (\a.east) -- (\b.west);}
+\node[draw, fill=gray!20, minimum width=0.22cm, minimum height=0.7cm] (r1) at (1.2,0) {};
+\node[draw, fill=gray!20, minimum width=0.22cm, minimum height=0.7cm] (r2) at (3.6,0) {};
+\node[draw, fill=gray!20, minimum width=0.22cm, minimum height=0.7cm] (r3) at (6.0,0) {};
+\node[draw, fill=gray!20, minimum width=0.22cm, minimum height=0.7cm] (r4) at (8.4,0) {};
+\node[above=0.55cm of r2, font=\tiny, text=violet!70!black] {pipeline registers};
+\draw[decorate, decoration={brace, amplitude=3pt}, thick, gray] (0,-0.75) -- (9.6,-0.75) node[midway, below, yshift=-0.25cm, font=\tiny] {5 cycles latency, 1/cycle throughput (ideal)};
+\end{tikzpicture}
+\end{center}
+
+With $k$ instructions and $n=5$ stages each $t$ plus register overhead $t_r$, pipelined time $\approx (n+k-1)(t+t_r)$ versus $k n t$ sequential; speedup $\to n$ as $k\to\infty$ but unequal stage delays and hazards reduce it.
+
+\begin{center}
+\begin{tabular}{lccccccc}
+\toprule Instr & 1 & 2 & 3 & 4 & 5 & 6 & 7 \\ \midrule
+\texttt{LW x5,0(x6)}  & IF & ID & EX & MEM & WB & & \\
+\texttt{ADD x7,x5,x8} & & IF & ID & EX & MEM & WB & \\
+\texttt{SW x9,4(x7)}  & & & IF & ID & EX & MEM & WB \\
+\texttt{BEQ x7,x0,T}  & & & & IF & ID & EX & MEM \\ \bottomrule
+\end{tabular}
+\end{center}
+
+Ideal CPI $=1$; real CPI $=1+s$ where $s$ is stall cycles per instruction. Forwarding and prediction minimise $s$.
+
+\section{Hazards}
+\begin{definition}[Hazard classes]
+\textit{Structural}: resource conflict; \textit{data} (RAW, WAR, WAW): operand not ready or name conflict; \textit{control}: next PC unknown. In-order 5-stage sees only structural and RAW; WAR/WAW appear with OOO issue.
+\end{definition}
+\subsection{Structural Hazards}
+Two instructions need the same resource in the same cycle. The classic is a single-ported memory serving both IF and MEM. Fix: split I/D memories (Harvard at L1) or stall. Modern cores also duplicate adders and ports to avoid structural conflicts at issue width.
+
+\subsection{Data Hazards and Forwarding}
+RAW is the common case: $j$ reads a register before $i$ writes it.
+
+\begin{lstlisting}[language={[x86masm]Assembler}, caption={RAW hazards: forwarding vs.\ load-use stall}, label={lst:hazards}]
+ADD  x5, x6, x7      # x5 produced in EX/MEM
+SUB  x8, x5, x9      # RAW on x5 -> forward from EX/MEM, no stall
+LW   x5, 0(x1)       # x5 from MEM
+ADD  x6, x5, x2      # load-use: cannot forward in time -> 1 bubble
+BEQ  x5, x0, target # branch reads x5 -> forward or stall if load
+\end{lstlisting}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, scale=0.88]
+\node[draw, fill=green!14, minimum width=1.4cm, minimum height=0.75cm] (ex) at (0,0) {EX/MEM};
+\node[draw, fill=red!12, minimum width=1.4cm, minimum height=0.75cm] (mem) at (0,-1.3) {MEM/WB};
+\node[draw, fill=orange!18, trapezium, trapezium angle=74, minimum width=1.7cm, minimum height=1.1cm, align=center] (alu2) at (3.8, -0.1) {ALU};
+\node[draw, fill=blue!12, minimum width=1.5cm, minimum height=0.75cm, rounded corners] (fwd) at (3.8,1.5) {Forward Unit};
+\draw[-{Stealth}, thick, violet!70!black] (ex.east) -| (fwd.east);
+\draw[-{Stealth}, thick, violet!70!black] (mem.east) -| (fwd.east);
+\draw[-{Stealth}, thick, blue!60!black] (fwd.south) -- (alu2.north) node[midway, right, font=\tiny] {sel A/B};
+\node[below=0.35cm of alu2, font=\tiny, align=center] {mux chooses\\reg / EX/MEM / MEM/WB};
+\node[left=0.4cm of ex, font=\tiny, text=gray!60!black, align=right] {Rd,\\result};
+\draw[-{Stealth}, thick, gray] (alu2.west |- ex.east) -- (ex.east);
+\end{tikzpicture}
+\end{center}
+
+The hazard unit compares $\text{Rd}_{\text{EX}}$ and $\text{Rd}_{\text{MEM}}$ against $\text{Rs1}_{\text{ID}}/\text{Rs2}_{\text{ID}}$ and steers muxes. Load-use ($\text{Rd}_{\text{EX}}$ is load destination and $\text{Rs}_{\text{ID}}$ matches) cannot be fixed by forwarding: data arrives from MEM after EX has passed, so the pipeline stalls IF/ID for one cycle and injects a bubble (\texttt{nop}) into ID/EX.
+
+A compiler can also hide latency by scheduling independent instructions between a producer and consumer.
+
+\subsection{Control Hazards}
+Branches resolve late (EX or MEM in the simplest pipeline). Instructions fetched after the branch may be on the wrong path. Mitigations: move compare to ID (1-cycle penalty), flush on mispredict, or predict.
+
+\begin{lstlisting}[language={[x86masm]Assembler}, caption={Compiler scheduling hides a load-use hazard}, label={lst:schedule}]
+# before scheduling (1 stall needed)
+LW   x5, 0(x10)
+ADD  x6, x5, x11      # stall
+SUB  x7, x8, x9       # independent
+# after scheduling (no stall)
+LW   x5, 0(x10)
+SUB  x7, x8, x9       # independent work fills the slot
+ADD  x6, x5, x11      # x5 now ready via forwarding from MEM/WB
+\end{lstlisting}
+
+Flushing zeroes control bits in IF/ID and ID/EX. Prediction (Ch.~3) turns the flush from always-taken to rarely-taken.
+
+\section{Performance Model with Hazards}
+Let $n=5$, clock $T_c = \max_i t_i + t_r$, ideal CPI $=1$, stall rate $s = s_{\text{data}}+s_{\text{ctrl}}+s_{\text{struct}}$. Then $\text{CPI}=1+s$, time $=(n+k-1+s k)T_c$, and speedup over single-cycle is limited by $\max_i t_i$ imbalance and by $s$. For a mix with $20\%$ loads and $15\%$ branches, even a perfect predictor can leave $s\approx0.1$ from load-use alone.
+
+\section{Stall and Bubble Mechanics}
+When the hazard unit detects a load-use, it asserts three controls in the same cycle: keep PC unchanged (no fetch), keep IF/ID latched (replay the consumer), and inject a bubble (all-zero control word) into ID/EX. The bubble behaves like \texttt{ADDI x0,x0,0} and propagates harmlessly. One bubble suffices because after one stall the load's data is in MEM/WB and can be forwarded.
+
+\begin{center}
+\begin{tabular}{clcccc}
+\toprule Cycle & Instr & Hazard? & Forward & Stall & Action \\ \midrule
+1 & \texttt{LW x5,0(x1)} & --- & --- & --- & --- \\
+2 & \texttt{ADD x6,x5,x2} & RAW load-use & no & yes & bubble in ID/EX \\
+3 & \texttt{ADD x6,x5,x2} & --- & MEM/WB$\to$EX & no & resume \\ \bottomrule
+\end{tabular}
+\end{center}
+
+WAR and WAW do not occur in a classic in-order pipeline because writes happen in order in WB; they appear once we allow out-of-order issue (Ch.~2) and require renaming.
+
+\section{Forwarding Conditions in Detail}
+The forward unit implements:
+\begin{align*}
+\text{ForwardA}=01 &\iff \text{RegWrite}_{\text{EX/MEM}}\land \text{Rd}_{\text{EX/MEM}}\ne0\land \text{Rd}_{\text{EX/MEM}}=\text{Rs1}_{\text{ID/EX}}\\
+\text{ForwardA}=10 &\iff \text{RegWrite}_{\text{MEM/WB}}\land \text{Rd}_{\text{MEM/WB}}\ne0\land \text{Rd}_{\text{MEM/WB}}=\text{Rs1}_{\text{ID/EX}}\land\text{not case }01\\
+\text{ForwardB}&\ \text{analogous for Rs2}.
+\end{align*}
+Priority favours EX/MEM over MEM/WB because it holds the newer result. Loads forward from MEM/WB; ALU results forward from EX/MEM one cycle earlier, which is why \texttt{ADD; SUB} needs no stall but \texttt{LW; ADD} does. The zero register is excluded to avoid false matches. Extra muxing adds perhaps $0.1$--$0.2$\,ns to $T_c$ but saves many stall cycles.
+
+\section{Quantitative Comparison}
+Example: $t_{\text{IM}}=2.0$, $t_{\text{RF}}=1.2$, $t_{\text{ALU}}=1.8$, $t_{\text{DM}}=2.4$\,ns, single-cycle $T_{\text{clk}}\approx8$\,ns. Pipelined $T_c=\max(t_i)+t_r\approx2.6$\,ns, ideal speedup $\approx 3.1\times$ before stalls. With $s=0.15$ CPI becomes $1.15$, effective time per instruction $1.15\times2.6\approx3.0$\,ns versus $8$\,ns still $2.7\times$ faster despite hazards. Unequal stages waste slack: IF and EX idle part of $T_c$. Balancing stages or using deeper pipelines (7--14 stages) helps until latch overhead and hazards dominate, which is why modern cores add superscalar width instead of extreme depth.
+
+\section{Control Signals Through the Pipeline}
+Unlike single-cycle, control is not monolithic. Signals are generated in ID from opcode/funct and latched forward:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule Stage & Control produced/held & Example signals \\ \midrule
+ID  & generate all & \texttt{ALUOp, ALUSrc, RegWrite, MemRead/Write, Branch} \\
+EX  & ALU control & \texttt{ALUCtrl}, \texttt{ALUSrc} mux, branch compare \\
+MEM & memory enables & \texttt{MemRead, MemWrite, Branch+Zero $\to$ PCSrc} \\
+WB  & write-back & \texttt{RegWrite, MemToReg} \\ \bottomrule
+\end{tabular}
+\end{center}
+If an instruction is flushed, its pipeline register control bits are zeroed so it writes nothing and changes no state. Exceptions are handled similarly: an illegal opcode detected in ID causes all younger instructions to be flushed and the trap handler address to be injected into PC. Precise exceptions require that instructions before the fault retire and those after are squashed, which is straightforward here because writes are in order.
+
+\section{Why Pipelining Alone Plateaus}
+Deeper pipelines (10--20 stages) reduce $T_c$ but face three walls: (1) latch overhead $t_r$ is not scalable, (2) branch penalty grows with depth because more speculative instructions are in flight, and (3) load-use penalty may grow if MEM is far from EX. The historical answer moved from frequency scaling to width scaling: issue multiple instructions per cycle (superscalar), allow out-of-order completion (Tomasulo), and speculate past branches. Each builds on the forwarding and flushing primitives reviewed here. The next chapters add those mechanisms one by one.
+
+\section{Key Takeaways}
+Single-cycle sets $T_c$ by the slowest instruction. Pipelining cuts $T_c$ toward $\max_i t_i$ and overlaps instructions but exposes hazards. Structural hazards are solved by replication; data hazards by forwarding, stalls, and scheduling; control hazards by early resolution and prediction. The rest of SC3050 removes these ceilings: superscalar and OOO attack data hazards, branch prediction attacks control hazards, and coherence attacks the memory wall.
+
+\begin{remark}[Exam checklist]
+Given any short RV32I fragment, you should be able to label structural / RAW / control hazards, state the forwarding path or stall count, and compute CPI $=1+s$. Practice by annotating every producer--consumer pair with its distance in cycles and whether a bubble is needed.
+\end{remark}
+
+\textit{Bridge}: the in-order pipeline saturates at CPI $\approx1.1$--$1.3$ for many workloads. To break through we must fetch and execute multiple instructions per cycle and allow them to overtake each other --- the subject of Chapter~2.
+
+% This chapter reviewed SC1006 foundations for SC3050 advanced topics.
+
+\section{Exercises}
+\begin{exercise}For a 5-stage pipeline with $t_{\text{IF}}=2.0$, $t_{\text{ID}}=1.2$, $t_{\text{EX}}=1.8$, $t_{\text{MEM}}=2.4$, $t_{\text{WB}}=1.0$\,ns and $t_r=0.2$\,ns, what is $T_c$? What is latency for one instruction and throughput in ideal steady state? Which stage limits $T_c$?\end{exercise}
+\begin{exercise}Sequence: \texttt{LW x5,0(x1)}; \texttt{ADD x6,x5,x2}; \texttt{SUB x7,x6,x3}. Identify every RAW hazard, state whether forwarding resolves it or a stall/bubble is required, and draw the 7-cycle timeline with bubbles.\end{exercise}
+\begin{exercise}With a single memory for IF and MEM, construct a cycle where a structural hazard occurs. Show two fixes (stall vs.\ split cache) and quantify the CPI impact for a workload with $30\%$ loads/stores if the stall fix adds one bubble per MEM-stage instruction.\end{exercise}
+\begin{exercise}Explain why \texttt{x0} needs special treatment in the hazard unit. Give an instruction pair where $\text{Rd}_{\text{EX}}=x_0$ matches $\text{Rs1}_{\text{ID}}$ but must not trigger forwarding or a stall.\end{exercise}
+\begin{exercise}Branch penalty is 2 cycles, $18\%$ of instructions are branches, predictor accuracy $75\%$. Compute average stall per instruction due to control hazards. How much does accuracy $95\%$ save? Relate to $\text{CPI}=1+s$.\end{exercise}
