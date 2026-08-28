@@ -1,0 +1,247 @@
+% SC3000 -- Chapter 5: Adversarial Search (0->100)
+% No \documentclass -- included by main.tex
+\chapter{Adversarial Search}
+\label{ch:adversarial}
+
+\begin{quote}
+\emph{``Every move is a question; every reply an answer.''} Games pit a player against an adversary who chooses the worst reply --- so optimal play means maximising under worst-case opposition, not averaging. This chapter builds that idea from zero: game trees, minimax, pruning, chance, and judging a position when time runs out.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: states $\to$ opponents.} We assume only state-space search from Ch.~2--3 and add one adversary who minimises your payoff. No prior game theory needed --- wins, losses, and draws become numbers before any algorithm.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item define a zero-sum game $(S,A,\text{Result},\text{Terminal},U)$ and its game tree;
+    \item compute minimax values bottom-up and extract the optimal strategy;
+    \item trace $\alpha$--$\beta$ pruning and explain why it returns the same move as minimax;
+    \item evaluate chance nodes with expectiminimax for dice/card games;
+    \item design evaluation functions and cut off search sensibly under time limits.
+\end{enumerate}
+
+% ============================================================
+\section{Games and Minimax}
+\label{sec:minimax}
+
+Two-player, turn-taking, deterministic, zero-sum games (chess, tic-tac-toe, checkers) are defined by a set of states $S$, actions $A(s)$, transition $\text{Result}(s,a)$, terminal test $\text{Terminal}(s)$, and utility $U(s)$ from MAX's viewpoint (MIN receives $-U$). The \emph{game tree} alternates MAX and MIN layers; leaves carry utilities.
+
+\begin{definition}[Minimax value]
+\[
+\text{Minimax}(s)=\begin{cases}
+U(s) & \text{if }\text{Terminal}(s),\\
+\max_{a}\,\text{Minimax}(\text{Result}(s,a)) & \text{if Player}(s)=\text{MAX},\\
+\min_{a}\,\text{Minimax}(\text{Result}(s,a)) & \text{if Player}(s)=\text{MIN}.
+\end{cases}
+\]
+MAX maximises the worst case; MIN minimises. A player's \emph{optimal strategy} chooses, at each of their nodes, an action attaining the node's value.
+\end{definition}
+
+Optimal play is depth-first minimax: values bubble up from the leaves. Time is $O(b^{m})$ and space $O(bm)$ for branching factor $b$ and depth $m$ --- too large for chess ($b\!\approx\!35$, $m\!\approx\!80$) without pruning.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.78, every node/.style={font=\scriptsize},
+  max/.style={regular polygon, regular polygon sides=3, draw, thick, fill=blue!18, minimum size=0.95cm, inner sep=1pt},
+  min/.style={regular polygon, regular polygon sides=3, draw, thick, fill=red!16, minimum size=0.95cm, inner sep=1pt, shape border rotate=180},
+  leaf/.style={rectangle, draw, thick, fill=green!10, minimum width=0.62cm, minimum height=0.48cm, rounded corners=2pt},
+  val/.style={font=\tiny\bfseries, fill=yellow!14, draw, rounded corners=2pt, inner sep=1.5pt}]
+  \node[max] (root) at (4,3.0) {MAX};
+  \node[min] (a) at (0.5,1.6) {MIN};
+  \node[min] (b) at (4,1.6) {MIN};
+  \node[min] (c) at (7.5,1.6) {MIN};
+  \node[leaf] (l1) at (-1.0,-0.6) {3};
+  \node[leaf] (l2) at (0.5,-0.6) {12};
+  \node[leaf] (l3) at (2.0,-0.6) {8};
+  \node[leaf] (l4) at (3.0,-0.6) {2};
+  \node[leaf] (l5) at (4.0,-0.6) {4};
+  \node[leaf] (l6) at (5.0,-0.6) {6};
+  \node[leaf] (l7) at (6.5,-0.6) {14};
+  \node[leaf] (l8) at (7.5,-0.6) {5};
+  \node[leaf] (l9) at (8.5,-0.6) {2};
+  \draw[thick, blue!60!black] (root) -- (a); \draw[thick, blue!60!black] (root) -- (b); \draw[thick, blue!60!black] (root) -- (c);
+  \draw[thick, red!60!black] (a) -- (l1); \draw[thick, gray!50] (a) -- (l2); \draw[thick, gray!50] (a) -- (l3);
+  \draw[thick, red!60!black, line width=0.9pt] (b) -- (l4); \draw[thick, gray!50] (b) -- (l5); \draw[thick, gray!50] (b) -- (l6);
+  \draw[thick, gray!50] (c) -- (l7); \draw[thick, gray!50] (c) -- (l8); \draw[thick, green!55!black, line width=0.9pt] (c) -- (l9);
+  \node[val, fill=blue!10] at (4,3.8) {3};
+  \node[val, fill=red!10] at (0.5,0.7) {3};
+  \node[val, fill=red!10] at (4,0.7) {2};
+  \node[val, fill=red!10] at (7.5,0.7) {2};
+  \node[font=\tiny, fill=white, draw, rounded corners, inner sep=2pt, align=left] at (4,-1.7) {Leaf $U$ (green) $\to$ MIN takes $\min$ (bold red edges) $\to$ MAX takes $\max(3,2,2)=3$};
+  \node[draw, fill=white, rounded corners, font=\tiny, align=left] at (7.7,3.7) {\color{blue!70!black}$\blacktriangle$ MAX (maximiser)\\\color{red!70!black}$\blacktriangledown$ MIN (minimiser)};
+\end{tikzpicture}
+\caption{Minimax game tree. Blue up-triangles are MAX nodes, red down-triangles MIN nodes; leaf values are utilities for MAX. MIN sub-trees evaluate to $3,2,2$ (bold chosen edges), so the root value is $\max(3,2,2)=3$.}
+\label{fig:minimax-tree}
+\end{figure}
+
+% ============================================================
+\section{Alpha--Beta Pruning}
+\label{sec:alphabeta}
+
+Minimax visits all $b^{m}$ leaves. \emph{Alpha--beta} carries two bounds down the path: $\alpha$ = the highest value MAX can already guarantee, $\beta$ = the lowest value MIN can already guarantee. Initially $\alpha=-\infty,\ \beta=+\infty$. At a MIN node, once a child returns $\le\alpha$, MAX would never allow this branch --- it is \emph{pruned}. Symmetrically, a MAX child $\ge\beta$ is pruned. The window $[\alpha,\beta]$ tightens as search proceeds.
+
+\begin{theorem}[Alpha--beta correctness]
+\label{thm:ab}
+With the same move ordering, alpha--beta returns the identical root value and move as minimax, visiting $O(b^{m/2})$ leaves under optimal ordering ($\approx 2b^{m/2}-1$), and no more than $b^{m}$ in the worst case.
+\end{theorem}
+
+Move ordering decides how much is pruned: ordering the best moves first (captures, killer moves) makes the bounds tighten early. Memory stays $O(bm)$ because the search is depth-first.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.74, every node/.style={font=\scriptsize},
+  max/.style={regular polygon, regular polygon sides=3, draw, thick, fill=blue!18, minimum size=0.95cm, inner sep=1pt},
+  min/.style={regular polygon, regular polygon sides=3, draw, thick, fill=red!16, minimum size=0.95cm, inner sep=1pt, shape border rotate=180},
+  leaf/.style={rectangle, draw, thick, minimum width=0.62cm, minimum height=0.48cm, rounded corners=2pt},
+  pruned/.style={rectangle, draw=gray!50, dashed, thick, fill=gray!18, minimum width=0.62cm, minimum height=0.48cm, rounded corners=2pt, text=gray!60!black},
+  ab/.style={font=\tiny, fill=white, draw, rounded corners=2pt, inner sep=1.5pt}]
+  \node[max] (root) at (4,3.0) {MAX};
+  \node[ab, fill=blue!8] at (4,3.8) {$\alpha=3,\ \beta=\infty$};
+  \node[min] (a) at (0.5,1.6) {MIN};
+  \node[min] (b) at (4,1.6) {MIN};
+  \node[min, fill=orange!18] (c) at (7.5,1.6) {MIN};
+  \node[leaf, fill=green!10] (l1) at (-1.0,-0.6) {3};
+  \node[leaf, fill=green!10] (l2) at (0.5,-0.6) {12};
+  \node[leaf, fill=green!10] (l3) at (2.0,-0.6) {8};
+  \node[leaf, fill=red!10] (l4) at (3.0,-0.6) {2};
+  \node[pruned] (l5) at (4.0,-0.6) {4};
+  \node[pruned] (l6) at (5.0,-0.6) {6};
+  \node[leaf, fill=green!10] (l7) at (6.5,-0.6) {14};
+  \node[leaf, fill=green!10] (l8) at (7.5,-0.6) {5};
+  \node[leaf, fill=red!10] (l9) at (8.5,-0.6) {2};
+  \draw[thick, blue!60!black] (root) -- (a); \draw[thick, blue!60!black] (root) -- (b); \draw[thick, blue!60!black] (root) -- (c);
+  \draw[thick, red!60!black] (a) -- (l1); \draw[thick, gray!50] (a) -- (l2); \draw[thick, gray!50] (a) -- (l3);
+  \draw[thick, red!60!black, line width=0.9pt] (b) -- (l4); \draw[thick, gray!55, dashed] (b) -- (l5); \draw[thick, gray!55, dashed] (b) -- (l6);
+  \draw[thick, gray!50] (c) -- (l7); \draw[thick, gray!50] (c) -- (l8); \draw[thick, green!55!black, line width=0.9pt] (c) -- (l9);
+  \node[ab] at (0.5,0.75) {$[-\infty,3]$: $a=3$};
+  \node[ab, fill=orange!10] at (4,0.75) {$[3,\infty]$: prune};
+  \node[ab] at (7.5,0.75) {$[3,\infty]$: $c=2$};
+  \node[font=\tiny, fill=red!10, draw, rounded corners=2pt, inner sep=2pt] at (3.0,-1.35) {$2\le\alpha$ $\Rightarrow$ cutoff};
+  \node[font=\tiny, fill=gray!15, draw, rounded corners=2pt, inner sep=2pt] at (4.5,-1.35) {pruned};
+  \node[font=\tiny, fill=white, draw, rounded corners, inner sep=2pt, align=left] at (4,-2.15) {Visited in order $3,12,8,2,\text{\textbf{4},6},14,5,2$: only $7$ of $9$ leaves (grey dashed $=$ pruned). Root stays $3$.};
+\end{tikzpicture}
+\caption{Alpha--beta on the tree of Fig.~\ref{fig:minimax-tree}. After $a$ returns $3$, the root window is $[\alpha,\beta]=[3,\infty]$. MIN node $b$: the first leaf $2\le\alpha$ already caps $b$ at $2$, so the remaining leaves $4,6$ are pruned (grey dashed). MIN node $c$ is fully scanned ($14,5,2$) but can only reach $2$, so the root value $3$ is unchanged --- identical to full minimax.}
+\label{fig:alphabeta}
+\end{figure}
+
+\begin{lstlisting}[language=Python, caption={Minimax with alpha--beta pruning}, label={lst:alphabeta}]
+def alphabeta(state, depth, alpha, beta, maximizing, game):
+    """Return (value, best_move). game: actions, result, terminal, evaluate."""
+    if depth == 0 or game.is_terminal(state):
+        return game.evaluate(state), None
+    best_move = None
+    if maximizing:
+        value = float('-inf')
+        for move in game.actions(state):      # order best-first for pruning!
+            child = game.result(state, move)
+            score, _ = alphabeta(child, depth-1, alpha, beta, False, game)
+            if score > value:
+                value, best_move = score, move
+            alpha = max(alpha, value)
+            if value >= beta:                 # beta cutoff
+                break
+        return value, best_move
+    else:
+        value = float('inf')
+        for move in game.actions(state):
+            child = game.result(state, move)
+            score, _ = alphabeta(child, depth-1, alpha, beta, True, game)
+            if score < value:
+                value, best_move = score, move
+            beta = min(beta, value)
+            if value <= alpha:                # alpha cutoff
+                break
+        return value, best_move
+
+# Usage: val, move = alphabeta(root, 4, -float('inf'), float('inf'), True, g)
+\end{lstlisting}
+
+Minimax without pruning would be the same code without the two cutoff lines; the cutoffs only remove branches that cannot change the result, which is why Theorem~\ref{thm:ab} holds. Do not forget the comment: \emph{move ordering is what makes alpha--beta fast}; with random ordering the gain shrinks toward none in the worst case.
+
+% ============================================================
+\section{Chance Nodes and Expectiminimax}
+\label{sec:expectiminimax}
+
+Backgammon, Monopoly, and card games add randomness. We insert \emph{chance} nodes whose children are the dice or card outcomes $d_i$, each with known probability $P(d_i)$; the node's value is an expectation:
+
+\[
+\text{Expectiminimax}(s)=\begin{cases}
+U(s) & \text{terminal},\\
+\max_{a}\,\text{Expectiminimax}(\text{Result}(s,a)) & \text{MAX},\\
+\min_{a}\,\text{Expectiminimax}(\text{Result}(s,a)) & \text{MIN},\\
+\sum_{i} P(d_i)\,\text{Expectiminimax}(\text{Result}(s,d_i)) & \text{CHANCE}.
+\end{cases}
+\]
+
+Time becomes $O(b^{m}n^{m})$ when each chance node has $n$ outcomes, and pruning weakens: a bound on \emph{expectations} is rarely decisive. Still, bounded-window variants (Ballard's \textsc{Star} algorithms: probe children of a chance node until the expectation exits $[\alpha,\beta]$) prune safely and are used in practice.
+
+\begin{lstlisting}[language=Python, caption={Expectiminimax with chance nodes}, label={lst:expectiminimax}]
+def expectiminimax(state, depth, game):
+    """Expectiminimax. Chance nodes use game.chance_outcomes(state)
+    -> list of (outcome, probability)."""
+    if depth == 0 or game.is_terminal(state):
+        return game.evaluate(state), None
+    player = game.player(state)
+    if player == 'CHANCE':
+        exp_value = 0.0
+        for outcome, prob in game.chance_outcomes(state):
+            child = game.chance_result(state, outcome)
+            val, _ = expectiminimax(child, depth - 1, game)
+            exp_value += prob * val
+        return exp_value, None
+    elif player == 'MAX':
+        best, best_move = float('-inf'), None
+        for move in game.actions(state):
+            child = game.result(state, move)
+            val, _ = expectiminimax(child, depth - 1, game)
+            if val > best:
+                best, best_move = val, move
+        return best, best_move
+    else:                                   # MIN
+        best, best_move = float('inf'), None
+        for move in game.actions(state):
+            child = game.result(state, move)
+            val, _ = expectiminimax(child, depth - 1, game)
+            if val < best:
+                best, best_move = val, move
+        return best, best_move
+
+# Backgammon: chance_outcomes = 36 dice pairs (i,j), each with prob 1/36
+\end{lstlisting}
+
+\emph{Caveat:} expectiminimax optimises the expected utility. A risk-averse player may prefer a guaranteed $4$ over an expected $5$ with variance (utility theory, not search, decides); the algorithm itself assumes utilities already encode preferences.
+
+% ============================================================
+\section{Evaluation Functions and Cutoff}
+\label{sec:eval}
+
+Full search to terminal nodes is impossible except for tiny games. Instead we \emph{cut off} at depth $d$ and apply an \emph{evaluation function} $\text{Eval}(s)\approx U(s)$. For chess, material counts ($P=1,\ N=B=3,\ R=5,\ Q=9$) plus mobility and pawn structure are classic; modern engines use neural networks trained by self-play.
+
+A good $\text{Eval}$ is fast, monotone (wins $>0$, losses $<0$, draws $0$), and strongly correlated with the chance of winning. Two pitfalls matter:
+\begin{itemize}
+    \item \textbf{Horizon effect}: a forced win or loss just beyond the cutoff looks fine; quiescence search extends the frontier through captures and checks until the position is \emph{quiescent}.
+    \item \textbf{Stability}: material counts swing wildly between adjacent plies; demanding a symmetric score, $\text{Eval}(s)=-\text{Eval}(s')$ for mirrored $s,s'$, halves the variance.
+\end{itemize}
+
+Engineering the full player: \emph{iterative deepening} (search 1,2,3,\dots plies until the clock runs out), alpha--beta with strong move ordering (captures first, killer heuristic), a \emph{transposition table} (hash visited states to reuse values), and quiescence search at the horizon.
+
+\begin{remark}[Why this chapter matters in practice]
+Every strong chess/draughts/shogi program since the 1970s is exactly this pipeline; AlphaZero replaced the hand-written $\text{Eval}$ with a learned one but kept the search tree. Understanding minimax and $\alpha$--$\beta$ is understanding the engine's skeleton.
+\end{remark}
+
+% ============================================================
+\section{Chapter Notes}
+Further reading: Russell \& Norvig Ch.~5; Knuth \& Moore (1975) on alpha--beta completeness; Ballard (1983) on expectation pruning; Shannon (1950) on evaluation functions for chess. Exercises below build tic-tac-toe and a coin-flip game by hand first, then by code.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch05-ex}
+\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Minimax by hand.} For Fig.~\ref{fig:minimax-tree}, compute the value of every internal node bottom-up. Which root move is optimal and what is the minimax value? If MIN plays suboptimally exactly once (say $12$ from node $a$), how much better can MAX do?
+    \item \textbf{Alpha--beta trace.} Replay Fig.~\ref{fig:alphabeta} left to right, updating $[\alpha,\beta]$ after every leaf. List the exact order of leaf visits and the pruned leaves. How many leaves does full minimax visit vs.\ alpha--beta? Would pruning change if the root's children were ordered $c,b,a$?
+    \item \textbf{Move ordering.} Reorder each MIN node's leaves in Fig.~\ref{fig:minimax-tree} to (a) maximise pruning and (b) minimise it. Count visited leaves in both cases and justify the $O(b^{m/2})$ bound of Theorem~\ref{thm:ab}.
+    \item \textbf{Expectiminimax.} MAX picks $A$ or $B$; then a fair coin lands $H$ or $T$. Payoffs (MAX's utility): $A\!+\!H=5$, $A\!+\!T=1$, $B\!+\!H=3$, $B\!+\!T=4$. Draw the tree (with CHANCE nodes), compute expectiminimax values, and give MAX's optimal choice. How does a biased coin with $P(H)=0.7$ change it? Why can alpha--beta \emph{not} prune the losing chance branch here?
+    \item \textbf{Evaluation design.} Design $\text{Eval}$ for tic-tac-toe as the number of open lines (row/column/diagonal) free of MIN marks and containing at least one MAX mark, minus the same count for MIN. Compute it for (a) $X$ in the centre, (b) $X$ in a corner, on an empty board, and state which opening it prefers. Explain the horizon effect: with cutoff at depth $1$, a position where MAX can fork in two moves can score worse than a calm, materially better one.
+\end{enumerate}
+% End of Chapter 5

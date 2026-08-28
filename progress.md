@@ -16,8 +16,9 @@
 | 3 - Batch expansion (next cores) | DONE | SC1004 43p 683KB + SC1005 37p 609KB + SC1006 71p 788KB (thickened 1893L 0 padding) — QA deleg_578cc33b PASS×2 + CONDITIONAL→thickened deleg_8af99f8e PASS 03:42 SGT |
 | 4 - Batch expansion (phase 4) | DONE | SC1008 43p 636KB + SC2000 40p 712KB + SC2002 44p 695KB — 3×8 ch 200-260L 0 ! drafts done deleg_b572680a 15m42s — QA FIXED 2026-08-28 14:40 SGT (SC2000 40p 0 ! 10.6pt max, SC2002 44p 0 ! resizebox fix + sloppy) — 0 ! 0 pgfkeys 0 fails>15 — PASS |
 | 5 - Batch expansion (phase 5) | DONE | SC2203 42p 740KB + SC2008 50p 757KB + SC2207 45p 670KB — 3×8 ch 1620/1665/1641L 2-3 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 15:01 SGT deleg_1aa6462b (1184s/939s/1211s) |
-| 6 - Remaining Programme Core/MPE/BDE | IN_PROGRESS (Phase 6 dispatched) | queued: SC3099/MH1812 + 9 MPE (SC3000/SC3010/SC3020/SC4001/SC4002/SC4012/SC4051/SC4040/SC4055) + BDE/College overview — autonomous until ALL DONE |
-| 7 - Final QA fleet | PENDING | cross-module prereq/notation + latexmk batch + release tag |
+| 6 - Batch expansion (phase 6) | DONE | SC3099 46p 688KB + MH1812 45p 676KB + SC3000 46p 827KB — 3×8 ch 1710/2078/1762L 2-4 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 15:24 SGT deleg_62e8848f (1324s/1070s/1031s) |
+| 7 - Remaining MPE/BDE | IN_PROGRESS (Phase 7 dispatched) | queued: 6 MPE (SC3010/SC3020/SC4001/SC4002/SC4012/SC4051) + 3 final (SC4040/SC4055/BDE) — autonomous until ALL DONE |
+| 8 - Final QA fleet | PENDING | cross-module prereq/notation + latexmk batch + release tag |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
@@ -35,6 +36,9 @@
 | SC2203 | Automata, Computability & Complexity | 3 | Core | DONE | DONE 8/8 (42p 740KB 1620L 25 TikZ color, 26 lstlisting) 15:01 SGT | DONE PASS 15:01 SGT (0 !, 12.27 max) | DONE | DONE 42p 740KB 0 ! |
 | SC2008 | Computer Network | 3 | Core | DONE | DONE 8/8 (50p 757KB 1665L 26 TikZ color, 46 lstlisting) 14:56 SGT | DONE PASS 15:02 SGT (0 !, 12.82 max) | DONE | DONE 50p 757KB 0 ! |
 | SC2207 | Introduction to Databases | 3 | Core | DONE | DONE 8/8 (45p 670KB 1641L 24 TikZ color, 44 lstlisting) 15:01 SGT | DONE PASS 15:02 SGT (0 !, 9.41 max) | DONE | DONE 45p 670KB 0 ! |
+| SC3099 | Capstone Project | 4 | Core | DONE | DONE 8/8 (46p 688KB 1710L 24 TikZ color) 15:24 SGT | DONE PASS 15:24 SGT (0 !, 14.91 max) | DONE | DONE 46p 688KB 0 ! |
+| MH1812 | Discrete Mathematics | 3 | Core* | DONE | DONE 8/8 (45p 676KB 2078L 24 TikZ color) 15:20 SGT | DONE PASS 15:24 SGT (0 !, 0 max) | DONE | DONE 45p 676KB 0 ! |
+| SC3000 | Artificial Intelligence | 3 | MPE | DONE | DONE 8/8 (46p 827KB 1762L 20 TikZ color) 15:19 SGT | DONE PASS 15:24 SGT (0 !, 0 max) | DONE | DONE 46p 827KB 0 ! |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
@@ -47,6 +51,7 @@
 - 2026-08-23 02:48 SGT: Phase 2 DONE — SC1007/05/06 QA deleg_85968bd2 PASS all 3 (24-26 TikZ, 0 verbatim, 0 !). SC2001 v3 8 patches consolidated (294/233/260/249/260/257/251/257L, 53p 982KB 0 !) pending re-QA. Phase 3 queued: remaining Programme Core + MPEs + BDE. AGENTS.md + memory updated per Bowen: color where useful + syntax-highlighted code + QA must compile-check diagrams+formulas.
 - 2026-08-28 14:40 SGT: Phase 4 QA FIXED — SC1008 (43p 0 !), SC2000 (40p 0 !, 41pt→10.6), SC2002 (44p 0 !, 222pt→0 via resizebox, 30pt→0 via sloppy) — all PASS visual+ground-up, committed.
 - 2026-08-28 15:02 SGT: Phase 5 DONE — SC2203 42p 1620L 0 ! 12.27 max, SC2008 50p 1665L 0 ! 12.82 max, SC2207 45p 1641L 0 ! 9.4 max — deleg_1aa6462b PASS, committed.
+- 2026-08-28 15:25 SGT: Phase 6 DONE — SC3099 46p 1710L 0 ! 14.91 max, MH1812 45p 2078L 0 !, SC3000 46p 1762L 0 ! — deleg_62e8848f PASS, committed.
 
 ## Resume Instructions
 - Read this file first on restart.

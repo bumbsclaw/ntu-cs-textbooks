@@ -1,0 +1,258 @@
+% SC3000 — Chapter 7: Automated Planning (0->100)
+% No \documentclass — included by main.tex
+\chapter{Automated Planning}
+\label{ch:planning}
+\begin{quote}
+\emph{``Planning is reasoning about doing.''} We leave behind explicit graph search on hand-coded states and instead let the agent \emph{describe} the world in logic --- then \emph{derive} a sequence of actions that achieves a goal.
+\end{quote}
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: search $\to$ descriptions.} We assume only state-space search (Ch.~2--3) and propositional logic (Ch.~6). We build planning from scratch: what a state \emph{is}, how an action \emph{changes} it, then how to plan efficiently. No prior PDDL or SAT assumed.}}
+\vspace{0.4em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item formalise a planning problem with STRIPS operators (preconditions, add, delete);
+    \item contrast state-space and plan-space search;
+    \item build a planning graph and identify mutex relations;
+    \item trace Graphplan (expand $\to$ extract) on a small example;
+    \item encode bounded planning as SAT and sketch PDDL syntax.
+\end{enumerate}
+% ============================================================
+\section{The Planning Problem and STRIPS}
+\label{sec:strips}
+A \emph{planning problem} is a triple $(S_0, G, O)$: initial state $S_0$ (a set of true propositions), goal $G$ (a conjunction to achieve), and operators $O$. The \emph{closed-world assumption} holds: anything not listed is false.
+\begin{definition}[STRIPS operator]
+An operator $o$ is $\langle \text{Name}(o), \text{Pre}(o), \text{Add}(o), \text{Del}(o)\rangle$ where $\text{Pre}(o)$ are preconditions that must hold, $\text{Add}(o)$ are propositions made true, and $\text{Del}(o)$ are propositions made false. $o$ is \emph{applicable} in $S$ iff $\text{Pre}(o)\subseteq S$; the result is $S'=(S\setminus\text{Del}(o))\cup\text{Add}(o)$.
+\end{definition}
+\begin{example}[Blocks world]
+$\text{Move}(b,x,y)$: move block $b$ from $x$ to $y$. Pre: $\{\text{On}(b,x),\text{Clear}(b),\text{Clear}(y)\}$, Add: $\{\text{On}(b,y),\text{Clear}(x)\}$, Del: $\{\text{On}(b,x),\text{Clear}(y)\}$. Grounding $b,x,y$ over blocks yields propositional operators.
+\end{example}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.82, every node/.style={font=\scriptsize},
+  box/.style={draw, thick, rounded corners, align=center, minimum width=2.2cm, minimum height=0.75cm},
+  arr/.style={->, thick, >=Stealth}]
+  \node[box, fill=blue!14, draw=blue!60!black] (op) at (4,2.2) {\textbf{Move(b,x,y)}};
+  \node[box, fill=orange!18, draw=orange!60!black] (pre) at (0.2,0.5) {Pre:\\On(b,x), Clear(b)\\Clear(y)};
+  \node[box, fill=green!16, draw=green!50!black] (add) at (4,0.5) {Add:\\On(b,y)\\Clear(x)};
+  \node[box, fill=red!14, draw=red!60!black] (del) at (7.8,0.5) {Del:\\On(b,x)\\Clear(y)};
+  \draw[arr, orange!70!black] (pre) -- (op) node[midway, above, sloped, font=\tiny] {requires};
+  \draw[arr, green!50!black] (op) -- (add) node[midway, right, font=\tiny] {+};
+  \draw[arr, red!60!black] (op) -- (del) node[midway, left, font=\tiny] {--};
+  \node[draw, fill=yellow!12, rounded corners, font=\tiny, align=left] at (4,3.4) {Operator schema: $S'=(S\setminus\text{Del})\cup\text{Add}$ if Pre $\subseteq S$};
+  \node[font=\tiny, fill=blue!6, draw, rounded corners, inner sep=2pt] at (4,-0.55) {STRIPS = add/delete lists; no conditional effects};
+\end{tikzpicture}
+\caption{STRIPS operator anatomy. Preconditions gate applicability (orange); effects split into add list (green, propositions asserted) and delete list (red, propositions retracted).}
+\label{fig:strips-op}
+\end{figure}
+
+State-space size is $2^{|\mathcal{P}|}$ for $|\mathcal{P}|$ propositions --- far too large to enumerate. Planning exploits the \emph{factored} representation to search more cleverly.
+
+% ============================================================
+\section{State-Space vs.\ Plan-Space Search}
+\label{sec:state-plan-space}
+
+\emph{State-space} planners search over world states: forward (progression) from $S_0$ applying applicable operators, or backward (regression) from $G$ applying operators relevant to open goals. Forward branching is $|O|$; backward branching is limited to operators that achieve a goal literal but may introduce many subgoals.
+
+\emph{Plan-space} planners search over \emph{partial plans} (sets of steps with ordering and causal-link constraints) and refine by resolving flaws (open precondition or threat). Plan-space enables least-commitment: order $a$ before $b$ only when needed. Modern planners mostly use state-space with heuristics (e.g., planning-graph heuristics), but plan-space clarifies the structure of reasoning.
+
+\begin{center}
+\small\begin{tabular}{lcc}
+\toprule
+& State-space & Plan-space\\
+\midrule
+Node & world state $S$ & partial plan $(A,\prec,\text{CL})$\\
+Start & $S_0$ & empty plan + start/finish steps\\
+Successor & apply one operator & repair one flaw\\
+Heuristic & $h(S)$ e.g.\ relaxed plan & fewest flaws\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Planning Graphs and Mutex}
+\label{sec:planning-graph}
+
+A \emph{planning graph} compactly approximates reachability in layers. Level $P_0=S_0$ (propositions). Then alternate action layers $A_i$ and proposition layers $P_{i+1}$: $A_i$ contains every operator whose preconditions appear in $P_i$ (plus persistence/no-op actions), and $P_{i+1}$ contains all adds of $A_i$. Edges link preconditions to actions and actions to effects. Crucially, we mark \emph{mutual exclusions} (mutex).
+
+Two actions at the same level are mutex if (i) one deletes a precondition or add of the other (\emph{interference}), or (ii) they have mutex preconditions (\emph{competing needs}). Two propositions are mutex if all ways to achieve them are pairwise mutex (including persistence). Mutex propagation prunes impossible combinations without full search.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.78, every node/.style={font=\scriptsize},
+  prop/.style={ellipse, draw, thick, minimum width=1.35cm, minimum height=0.58cm, align=center},
+  act/.style={rectangle, draw, thick, rounded corners, minimum width=1.45cm, minimum height=0.55cm, align=center}]
+  % P0
+  \node[prop, fill=blue!14, draw=blue!60!black] (p0a) at (0,2.8) {Have(Cake)};
+  \node[prop, fill=blue!14, draw=blue!60!black] (p0b) at (0,1.5) {Eaten(Cake)};
+  \node[font=\tiny, gray] at (0,3.55) {$P_0$};
+  % A0
+  \node[act, fill=orange!18, draw=orange!60!black] (a0a) at (3.2,2.8) {Eat(Cake)};
+  \node[act, fill=gray!14, draw=gray!60!black] (a0b) at (3.2,1.5) {NoOp$_{\neg\text{Eaten}}$};
+  \node[act, fill=gray!14, draw=gray!60!black] (a0c) at (3.2,0.35) {NoOp$_{\text{Have}}$};
+  \node[font=\tiny, gray] at (3.2,3.55) {$A_0$};
+  % P1
+  \node[prop, fill=green!14, draw=green!50!black] (p1a) at (6.4,2.8) {Have(Cake)};
+  \node[prop, fill=green!14, draw=green!50!black] (p1b) at (6.4,1.5) {Eaten(Cake)};
+  \node[prop, fill=green!10, draw=green!50!black] (p1c) at (6.4,0.35) {$\neg$Have(Cake)};
+  \node[font=\tiny, gray] at (6.4,3.55) {$P_1$};
+  % edges
+  \draw[->, thick, blue!50!black] (p0a) -- (a0a);
+  \draw[->, thick, violet!50!black] (p0b) -- (a0b);
+  \draw[->, thick, violet!50!black] (p0a) -- (a0c);
+  \draw[->, thick, green!50!black] (a0a) -- (p1b);
+  \draw[->, thick, green!50!black] (a0a) -- (p1c);
+  \draw[->, thick, gray] (a0b) -- (p1b);
+  \draw[->, thick, gray] (a0c) -- (p1a);
+  % mutex arcs
+  \draw[<->, thick, red!65!black, dashed] (a0a) to[bend left=18] node[midway, above, font=\tiny, fill=white, inner sep=1pt] {mutex} (a0c);
+  \draw[<->, thick, red!65!black, dashed] (p1a) to[bend left=14] node[midway, right, font=\tiny, fill=white, inner sep=1pt] {mutex} (p1c);
+  \draw[<->, thick, red!65!black, dashed] (p1a) to[bend right=10] node[midway, above, font=\tiny, fill=white, inner sep=1pt] {mutex} (p1b);
+  \node[font=\tiny, fill=red!8, draw=red!30!black, rounded corners, inner sep=2pt, align=left] at (3.2,-0.65) {red dashed = mutex};
+  \node[font=\tiny, fill=yellow!10, draw, rounded corners, inner sep=2pt] at (6.4,-0.65) {persistence = NoOp};
+\end{tikzpicture}
+\caption{Planning graph for the cake problem (one eat step). $P_0\to A_0\to P_1$ with precondition/effect edges. Red dashed arcs are mutex: Eat(Cake) interferes with NoOp$_{\text{Have}}$; Have and Eaten become mutex at $P_1$.}
+\label{fig:planning-graph}
+\end{figure}
+
+If $G\subseteq P_k$ with no mutex among goal propositions, a solution \emph{might} exist within $k$ steps. If the graph levels off (no new propositions or mutexes), and $G$ remains mutex, the problem is unsolvable.
+
+\begin{lstlisting}[language=Python, caption={Forward BFS planner over STRIPS states}, label={lst:strips-bfs}]
+from collections import deque
+
+def strips_bfs(init, goal, operators):
+    """BFS progression planner. State = frozenset of true propositions."""
+    frontier = deque([(frozenset(init), [])])
+    visited = {frozenset(init)}
+    while frontier:
+        state, plan = frontier.popleft()
+        if goal.issubset(state):
+            return plan
+        for op in operators:
+            if op['pre'].issubset(state):          # applicable?
+                nxt = (state - op['del']) | op['add']
+                if nxt not in visited:
+                    visited.add(nxt)
+                    frontier.append((nxt, plan + [op['name']]))
+    return None  # no plan
+
+# Example: cake problem
+ops = [
+    {'name':'Eat(Cake)', 'pre':{'Have(Cake)'}, 'add':{'Eaten(Cake)'}, 'del':{'Have(Cake)'}},
+    {'name':'Bake(Cake)', 'pre':{'NotHave(Cake)'}, 'add':{'Have(Cake)'}, 'del':{'NotHave(Cake)'}},
+]
+print(strips_bfs({'Have(Cake)'}, {'Have(Cake)','Eaten(Cake)'}, ops))
+\end{lstlisting}
+
+% ============================================================
+\section{Graphplan}
+\label{sec:graphplan}
+
+Graphplan (Blum \& Furst, 1997) interleaves expansion and extraction:
+\begin{enumerate}[nosep, leftmargin=1.4em]
+    \item \textbf{Expand} the planning graph one level until $G$ appears non-mutex in $P_k$.
+    \item \textbf{Extract} a plan by backward search: pick actions in $A_{k-1}$ achieving $G$, ensure they are pairwise non-mutex, recurse on their preconditions at $P_{k-1}$. On failure, backtrack; if no set works, expand further.
+    \item If the graph levels off with $G$ still mutex, report unsolvable.
+\end{enumerate}
+Graphplan is sound, complete, and often much faster than naive BFS because mutex pruning eliminates vast dead space. The extracted plan is parallel: non-mutex actions at the same level run concurrently.
+
+% ============================================================
+\section{SAT Planning and PDDL}
+\label{sec:sat-pddl}
+
+Bounded planning asks: is there a plan of length $\le k$? Encode as SAT and let a solver decide. Create variables $p_t$ (proposition $p$ at time $t$) and $a_t$ (action $a$ at time $t$) for $0\le t\le k$:
+\begin{align*}
+&\text{initial: } p_0 \text{ for }p\in S_0,\; \neg p_0\text{ otherwise} \quad
+\text{goal: } p_k \text{ for }p\in G\\
+&\text{action $\to$ pre: } a_t \to \bigwedge_{p\in\text{Pre}(a)} p_t \quad
+\text{action $\to$ eff: } a_t \to \bigwedge_{p\in\text{Add}(a)} p_{t+1}\wedge\bigwedge_{p\in\text{Del}(a)}\neg p_{t+1}\\
+&\text{frame: } (p_t\wedge\neg p_{t+1})\to\bigvee_{a: p\in\text{Del}(a)} a_t \quad
+\text{exclusion: at most one }a_t\text{ per }t
+\end{align*}
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[scale=0.80, every node/.style={font=\scriptsize},
+  var/.style={draw, thick, rounded corners, minimum width=1.5cm, minimum height=0.6cm, align=center},
+  clause/.style={draw, thick, ellipse, minimum width=2.2cm, minimum height=0.65cm, align=center}]
+  \node[var, fill=blue!14, draw=blue!60!black] (at) at (0,2.0) {$a_t$};
+  \node[var, fill=green!14, draw=green!50!black] (pre) at (3.4,2.9) {$p_t\in\text{Pre}(a)$};
+  \node[var, fill=orange!16, draw=orange!60!black] (add) at (3.4,1.6) {$p_{t+1}\in\text{Add}$};
+  \node[var, fill=red!14, draw=red!60!black] (del) at (3.4,0.5) {$\neg p_{t+1}\in\text{Del}$};
+  \node[clause, fill=violet!12, draw=violet!50!black] (frame) at (0,0.5) {frame axiom};
+  \node[var, fill=yellow!16, draw=yellow!60!black] (excl) at (6.6,2.0) {$\neg a_t\vee\neg b_t$};
+  \draw[->, thick, blue!60!black] (at) -- (pre) node[midway, above, font=\tiny, fill=white, inner sep=1pt] {$a_t\!\to\!p_t$};
+  \draw[->, thick, green!50!black] (at) -- (add) node[midway, above, font=\tiny, fill=white, inner sep=1pt] {$a_t\!\to\!p_{t+1}$};
+  \draw[->, thick, red!60!black] (at) -- (del);
+  \draw[->, thick, violet!60!black, dashed] (frame) -- (at) node[midway, below, sloped, font=\tiny, fill=white, inner sep=1pt] {change needs action};
+  \draw[<->, thick, yellow!60!black] (at) -- (excl) node[midway, above, font=\tiny, fill=white, inner sep=1pt] {at-most-one};
+  \node[font=\tiny, fill=gray!8, draw, rounded corners, inner sep=2pt, align=left] at (6.6,0.5) {Solve for $t=0..k$\\SAT $\Rightarrow$ plan};
+\end{tikzpicture}
+\caption{SAT encoding of bounded planning. Each action implies its preconditions and effects; frame axioms force every change to be caused by an action; exclusion clauses enforce serial plans. A satisfying assignment at horizon $k$ is a $k$-step plan.}
+\label{fig:sat-encoding}
+\end{figure}
+
+Iteratively increase $k$ until SAT (plan found) or resource limit. Modern SAT planners (Blackbox, SATPlan) add planning-graph mutex as clauses to speed solving.
+
+\paragraph{PDDL basics.} The Planning Domain Definition Language describes domains and problems separately:
+\begin{center}
+\small\texttt{(:action Move :parameters (?b ?x ?y) :precondition (and (On ?b ?x) (Clear ?b) (Clear ?y))}\\
+\small\texttt{:effect (and (On ?b ?y) (Clear ?x) (not (On ?b ?x)) (not (Clear ?y))))}
+\end{center}
+A problem file gives \texttt{:init} and \texttt{:goal}; grounding instantiates lifted operators. PDDL~2.1 adds numeric fluents and durative actions.
+
+\begin{lstlisting}[language=Python, caption={Mutex detection for a planning-graph level}, label={lst:mutex}]
+def action_mutex(a, b, prop_mutex):
+    """True if actions a,b are mutex (interference or competing needs)."""
+    if a['add'] & b['del'] or b['add'] & a['del']:
+        return True   # interference
+    if a['del'] & b['pre'] or b['del'] & a['pre']:
+        return True
+    if a['pre'] & b['add'] or b['pre'] & a['add']:
+        pass  # covered by competing needs below
+    for p in a['pre']:
+        for q in b['pre']:
+            if (p, q) in prop_mutex or (q, p) in prop_mutex:
+                return True  # competing needs
+    return False
+
+def prop_mutex_level(props, achievers, act_mutex):
+    """Props p,q mutex if every achiever pair is mutex."""
+    mutex = set()
+    plist = list(props)
+    for i, p in enumerate(plist):
+        for q in plist[i+1:]:
+            all_mutex = True
+            for ap in achievers.get(p, []):
+                for aq in achievers.get(q, []):
+                    if ap is aq:
+                        all_mutex = False; break
+                    if (ap, aq) not in act_mutex and (aq, ap) not in act_mutex:
+                        all_mutex = False; break
+                if not all_mutex:
+                    break
+            if all_mutex and achievers.get(p) and achievers.get(q):
+                mutex.add((p, q))
+    return mutex
+\end{lstlisting}
+
+% ============================================================
+\section{Key Takeaways}
+STRIPS factors the world into propositions and operators; state-space progression/regression search from this factored form. Planning graphs over-approximate reachability and expose mutex to prune massively. Graphplan extracts a parallel plan by backward search over the graph, expanding only as needed. Bounded planning compiles to SAT (action$\to$pre/eff + frame + exclusion) and leverages modern solvers. PDDL cleanly separates lifted domain from grounded problem.
+
+% ============================================================
+\section{Chapter Notes}
+Further reading: Russell \& Norvig Ch.~10--11; Blum \& Furst (1997) on Graphplan; Kautz \& Selman (1996) on SATPlan. Heuristic search planning (FF, Fast Downward) dominates today, using planning-graph relaxations ($h_{\text{add}}$, $h_{\max}$, $h_{\text{FF}}$) to guide forward search. Try the \texttt{fast-downward} or \texttt{pyperplan} toolkits with PDDL benchmarks (Blocks, Logistics, Rovers).
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch07-ex}
+\begin{enumerate}[label=E7.\arabic*, leftmargin=*, itemsep=0.75em]
+    \item \textbf{Warm-up: STRIPS grounding.} Domain has predicates On/2, Clear/1 and blocks $\{A,B,C\}$. Write the grounded operator Move(A,B,C) with pre/add/del sets. How many grounded Move operators exist?
+    \item \textbf{State-space vs.\ plan-space.} For a problem with branching $b=6$ and solution depth $d=5$, compare worst-case nodes for forward BFS vs.\ a plan-space search that keeps 3 partial plans. When does regression beat progression?
+    \item \textbf{Planning graph trace.} Initial $\{P,Q\}$, actions $A_1$: Pre $\{P\}\to$ Add $\{R\}$, $A_2$: Pre $\{Q\}\to$ Add $\{S\}$, $A_3$: Pre $\{R,S\}\to$ Add $\{G\}$ (all delete $\emptyset$). Build $P_0,A_0,P_1,A_1,P_2$ and mark all mutex. At which level does $G$ first appear non-mutex with itself?
+    \item \textbf{Graphplan extraction.} Use the graph from E7.3 to extract a plan for goal $\{G\}$. Show the backward search choices at each level and give the final parallel plan. What changes if $A_1$ deletes $Q$?
+    \item \textbf{SAT encoding.} Encode the cake problem (Have $\to$ Eat $\to$ Eaten) for horizon $k=1$ as CNF: list all variables $p_t,a_t$ and write the clauses for initial, goal, action$\to$pre/eff, frame, and at-most-one. Is the formula satisfiable? What about $k=0$?
+\end{enumerate}
+% End of Chapter 7

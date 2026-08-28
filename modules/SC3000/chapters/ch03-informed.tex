@@ -1,0 +1,204 @@
+\chapter{Informed Search}\label{ch:informed}
+\begin{center}\small\textit{Uninformed search explores blindly; informed search guesses wisely\\--- guided by a heuristic that estimates how far remains to the goal.}\end{center}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{Learning outcomes.} After this chapter you will be able to: (1)~define $g$, $h$, $f$ and explain $f=g+h$; (2)~distinguish greedy best-first from A$^{*}$; (3)~test admissibility vs.\ consistency; (4)~prove A$^{*}$ optimality; (5)~run IDA$^{*}$ and choose a heuristic by dominance.}}
+\vspace{0.3em}
+
+\noindent\textit{Prerequisites:} uninformed search (Ch.~2), priority queues, and big-$O$. We build from zero: no prior heuristic knowledge assumed.
+
+% Notation: states are nodes, actions are edges with cost c(n,n')>0, g is path cost, h is heuristic, f=g+h.
+
+\section{From Blind to Guided Search}
+Uninformed methods (\textsc{BFS}, \textsc{DFS}, UCS) use only the path cost $g(n)$ --- the cheapest known cost from start $S$ to node $n$. They cannot tell whether $n$ is promising. \emph{Informed} (heuristic) search adds a guess $h(n)\approx h^{*}(n)$, the true cheapest cost $n\to$ goal. The art is choosing $h$ that is informative yet never misleading.
+
+\begin{definition}[Heuristic function]
+A heuristic $h:\mathcal{S}\to\mathbb{R}_{\ge 0}$ maps each state to a non-negative estimate of the cheapest cost to the nearest goal, with $h(G)=0$ for every goal $G$.
+\end{definition}
+
+Intuition: on a road map, \emph{straight-line distance} to Bucharest underestimates any real route --- it is optimistic and therefore safe. Manhattan distance on a 4-neighbour grid has the same property when each move costs $1$. Relaxing the problem (ignore roads, ignore obstacles) is the standard way to invent admissible heuristics.
+
+\section{Greedy Best-First Search}
+Greedy best-first expands the node that \emph{looks} closest to goal:
+\[
+  f(n)=h(n).
+\]
+It picks the smallest $h$, ignoring how far we have already travelled. It is fast and often finds a solution quickly, but it is neither complete (in infinite spaces) nor optimal.
+
+\begin{example}[Greedy trap]
+On the Romania map, straight-line $h$ makes greedy go Arad $\to$ Sibiu $\to$ Fagaras $\to$ Bucharest ($450$\,km) even though Arad $\to$ Sibiu $\to$ Rimnicu $\to$ Pitesti $\to$ Bucharest ($418$\,km) is cheaper. Greedy never looks back at $g$.
+\end{example}
+
+UCS is the opposite extreme: $f(n)=g(n)$, optimal but explores equally in all directions. \textsc{A}$^{*}$ combines both.
+
+\section{A\texorpdfstring{$^{*}$}{*} Search: \texorpdfstring{$f(n)=g(n)+h(n)$}{f(n)=g(n)+h(n)}}
+\begin{definition}[A$^{*}$ evaluation]
+For node $n$, let $g(n)$ be the cheapest known cost $S\to n$ and $h(n)$ the heuristic. A$^{*}$ orders its frontier (priority queue) by
+\[
+  f(n)=g(n)+h(n),
+\]
+an estimate of the total cost of the best solution constrained to go through $n$.
+\end{definition}
+At each step A$^{*}$ pops the smallest-$f$ node, tests for goal, expands successors, and pushes them with their $f$ values. With a min-heap this is $O(\log |\text{frontier}|)$ per push/pop. If $h$ never overestimates, the first goal popped is optimal.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, every node/.style={font=\scriptsize},
+  level distance=13mm, sibling distance=22mm,
+  edge from parent/.style={draw, -{Stealth}, thick, black!60}]
+\tikzset{st/.style={draw, rounded corners, align=center, minimum width=1.65cm, minimum height=7mm, fill=blue!10, draw=blue!50!black},
+  expand/.style={fill=orange!22, draw=orange!60!black, thick},
+  goal/.style={fill=green!20, draw=green!50!black, thick},
+  fringe/.style={fill=violet!10, draw=violet!40!black, dashed}}
+\node[st, fill=yellow!18] (root) {S\\$g\!=\!0,h\!=\!6,f\!=\!6$}
+  child {node[st,expand] {A\\$g\!=\!1,h\!=\!4,f\!=\!5$}
+    child {node[st,fringe] {C\\$1\!+\!3\!+\!2\!=\!6$}
+      child {node[st,goal] {G\\$5\!+\!0\!=\!5^{\star}$} edge from parent node[midway,left,font=\tiny]{2}}
+      edge from parent node[midway,left,font=\tiny]{3}}
+    child {node[st,fringe] {D\\$1\!+\!4\!+\!1\!=\!6$} edge from parent node[midway,right,font=\tiny]{4}}
+    edge from parent node[midway,left,font=\tiny]{1}}
+  child {node[st] {B\\$g\!=\!4,h\!=\!2,f\!=\!6$}
+    child {node[st,fringe] {G$_{2}$\\$4\!+\!5\!+\!0\!=\!9$} edge from parent node[midway,right,font=\tiny]{5}}
+    edge from parent node[midway,right,font=\tiny]{4}};
+\node[below=1mm of root, font=\tiny, text=gray!60!black] {frontier ordered by $f$};
+\draw[->, thick, red!60!black] (3.2,-1.2) -- (2.1,-1.9) node[midway,above,sloped,font=\tiny,fill=white]{expand $f=5$ first};
+\node[draw, fill=white, rounded corners, font=\tiny, align=left] at (5.8,-3.2) {\textbf{Legend:}\\{\color{orange!70!black}$\blacksquare$} expanded\\{\color{violet!60!black}$\blacksquare$} fringe\\{\color{green!50!black}$\blacksquare$} goal};
+\end{tikzpicture}
+\caption{A$^{*}$ search tree. Each node shows $g+h=f$. A$^{*}$ expands smallest $f$ first; the goal via A--C ($f=5$) is found before the costlier B route ($f=9$).}
+\label{fig:astar-tree}
+\end{figure}
+
+\section{Admissibility and Consistency}
+\begin{definition}[Admissibility]
+$h$ is \emph{admissible} iff it never overestimates: $0\le h(n)\le h^{*}(n)$ for all $n$, where $h^{*}(n)$ is the true cheapest cost $n\to$ goal.
+\end{definition}
+\begin{definition}[Consistency / Monotonicity]
+$h$ is \emph{consistent} iff for every edge $n\to n'$ with cost $c(n,n')$,
+\[
+  h(n)\le c(n,n')+h(n')\quad\text{(triangle inequality),}
+\]
+and $h(G)=0$. Consistency implies admissibility; the converse is false.
+\end{definition}
+Consistency guarantees $f$ is non-decreasing along any path, so A$^{*}$ with graph search never needs to reopen a closed node. With tree search, admissibility alone suffices for optimality; with graph search, consistency is needed (otherwise a better $g$ to a closed node may appear later).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize]
+\draw[->, thick, black!50] (-0.3,0) -- (7.2,0) node[right] {cost};
+\fill[green!55!black] (0,0) circle (1.8pt) node[below=2pt, font=\tiny] {$0$};
+\fill[blue!60!black] (5.0,0) circle (1.8pt) node[below=2pt, font=\tiny] {$h^{*}(n)$};
+\fill[orange!80!black] (3.2,0) circle (1.8pt) node[below=2pt, font=\tiny] {$h(n)$};
+\draw[thick, green!40!black] (0,0.55) -- (5.0,0.55);
+\draw[thick, orange!70!black] (0,0.32) -- (3.2,0.32);
+\node[font=\tiny, green!40!black] at (2.5,0.78) {true cost $h^{*}$};
+\node[font=\tiny, orange!70!black] at (1.6,0.12) {admissible $h\le h^{*}$};
+\draw[->, red!65!black, dashed, thick] (5.0,0.15) -- (6.4,0.15) node[midway,above,font=\tiny,fill=white]{overestimate $\Rightarrow$ inadmissible};
+\fill[red!65!black] (6.4,0) circle (1.8pt) node[below=2pt,font=\tiny] {$h$};
+\begin{scope}[yshift=-1.40cm]
+\node[draw, fill=blue!10, circle, minimum size=7mm] (a) at (0,0) {$n$};
+\node[draw, fill=blue!10, circle, minimum size=7mm] (b) at (3.0,0) {$n'$};
+\node[draw, fill=green!15, circle, minimum size=7mm] (g) at (6.0,0) {$G$};
+\draw[->, thick, blue!60!black] (a) -- (b) node[midway,above] {$c=2$};
+\draw[->, thick, blue!60!black] (b) -- (g) node[midway,above] {$h(n')=3$};
+\draw[->, thick, violet!60!black, bend left=22] (a) to node[above] {$h(n)\le 2+3=5$} (g);
+\node[below=2mm of a, font=\tiny, text=gray!60!black] {$h(n)=4$};
+\node[below=2mm of b, font=\tiny, text=gray!60!black] {$h(n')=3$};
+\node[font=\tiny, fill=yellow!12, draw=orange!40!black, rounded corners] at (3.0,-0.95) {Consistent: $h(n)\le c+h(n')$};
+\end{scope}
+\end{tikzpicture}
+\caption{Top: admissibility --- $h$ must lie at or below $h^{*}$. Bottom: consistency as a triangle inequality on every edge.}
+\label{fig:admissible}
+\end{figure}
+
+\noindent\textbf{Optimality sketch.} With admissible $h$, any suboptimal goal $G_2$ has $f(G_2)=g(G_2)>g^{*}$. An optimal goal $G^{*}$ on the frontier satisfies $f(G^{*})=g^{*}\le f(G_2)$, so A$^{*}$ pops $G^{*}$ first. Dominance matters: if $h_2\ge h_1$ everywhere, A$^{*}$ with $h_2$ expands a subset of the nodes of $h_1$ (up to tie-breaking).
+
+\section{IDA\texorpdfstring{$^{*}$}{*}: Memory-Bounded Optimal Search}
+A$^{*}$ keeps the entire frontier ($O(b^{d})$ memory, $b$ branching, $d$ depth). \emph{Iterative-Deepening A$^{*}$} (IDA$^{*}$) runs depth-first search limited by an $f$-threshold, increasing it to the minimum $f$ that exceeded it:
+\[
+  \text{threshold}_{k+1}=\min\{f(n)\mid f(n)>\text{threshold}_{k}\}.
+\]
+IDA$^{*}$ is optimal with admissible $h$, uses $O(d)$ memory, but re-expands nodes across iterations --- ideal when memory is scarce and $h$ is strong. In practice, IDA$^{*}$ shines on puzzles (15-puzzle) where $b$ is small.
+
+\begin{table}[h]\centering\small
+\begin{tabular}{lccc}
+\toprule
+Algorithm & $f(n)$ & Optimal? & Memory\\
+\midrule
+Greedy best-first & $h(n)$ & No & $O(b^{m})$\\
+A$^{*}$ (consistent $h$) & $g+h$ & Yes & $O(b^{d})$\\
+IDA$^{*}$ (admissible $h$) & $g+h$ threshold & Yes & $O(d)$\\
+\bottomrule
+\end{tabular}
+\caption{Informed search at a glance ($b$ branching, $d$ depth, $m$ max depth).}
+\end{table}
+
+\begin{remark}[Why heuristics matter]
+A better $h$ can reduce expansions from exponential to linear. On the 8-puzzle, misplaced-tiles expands $\sim$10$\times$ more nodes than Manhattan at depth $20$; on the 15-puzzle the gap is $>100\times$. The cost of computing $h$ must stay small --- an $O(1)$ Manhattan lookup beats a perfect $h^{*}$ that costs exponential time.
+\end{remark}
+
+\section{Implementing A\texorpdfstring{$^{*}$}{*}}
+
+\begin{lstlisting}[language=Python]
+import heapq
+
+def astar(start, is_goal, successors, heuristic):
+    """A* graph search. successors(s) -> [(s', cost)]. Returns (path, cost)."""
+    open_heap = [(heuristic(start), 0, start, [start])]  # (f, g, node, path)
+    closed = {}  # node -> best g seen
+    while open_heap:
+        f, g, n, path = heapq.heappop(open_heap)
+        if n in closed and closed[n] <= g:
+            continue
+        closed[n] = g
+        if is_goal(n):
+            return path, g
+        for nxt, c in successors(n):
+            ng = g + c
+            nf = ng + heuristic(nxt)
+            if nxt not in closed or ng < closed.get(nxt, float('inf')):
+                heapq.heappush(open_heap, (nf, ng, nxt, path + [nxt]))
+    return None, float('inf')
+
+# Example: 4-neighbour grid, cost 1, Manhattan heuristic
+def manhattan(a, b):
+    return abs(a[0]-b[0]) + abs(a[1]-b[1])
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python]
+# Heuristic design: when is a heuristic admissible?
+# 8-puzzle: tiles 1..8, blank=0, goal has blank bottom-right.
+
+def misplaced_tiles(state, goal):
+    """Counts tiles out of place. Admissible: each move fixes at most 1 tile."""
+    return sum(1 for a, b in zip(state, goal) if a != 0 and a != b)
+
+def manhattan_8puzzle(state, goal_pos):
+    """Sum of Manhattan distances per tile. Dominates misplaced; still admissible."""
+    dist = 0
+    for idx, tile in enumerate(state):
+        if tile == 0:
+            continue
+        r, c = divmod(idx, 3)
+        gr, gc = goal_pos[tile]
+        dist += abs(r - gr) + abs(c - gc)
+    return dist
+
+# Consistency check for an edge n -> n' with cost c:
+#   assert heuristic(n) <= c + heuristic(n_prime)
+# Straight-line distance on a map passes this (triangle inequality).
+
+# Admissible but inconsistent example (graph search must reopen):
+#   h(A)=4, h(B)=1, edge A->B cost 1 gives 4 <= 1+1? No -> inconsistent.
+\end{lstlisting}
+
+\section{Choosing and Combining Heuristics}
+A heuristic comes from a \emph{relaxed problem}: drop constraints and solve cheaply. Straight-line distance relaxes roads to Euclidean plane; Manhattan relaxes diagonal moves; misplaced-tiles relaxes that tiles interfere. If $h_1,h_2$ are admissible, so is $h=\max\{h_1,h_2\}$ and $h$ dominates both (expands no more nodes, up to ties). Pattern databases precompute exact costs for subproblems (e.g., 7 tiles of the 15-puzzle) and remain admissible by partitioning moves.
+The \emph{effective branching factor} $b^{*}$ solves $N+1=1+b^{*}+(b^{*})^{2}+\dots+(b^{*})^{d}$ for $N$ expanded nodes and depth $d$; better $h$ drives $b^{*}$ toward $1$.
+
+\section{Key Takeaways}
+Greedy ($f=h$) is fast but not optimal; A$^{*}$ ($f=g+h$) is optimal with admissible $h$ and never reopens with consistent $h$; IDA$^{*}$ trades time for $O(d)$ memory via $f$-thresholds. Heuristic quality dominates performance: a dominated heuristic can expand exponentially more nodes. Design $h$ by relaxing the problem (e.g., ignore obstacles for straight-line distance) and prefer the dominating admissible heuristic (e.g., $\max\{h_1,h_2\}$). When memory is tight, IDA$^{*}$ with a strong heuristic beats A$^{*}$; when $h$ is weak, A$^{*}$'s best-first order saves re-expansions.
+
+\section{Exercises}
+\begin{exercise}Prove that consistency implies admissibility. Give a 3-node graph where $h$ is admissible but not consistent.\end{exercise}
+\begin{exercise}Run A$^{*}$ on Fig.~\ref{fig:astar-tree} listing the order nodes are popped from the frontier. What would greedy best-first ($f=h$) expand first?\end{exercise}
+\begin{exercise}Show that if $h_1$ and $h_2$ are admissible then $h(n)=\max\{h_1(n),h_2(n)\}$ is admissible and dominates both. When is $\max$ still consistent?\end{exercise}
+\begin{exercise}For the 8-puzzle, compare misplaced-tiles vs.\ Manhattan distance on a state where tiles 4 and 5 are swapped. Compute both values and explain which prunes more.\end{exercise}
+\begin{exercise}IDA$^{*}$ starts with threshold $=h(S)$. Trace two iterations on a line $S\to A\to G$ with costs $1,1$ and $h(S)=2,h(A)=2,h(G)=0$. What is the second threshold? Why does IDA$^{*}$ re-expand $S$?\end{exercise}
