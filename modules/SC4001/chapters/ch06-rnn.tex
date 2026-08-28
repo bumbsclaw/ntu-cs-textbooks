@@ -1,0 +1,200 @@
+\chapter{Recurrent Networks \& Sequence Modeling}\label{ch:rnn}
+\begin{center}\small\textit{Language, speech, and time series unfold step by step -- networks must remember.}\end{center}
+
+\section{Intuition: Memory Through Loops}
+An MLP sees a fixed window; language does not fit. ``The cat that chased the dogs \emph{was}...'' -- agreement depends on ``cat'' six words back. We need a network with \textbf{memory}: a hidden state that carries information forward. A \textbf{Recurrent Neural Network (RNN)} does exactly this -- it reuses the same weights at each time step, updating a state $\mathbf{h}_t$ from input $\mathbf{x}_t$ and previous state $\mathbf{h}_{t-1}$.
+
+Unrolling the loop in time reveals a deep network whose depth is the sequence length -- with shared weights and a gradient that must flow back through time.
+
+\section{The Vanilla RNN}
+\begin{definition}[Elman RNN]
+For sequence $\mathbf{x}_{1:T}$,
+\begin{equation}
+\mathbf{h}_t = \tanh(W_{hh}\mathbf{h}_{t-1}+W_{xh}\mathbf{x}_t+\mathbf{b}_h),\quad \mathbf{y}_t = W_{hy}\mathbf{h}_t+\mathbf{b}_y,\quad \mathbf{h}_0=\mathbf{0}
+\end{equation}
+Loss sums over time: $\mathcal{L}=\sum_t \ell(\mathbf{y}_t,\mathbf{y}^*_t)$.
+\end{definition}
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.93]
+  % Unrolled RNN
+  \foreach \t in {1,2,3} {
+    \node[draw, fill=blue!12, rounded corners, minimum width=1.1cm, minimum height=0.7cm] (x\t) at (2*\t, -1.2) {$\mathbf{x}_{\t}$};
+    \node[draw, fill=green!15, circle, minimum size=1.0cm, thick] (h\t) at (2*\t, 0.4) {$\mathbf{h}_{\t}$};
+    \node[draw, fill=orange!12, rounded corners, minimum width=1.0cm, minimum height=0.6cm] (y\t) at (2*\t, 1.8) {$\mathbf{y}_{\t}$};
+    \draw[->, thick, blue!60!black] (x\t) -- (h\t);
+    \draw[->, thick, orange!70!black] (h\t) -- (y\t);
+  }
+  \draw[->, thick, green!50!black, bend left=12] (h1) -- (h2);
+  \draw[->, thick, green!50!black, bend left=12] (h2) -- (h3);
+  \node[left, font=\tiny, text=green!50!black] at (3,0.9) {$W_{hh}$ shared};
+  \draw[->, thick, red!60!black, dashed] (y3) -- ++(0.8,0) |- (h1) node[midway, above, font=\tiny, text=red!60!black] {BPTT};
+  \node[draw, fill=violet!8, rounded corners, font=\tiny, align=center] at (4,-2.3) {Unrolled over time\\depth = sequence length};
+\end{tikzpicture}
+\end{center}
+
+\textbf{Backpropagation Through Time (BPTT)}: unroll, then backprop. Gradient involves repeated multiplication by $W_{hh}$:
+\begin{equation}
+\frac{\partial\mathcal{L}_T}{\partial\mathbf{h}_1}=\frac{\partial\mathcal{L}_T}{\partial\mathbf{h}_T}\prod_{t=2}^{T} W_{hh}^{\top}\operatorname{diag}(\tanh'(\cdot))
+\end{equation}
+If spectral radius $<1$, gradient vanishes exponentially; if $>1$, it explodes. This is why vanilla RNNs cannot learn dependencies beyond $\sim$10 steps.
+
+\section{LSTM and GRU: Gated Memory}
+Gates -- learnable sigmoidal switches in $[0,1]$ -- protect the gradient by creating an additive ``conveyor belt''.
+
+\begin{definition}[LSTM, Hochreiter \& Schmidhuber 1997]
+\begin{align}
+\mathbf{f}_t&=\sigma(W_f[\mathbf{h}_{t-1},\mathbf{x}_t]+\mathbf{b}_f) &&\text{forget gate}\\
+\mathbf{i}_t&=\sigma(W_i[\mathbf{h}_{t-1},\mathbf{x}_t]+\mathbf{b}_i) &&\text{input gate}\\
+\tilde{\mathbf{c}}_t&=\tanh(W_c[\mathbf{h}_{t-1},\mathbf{x}_t]+\mathbf{b}_c) &&\text{candidate}\\
+\mathbf{c}_t&=\mathbf{f}_t\odot\mathbf{c}_{t-1}+\mathbf{i}_t\odot\tilde{\mathbf{c}}_t &&\text{cell state (additive!)}\\
+\mathbf{o}_t&=\sigma(W_o[\mathbf{h}_{t-1},\mathbf{x}_t]+\mathbf{b}_o) &&\text{output gate}\\
+\mathbf{h}_t&=\mathbf{o}_t\odot\tanh(\mathbf{c}_t)
+\end{align}
+Key: $\mathbf{c}_t$ updates \emph{additively}; gradient $\partial\mathbf{c}_T/\partial\mathbf{c}_t=\prod \mathbf{f}_k$ stays near $1$ if forget gates stay open.
+\end{definition}
+
+\begin{definition}[GRU, Cho et al. 2014]
+Simpler, two gates:
+\begin{align}
+\mathbf{z}_t&=\sigma(W_z[\mathbf{h}_{t-1},\mathbf{x}_t]),\quad \mathbf{r}_t=\sigma(W_r[\mathbf{h}_{t-1},\mathbf{x}_t])\\
+\tilde{\mathbf{h}}_t&=\tanh(W_h[\mathbf{r}_t\odot\mathbf{h}_{t-1},\mathbf{x}_t]),\quad \mathbf{h}_t=(1-\mathbf{z}_t)\odot\mathbf{h}_{t-1}+\mathbf{z}_t\odot\tilde{\mathbf{h}}_t
+\end{align}
+Often matches LSTM with fewer parameters.
+\end{definition}
+
+\begin{center}
+\begin{tikzpicture}[font=\tiny, >=Stealth, scale=0.88]
+  % LSTM cell schematic
+  \node[draw, fill=blue!10, rounded corners, minimum width=5.5cm, minimum height=3.0cm] (box) at (0,0) {};
+  \node[above, font=\scriptsize, text=blue!60!black] at (0,1.5) {LSTM Cell};
+  \draw[->, thick, green!50!black] (-3.2,0.8) -- (-1.6,0.8) node[midway, above] {$\mathbf{c}_{t-1}$};
+  \draw[->, thick, green!50!black] (1.6,0.8) -- (3.2,0.8) node[midway, above] {$\mathbf{c}_t$};
+  \node[draw, fill=orange!18, circle, minimum size=0.6cm] (forget) at (-0.8,0.3) {$\times$};
+  \node[draw, fill=orange!18, circle, minimum size=0.6cm] (add) at (0.5,0.3) {$+$};
+  \node[draw, fill=violet!15, rounded corners, minimum width=0.9cm, minimum height=0.5cm] (fg) at (-0.8,-0.7) {$\sigma$ forget};
+  \node[draw, fill=violet!15, rounded corners, minimum width=0.9cm, minimum height=0.5cm] (ig) at (0.5,-0.7) {$\sigma$ input};
+  \draw[->, thin, violet!60!black] (fg) -- (forget); \draw[->, thin, violet!60!black] (ig) -- (add);
+  \node[below, font=\tiny, text=gray!60!black, align=center] at (0,-1.7) {Cell = conveyor belt\\gates control read/write};
+  \node[draw, fill=red!12, circle, minimum size=0.5cm] (out) at (2.0,-0.3) {$\times$};
+  \draw[->, thin, green!50!black] (-1.6,0.8) -- (forget) -- (add) -- (1.6,0.8);
+  \draw[->, thin, blue!60!black] (add) -- (out);
+\end{tikzpicture}
+\end{center}
+
+\section{Attention Intuition (Bridge to Transformers)}
+RNNs compress all history into $\mathbf{h}_t$ -- a bottleneck. \textbf{Attention} lets the decoder peek at all encoder states: for each output step, compute weights $\alpha_{t,i}=\text{softmax}(\text{score}(\mathbf{s}_{t-1},\mathbf{h}_i))$ and context $\mathbf{c}_t=\sum_i\alpha_{t,i}\mathbf{h}_i$. The network \emph{learns where to look}. This idea, scaled up and stripped of recurrence, becomes the Transformer.
+
+\section{Worked Example}
+\begin{example}[Character-Level RNN in PyTorch]
+\begin{lstlisting}[language=Python]
+import torch, torch.nn as nn
+class CharRNN(nn.Module):
+    def __init__(self, vocab=65, hidden=128):
+        super().__init__()
+        self.emb = nn.Embedding(vocab, 64)
+        self.rnn = nn.LSTM(64, hidden, batch_first=True)  # or nn.GRU
+        self.fc  = nn.Linear(hidden, vocab)
+    def forward(self, x, h=None):
+        e = self.emb(x)          # (B,T,64)
+        out, h = self.rnn(e, h)  # out: (B,T,hidden)
+        return self.fc(out), h   # logits per step
+
+# Training: teacher forcing
+model = CharRNN(); opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+for x,y in loader:  # x:(B,T) y:(B,T) next-char targets
+    opt.zero_grad()
+    logits,_ = model(x)
+    loss = nn.CrossEntropyLoss()(logits.view(-1,65), y.view(-1))
+    loss.backward()
+    nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # cure explosion
+    opt.step()
+
+# Sampling
+model.eval()
+x = torch.tensor([[ord('T')%65]])
+with torch.no_grad():
+    for _ in range(50):
+        logits,h = model(x[:,-1:])
+        nxt = torch.multinomial(torch.softmax(logits[:,-1],-1),1)
+        x = torch.cat([x,nxt],1)
+print(''.join(chr(c.item()) for c in x[0]))
+\end{lstlisting}
+\end{example}
+
+Bidirectional RNNs run forward and backward, concatenating states for tasks like NER where future context matters. Stacking 2--4 layers deepens representation.
+
+\section{Why Vanilla RNNs Fail: Vanishing/Exploding Gradients}
+Consider $\mathbf{h}_t = \tanh(W_{hh}\mathbf{h}_{t-1}+\dots)$. Then
+$\partial\mathbf{h}_T/\partial\mathbf{h}_t = \prod_{k=t+1}^{T} D_k W_{hh}$ where
+$D_k=\operatorname{diag}(\tanh'(\cdot))$ has entries in $(0,1]$. Norm behaves as
+$\|W_{hh}\|^{T-t}$. If $\|W_{hh}\|<1$, product $\to0$ exponentially; if $>1$,
+$\to\infty$. Gradient clipping handles explosion, but vanishing requires
+architecture -- gates. Orthogonal init of $W_{hh}$ (eigenvalues $\approx1$) helps
+but is insufficient alone for long horizons.
+
+\section{LSTM Gates in Action}
+Walk through a memory write/read: to remember a fact at $t=5$ for use at $t=50$,
+the forget gate must stay $\approx1$ for 45 steps ($\mathbf{b}_f$ initialized to
+$1$ helps), input gate opens at $t=5$ to write $\tilde{\mathbf{c}}_5$, cell
+holds $\mathbf{c}_t$ additively, output gate opens at $t=50$ to expose it.
+Peephole connections (optional) let gates see $\mathbf{c}$. GRU merges cell and
+hidden, using update gate $\mathbf{z}_t$ to interpolate old vs new -- fewer
+parameters, similar performance, faster.
+
+\section{Bidirectional and Stacked RNNs}
+A \textbf{Bi-RNN} runs forward $\overrightarrow{\mathbf{h}}_t$ and backward
+$\overleftarrow{\mathbf{h}}_t$, concatenating $[\overrightarrow{\mathbf{h}}_t;
+\overleftarrow{\mathbf{h}}_t]$ for tasks where future context helps (NER, speech).
+\textbf{Stacked} (deep) RNNs feed $\mathbf{h}^{(l)}_t$ as input to layer $l+1$,
+learning hierarchical timescales. Attention over encoder states (Bahdanau,
+Luong) then lets decoders focus: $\alpha_{t,i}\propto\exp(\mathbf{s}_{t-1}^{\top}W\mathbf{h}_i)$,
+$\mathbf{c}_t=\sum_i\alpha_{t,i}\mathbf{h}_i$, finally $\tilde{\mathbf{s}}_t=
+\tanh(W_c[\mathbf{c}_t;\mathbf{s}_t])$ before predicting $y_t$.
+
+\section{RNNs Today and the Path to Transformers}
+LSTMs dominated 2014--2017 for translation, speech, and language modeling.
+But sequential dependence prevents parallelization ($O(T)$ steps) and path length
+between positions is $O(T)$. Attention shortens it to $O(1)$ and parallelizes
+to $O(1)$ steps with $O(T^2)$ work -- the Transformer keeps the gating insight
+(additive paths, normalization) but removes recurrence entirely.
+
+\section{Common Pitfalls}
+Feeding the whole sequence without truncation causes $O(T)$ memory blowup and
+slow BPTT -- use truncated BPTT (backprop every $k$ steps, carry state). Not
+detaching hidden states between batches leaks gradient across unrelated
+sequences. Teacher forcing during training vs autoregressive sampling at test
+causes exposure bias -- scheduled sampling or professor forcing mitigates.
+Always clip gradients; without clipping, one bad batch can NaN the run.
+
+\section{Further Reading}
+Hochreiter \& Schmidhuber (1997) LSTM; Cho et al. (2014) GRU; Bahdanau et al.
+(2015) attention. Graves (2013) applies RNNs to speech; Karpathy's ``The
+Unreasonable Effectiveness of RNNs'' is the classic blog. For BPTT theory, see
+Pascanu et al. (2013) on vanishing/exploding.
+
+\section{Chapter Summary}
+RNNs share weights over time: $\mathbf{h}_t=\tanh(W_{hh}\mathbf{h}_{t-1}+
+W_{xh}\mathbf{x}_t)$. BPTT unrolls and backprops through the product of
+Jacobians -- vanishing/exploding follows. LSTM/GRU gates create additive
+memory ($\mathbf{c}_t=\mathbf{f}_t\odot\mathbf{c}_{t-1}+\mathbf{i}_t\odot
+\tilde{\mathbf{c}}_t$) preserving gradient. Attention fixes the bottleneck by
+peeking at all states, foreshadowing Transformers.
+
+\smallskip
+\noindent\textit{Key takeaways:} (1) recurrence $=$ memory via loop;
+(2) BPTT $=$ backprop through time; (3) gates $=$ learnable switches;
+(4) $\mathbf{f}\approx1$ preserves long memory; (5) attention $>$ compression.
+
+\paragraph{Gradient sanity check.} Before training, run gradient checking with $\epsilon=10^{-5}$ on a 3-step unroll. If relative error $>10^{-3}$, check gate biases (forget bias $b_f=1$ helps) and clipping threshold.
+
+\begin{example}[BPTT product] For $h_t=\tanh(W h_{t-1}+U x_t)$, $\partial h_3/\partial h_1 = \prod_{k=2}^3 \text{diag}(1-\tanh^2(\cdot))W$. Spectral radius $\rho(W)>1$ explodes, $\rho(W)<1$ vanishes. Gating replaces product with sum via $c_t$.
+\end{example}
+
+\section{Exercises}
+\begin{exercise} Unroll a vanilla RNN for $T=3$ and derive $\partial\mathcal{L}_3/\partial W_{hh}$ explicitly. Identify the product that vanishes/explodes.\end{exercise}
+\begin{exercise} Explain in words how LSTM's forget gate $\mathbf{f}_t\approx1$ preserves gradient over 100 steps. What initialization of $\mathbf{b}_f$ encourages this?\end{exercise}
+\begin{exercise} Implement a NumPy forward pass for one LSTM step. Count parameters for $d_x=64$, $d_h=128$ and compare to GRU and vanilla RNN.\end{exercise}
+\begin{exercise} Train CharRNN on Tiny Shakespeare (10k chars) with RNN vs LSTM (same hidden size). Plot loss and report which captures longer dependencies -- test by checking if it closes a quote 30 chars later.\end{exercise}
+\begin{exercise} For seq2seq translation, why does attention help with long sentences? Sketch the alignment matrix for ``The cat sat'' $\to$ ``Le chat s'est assis''.\end{exercise}
+% End of Chapter

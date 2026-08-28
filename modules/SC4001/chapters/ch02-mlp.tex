@@ -1,0 +1,204 @@
+\chapter{Multi-Layer Perceptrons \& Backpropagation}\label{ch:mlp}
+\begin{center}\small\textit{One line cannot solve XOR; stacking lines can approximate anything -- if we can train them.}\end{center}
+
+\section{Intuition: Why Go Deeper?}
+A single perceptron draws one line. XOR needs two lines combined: ``$(x_1\lor x_2)$ but not $(x_1\land x_2)$''. That is a hidden layer. Stack perceptrons: first layer draws several lines, second layer combines them into convex regions, third layer into arbitrary shapes. This is the \textbf{Multi-Layer Perceptron (MLP)} -- the simplest deep network.
+
+The obstacle that froze the field for 15 years: how to assign blame to hidden weights when only the output error is visible? The answer is the \textbf{chain rule} applied systematically -- backpropagation.
+
+\section{Formal Setup: Forward Pass}
+An $L$-layer MLP maps $\mathbf{a}^{(0)}=\mathbf{x}\in\mathbb{R}^{d_0}$ to output $\hat{\mathbf{y}}=\mathbf{a}^{(L)}$ via
+\begin{equation}
+\mathbf{z}^{(l)} = W^{(l)}\mathbf{a}^{(l-1)}+\mathbf{b}^{(l)},\qquad \mathbf{a}^{(l)}=\sigma(\mathbf{z}^{(l)}),\qquad l=1,\dots,L
+\end{equation}
+where $W^{(l)}\in\mathbb{R}^{d_l\times d_{l-1}}$, $\sigma$ is a non-linear activation (sigmoid, tanh, ReLU). Without $\sigma$, the composition collapses to one affine map -- depth would be pointless.
+
+Common activations:
+\begin{equation}
+\sigma_{\text{sig}}(z)=\frac{1}{1+e^{-z}},\quad \tanh(z)=\frac{e^{z}-e^{-z}}{e^{z}+e^{-z}},\quad \text{ReLU}(z)=\max(0,z)
+\end{equation}
+
+\begin{definition}[Universal Approximation, informal]
+An MLP with one hidden layer and enough neurons can approximate any continuous function on a compact set arbitrarily well (Cybenko, 1989). Depth makes this efficient.
+\end{definition}
+
+\begin{center}
+\begin{tikzpicture}[font=\footnotesize, >=Stealth, node distance=0.6cm]
+  \tikzstyle{neuron}=[circle, draw, thick, minimum size=0.9cm, inner sep=0pt]
+  % Input
+  \node[neuron, fill=blue!15] (i1) at (0,1.5) {$x_1$};
+  \node[neuron, fill=blue!15] (i2) at (0,0) {$x_2$};
+  \node[neuron, fill=blue!15] (i3) at (0,-1.5) {$x_3$};
+  % Hidden 1
+  \node[neuron, fill=green!15] (h1) at (3,1.8) {$h_1$};
+  \node[neuron, fill=green!15] (h2) at (3,0) {$h_2$};
+  \node[neuron, fill=green!15] (h3) at (3,-1.8) {$h_3$};
+  % Hidden 2
+  \node[neuron, fill=orange!15] (g1) at (6,0.9) {$g_1$};
+  \node[neuron, fill=orange!15] (g2) at (6,-0.9) {$g_2$};
+  % Output
+  \node[neuron, fill=violet!15] (o1) at (9,0) {$\hat y$};
+  \foreach \i in {1,2,3} \foreach \h in {1,2,3} \draw[->, gray!60, thin] (i\i) -- (h\h);
+  \foreach \h in {1,2,3} \foreach \g in {1,2} \draw[->, green!50!black, thin] (h\h) -- (g\g);
+  \foreach \g in {1,2} \draw[->, orange!70!black, thick] (g\g) -- (o1);
+  \node[above, font=\scriptsize, text=blue!60!black] at (0,2.3) {Input};
+  \node[above, font=\scriptsize, text=green!50!black] at (3,2.6) {Hidden 1};
+  \node[above, font=\scriptsize, text=orange!70!black] at (6,1.7) {Hidden 2};
+  \node[above, font=\scriptsize, text=violet!70!black] at (9,0.8) {Output};
+  \node[draw, fill=yellow!10, rounded corners, font=\tiny, align=center] at (3,-3.0) {$W^{(1)}\mathbf{x}+\mathbf{b}^{(1)}$\\{\scriptsize then }$\sigma$};
+\end{tikzpicture}
+\end{center}
+
+\section{The Chain Rule and Gradients}
+Training minimises a loss, e.g., MSE $\mathcal{L}=\tfrac12\|\mathbf{a}^{(L)}-\mathbf{y}\|^2$ or cross-entropy. We need $\partial\mathcal{L}/\partial W^{(l)}$ to step downhill.
+
+For scalar composition $f(g(h(x)))$: $df/dx = f'(g)\,g'(h)\,h'(x)$. For vectors, Jacobians multiply. The cleverness of backprop is \emph{reusing} downstream gradients.
+
+Define error signal $\boldsymbol{\delta}^{(l)}:=\partial\mathcal{L}/\partial\mathbf{z}^{(l)}$. Then:
+
+\begin{align}
+\boldsymbol{\delta}^{(L)} &= \nabla_{\mathbf{a}^{(L)}}\mathcal{L}\odot \sigma'(\mathbf{z}^{(L)})\\
+\boldsymbol{\delta}^{(l)} &= \big(W^{(l+1)\top}\boldsymbol{\delta}^{(l+1)}\big)\odot \sigma'(\mathbf{z}^{(l)}),\quad l=L-1,\dots,1\\
+\frac{\partial\mathcal{L}}{\partial W^{(l)}} &= \boldsymbol{\delta}^{(l)}\mathbf{a}^{(l-1)\top},\qquad \frac{\partial\mathcal{L}}{\partial\mathbf{b}^{(l)}}=\boldsymbol{\delta}^{(l)}
+\end{align}
+where $\odot$ is element-wise product. One forward pass caches $\mathbf{z}^{(l)},\mathbf{a}^{(l)}$; one backward pass propagates $\boldsymbol{\delta}$.
+
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth]
+  \node[draw, fill=blue!12, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center] (fwd) at (0,0) {Forward\\$\mathbf{a}^{(l-1)}\to\mathbf{z}^{(l)}\to\mathbf{a}^{(l)}$};
+  \node[draw, fill=orange!12, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center] (bwd) at (6,0) {Backward\\$\boldsymbol{\delta}^{(l+1)}\to\boldsymbol{\delta}^{(l)}$};
+  \draw[->, thick, blue!60!black] (fwd) -- node[above] {cache $\mathbf{z}^{(l)}$} (bwd);
+  \draw[->, thick, orange!70!black, bend left=30] (bwd) to node[below] {$\frac{\partial\mathcal{L}}{\partial W^{(l)}}$} (fwd);
+  \node[draw, fill=green!10, rounded corners, font=\tiny, align=center] at (3,1.4) {Chain rule: re-use\\downstream gradient};
+  \draw[->, dashed, violet!60!black] (3,1.1) -- (3,0.5);
+\end{tikzpicture}
+\end{center}
+
+\section{Backpropagation Algorithm}
+\begin{enumerate}[leftmargin=1.2em]
+\item Forward: compute and store all $\mathbf{z}^{(l)},\mathbf{a}^{(l)}$.
+\item Output error: $\boldsymbol{\delta}^{(L)} = (\mathbf{a}^{(L)}-\mathbf{y})\odot\sigma'(\mathbf{z}^{(L)})$ (for MSE).
+\item Backward: for $l=L-1$ down to $1$, $\boldsymbol{\delta}^{(l)}=(W^{(l+1)\top}\boldsymbol{\delta}^{(l+1)})\odot\sigma'(\mathbf{z}^{(l)})$.
+\item Gradients: $\partial\mathcal{L}/\partial W^{(l)}=\boldsymbol{\delta}^{(l)}\mathbf{a}^{(l-1)\top}$.
+\item Update: $W^{(l)}\leftarrow W^{(l)}-\eta\,\partial\mathcal{L}/\partial W^{(l)}$.
+\end{enumerate}
+
+Complexity is $O(|W|)$ -- same as forward pass -- because each weight is touched once forward and once backward. Naive finite differences would cost $O(|W|^2)$.
+
+\section{Worked Example: Tiny Network by Hand}
+Network: $x\in\mathbb{R}$, one hidden neuron with sigmoid, linear output. $w_1=0.5,b_1=0$, $w_2=1.0,b_2=0$, input $x=1$, target $y=0.8$, loss $\tfrac12(\hat y-y)^2$, $\eta=0.5$. Forward: $z_1=0.5$, $a_1=\sigma(0.5)=0.622$, $\hat y=0.622$. Error: $\hat y-y=-0.178$. $\delta^{(2)}=-0.178$. $\partial\mathcal{L}/\partial w_2=\delta^{(2)}a_1=-0.111$. $\delta^{(1)}=\delta^{(2)}w_2\cdot\sigma'(z_1)=-0.178\times1\times0.235=-0.0418$. $\partial\mathcal{L}/\partial w_1=\delta^{(1)}x=-0.0418$. Updates: $w_2\leftarrow1.055$, $w_1\leftarrow0.521$. Loss drops from $0.0158$ to $0.0121$.
+
+\begin{example}[Autograd in NumPy]
+\begin{lstlisting}[language=Python]
+import numpy as np
+def sigmoid(z): return 1/(1+np.exp(-z))
+def dsigmoid(z): s=sigmoid(z); return s*(1-s)
+
+# 2-layer MLP: 2 -> 3 -> 1
+np.random.seed(0)
+W1 = np.random.randn(3,2)*0.5; b1=np.zeros(3)
+W2 = np.random.randn(1,3)*0.5; b2=np.zeros(1)
+X = np.array([[0,1],[1,0],[1,1],[0,0]],dtype=float).T  # (2,4)
+Y = np.array([[1,1,0,0]],dtype=float)
+lr=0.5
+for epoch in range(500):
+    # Forward
+    Z1=W1@X+b1[:,None]; A1=np.maximum(0,Z1)  # ReLU
+    Z2=W2@A1+b2[:,None]; A2=sigmoid(Z2)
+    loss= -np.mean(Y*np.log(A2+1e-9)+(1-Y)*np.log(1-A2+1e-9))
+    # Backward
+    dZ2=A2-Y
+    dW2=dZ2@A1.T/4; db2=dZ2.mean(axis=1)
+    dA1=W2.T@dZ2; dZ1=dA1*(Z1>0)
+    dW1=dZ1@X.T/4; db1=dZ1.mean(axis=1)
+    W2-=lr*dW2; b2-=lr*db2; W1-=lr*dW1; b1-=lr*db1
+print("Final loss",loss); print("Pred",A2.round(2))
+\end{lstlisting}
+\end{example}
+
+\section{Computation Graph View}
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=Stealth]
+  \node[draw, fill=blue!10, circle, minimum size=0.9cm] (x) at (0,0) {$x$};
+  \node[draw, fill=green!12, rounded corners, minimum width=1.3cm, minimum height=0.8cm] (mul) at (2.2,0) {$\times w_1$};
+  \node[draw, fill=orange!12, rounded corners, minimum width=1.0cm, minimum height=0.8cm] (sig) at (4.3,0) {$\sigma$};
+  \node[draw, fill=violet!12, rounded corners, minimum width=1.3cm, minimum height=0.8cm] (mul2) at (6.4,0) {$\times w_2$};
+  \node[draw, fill=red!12, circle, minimum size=0.9cm] (loss) at (8.5,0) {$\mathcal{L}$};
+  \draw[->, thick, blue!60!black] (x) -- (mul);
+  \draw[->, thick] (mul) -- (sig); \draw[->, thick] (sig) -- (mul2); \draw[->, thick] (mul2) -- (loss);
+  % backward arrows
+  \draw[->, thick, red!70!black, dashed] (loss) -- ++(0,-1.1) -- ++(-8.5,0) -- (x);
+  \node[below, font=\tiny, text=red!70!black, align=center] at (4.3,-1.1) {backward: $\partial\mathcal{L}/\partial w$ flows via chain rule};
+  \node[above, font=\tiny] at (1.1,0.3) {fwd};
+  \node[above, font=\tiny] at (5.35,0.3) {fwd};
+\end{tikzpicture}
+\end{center}
+
+\section{Initialization and Vanishing Gradients}
+Backprop needs a starting point. Zero init fails (all neurons identical).
+\textbf{Xavier/Glorot} sets $\operatorname{Var}[W]=2/(\text{fan}_{in}+\text{fan}_{out})$
+for tanh; \textbf{He} sets $\operatorname{Var}[W]=2/\text{fan}_{in}$ for ReLU,
+preserving variance forward and backward. Without this, deep nets see
+exponentially vanishing or exploding activations.
+
+Sigmoid/tanh saturate: $\sigma'(z)\approx0$ for $|z|>3$, so gradients die in
+deep stacks. ReLU fixes this for $z>0$ ($\sigma'=1$) but can die ($z\le0$).
+Leaky ReLU, GELU, and careful norm (BatchNorm, LayerNorm) mitigate.
+
+\section{Computation Graph and Automatic Differentiation}
+Modern frameworks build a directed acyclic graph: leaves are parameters and
+inputs, internal nodes are ops ($+$, $\times$, $\sigma$). Forward evaluates and
+caches; backward applies chain rule node-by-node (reverse-mode AD). Cost is
+$\approx2\times$ forward, memory $O(\text{nodes})$. Gradient checking via finite
+differences validates: $\partial\mathcal{L}/\partial w\approx[\mathcal{L}(w+\epsilon)-\mathcal{L}(w-\epsilon)]/(2\epsilon)$.
+
+\section{Why Depth Beats Width}
+A shallow net needs exponentially many hidden units to approximate a deep
+compositional function (e.g., parity, or $f(x)=\sin(\sin(\dots\sin(x)))$).
+Depth reuses features hierarchically: edges $\to$ motifs $\to$ objects. Formal
+results (Eldan \& Shamir, 2016) exhibit functions where a 3-layer net needs
+exponential width to match a 2-layer deep net. Optimization is harder with depth,
+but residuals and normalization make it trainable -- foreshadowing ResNets
+(Chapter~5).
+
+\section{Regularization Preview}
+Even with perfect optimization, MLPs overfit. Weight decay, dropout, and early
+stopping (Chapter~4) inject bias toward simple functions. BatchNorm also
+smooths the landscape, allowing larger learning rates -- a theme revisited in
+Chapter~3.
+
+\section{Common Pitfalls}
+Forgetting to zero gradients (\texttt{optimizer.zero\_grad()} in PyTorch) causes
+accumulation across batches -- loss explodes silently. Another trap: applying
+softmax before cross-entropy (which already includes log-softmax) doubly squashes
+and kills gradients. Use \texttt{CrossEntropyLoss} on logits. Finally, shuffling
+matters: without shuffling, batches are correlated and BatchNorm statistics
+drift.
+
+\section{Further Reading}
+Rumelhart, Hinton \& Williams (1986) introduced backprop for MLPs. Goodfellow
+et al., \emph{Deep Learning}, Chapters 6--8, formalizes the graph view. For
+hands-on AD, see Karpathy's \texttt{micrograd} (50 lines that build autograd
+from scratch) -- stepping through it demystifies every $\boldsymbol{\delta}$.
+
+\section{Chapter Summary}
+MLPs compose perceptrons: $\mathbf{a}^{(l)}=\sigma(W^{(l)}\mathbf{a}^{(l-1)}+
+\mathbf{b}^{(l)})$. Backprop reuses downstream gradients via
+$\boldsymbol{\delta}^{(l)}=(W^{(l+1)\top}\boldsymbol{\delta}^{(l+1)})\odot
+\sigma'(\mathbf{z}^{(l)})$, costing $O(|W|)$. Initialization and non-linearity
+choice decide whether gradients flow. Depth yields exponential expressivity over
+width. Next: how to walk downhill efficiently.
+
+\smallskip
+\noindent\textit{Key takeaways:} (1) forward caches $\mathbf{z},\mathbf{a}$;
+(2) backward propagates $\boldsymbol{\delta}$; (3) chain rule gives
+$\partial\mathcal{L}/\partial W^{(l)}=\boldsymbol{\delta}^{(l)}\mathbf{a}^{(l-1)\top}$;
+(4) He/Xavier init prevents vanishing; (5) computation graphs unify all gradients.
+
+\section{Exercises}
+\begin{exercise} Derive $\boldsymbol{\delta}^{(l)}$ formula from first principles for MSE + sigmoid. Show each step of the Jacobian chain.\end{exercise}
+\begin{exercise} Why does a deep stack of linear layers equal one linear layer? Prove $W_2(W_1\mathbf{x})=W\mathbf{x}$ and explain why non-linearity is essential.\end{exercise}
+\begin{exercise} Compute one backprop step by hand for the XOR network: 2 inputs, 2 hidden ReLU, 1 output. Use given weights and input $(1,0)\to1$.\end{exercise}
+\begin{exercise} Implement the NumPy MLP above but swap ReLU for tanh. Compare convergence speed and final loss over 500 epochs. Explain vanishing-gradient differences.\end{exercise}
+\begin{exercise} Backprop needs $O(|W|)$ memory for cached $\mathbf{z}$. For a 10-layer network with 1000 neurons/layer, estimate floats stored. How does gradient checkpointing trade compute for memory?\end{exercise}
+% End of Chapter
