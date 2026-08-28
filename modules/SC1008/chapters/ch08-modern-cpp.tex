@@ -1,0 +1,216 @@
+% SC1008 — Chapter 8: Modern C++ — RAII, Smart Pointers, Move (0->100 ground-up)
+\chapter{Modern C++: RAII, Smart Pointers, and Move Semantics}
+\label{ch:modern-cpp}
+
+\begin{quote}
+\emph{``Modern C++ is not C with extras --- it is a different language that happens to compile C.''} RAII makes resource safety automatic; smart pointers make ownership explicit; move semantics makes copies cheap.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: Ch.~4's discipline was manual; now we automate it.} Every resource gets an owner object whose destructor frees it. We build RAII, then smart pointers, then moves --- each fixing a failure mode of the last.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain RAII and why it prevents leaks even on exceptions;
+    \item use \texttt{unique\_ptr}, \texttt{shared\_ptr}, \texttt{weak\_ptr} correctly;
+    \item distinguish lvalues from rvalues and apply move semantics;
+    \item state the Rule of Zero/Three/Five;
+    \item write exception-safe code with RAII types.
+\end{enumerate}
+
+% ============================================================
+\section{RAII: Resource Acquisition Is Initialisation}
+\label{sec:raii}
+\emph{Idea:} tie every resource (memory, file, lock) to an object's lifetime. Constructor acquires; destructor releases. No manual \texttt{free}/\texttt{close} --- the scope does it, even if an exception is thrown.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\draw[thick,fill=green!12] (0,0) rectangle (3.0,1.1);
+\node[font=\tiny\bfseries] at (1.5,0.85) {Constructor};
+\node[font=\tiny] at (1.5,0.50) {acquire (new/open/lock)};
+\node[font=\tiny] at (1.5,0.20) {\texttt{File f("a.txt")}};
+\draw[thick,fill=blue!10] (3.6,0) rectangle (6.6,1.1);
+\node[font=\tiny\bfseries] at (5.1,0.85) {Use};
+\node[font=\tiny] at (5.1,0.50) {read/write};
+\node[font=\tiny] at (5.1,0.20) {exception? still OK};
+\draw[thick,fill=orange!15] (7.2,0) rectangle (10.2,1.1);
+\node[font=\tiny\bfseries] at (8.7,0.85) {Destructor};
+\node[font=\tiny] at (8.7,0.50) {release (delete/close/unlock)};
+\node[font=\tiny] at (8.7,0.20) {automatic at \texttt{\}}};
+\draw[-{Latex},thick,blue!60!black] (3.0,0.55)--(3.6,0.55);
+\draw[-{Latex},thick,blue!60!black] (6.6,0.55)--(7.2,0.55);
+\draw[-{Latex},thick,red!60!black,dashed] (5.1,-0.05)--(5.1,-0.45)--(8.7,-0.45)--(8.7,0.0);
+\node[font=\tiny,red!60!black] at (6.9,-0.70) {exception $\to$ stack unwind $\to$ dtor still runs};
+\end{tikzpicture}
+\caption{RAII timeline: acquisition in constructor, automatic release in destructor. Stack unwinding guarantees the destructor runs even on exception.}
+\label{fig:raii-timeline}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <fstream>
+void process(){
+    std::ofstream out("log.txt"); // acquires file handle
+    out << "hello\n";
+    if(some_error()) throw std::runtime_error("oops");
+    // no close needed -- destructor closes even on throw
+} // out.~ofstream() runs here
+\end{lstlisting}
+\texttt{std::string}, \texttt{std::vector}, \texttt{std::lock\_guard}, \texttt{std::fstream} are all RAII types. Manual \texttt{new/delete} is the non-RAII alternative --- avoid it.
+
+\section{Smart Pointers: Explicit Ownership}
+\label{sec:smart-pointers}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% unique_ptr
+\draw[thick,fill=blue!10] (0,1.2) rectangle (2.4,1.95);
+\node[font=\tiny\bfseries] at (1.2,1.62) {\texttt{unique\_ptr<T> p}};
+\draw[thick,fill=green!14] (3.2,1.2) rectangle (5.0,1.95);
+\node at (4.1,1.57) {\texttt{T object}};
+\draw[-{Latex},thick,red!70!black] (2.4,1.57)--(3.2,1.57) node[midway,above,font=\tiny] {owns};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (1.2,0.85) {one owner, move-only};
+% shared_ptr
+\draw[thick,fill=blue!10] (0,-0.15) rectangle (2.0,0.55);
+\node[font=\tiny\bfseries] at (1.0,0.22) {\texttt{shared\_ptr q}};
+\draw[thick,fill=blue!10] (2.6,-0.15) rectangle (4.6,0.55);
+\node[font=\tiny\bfseries] at (3.6,0.22) {\texttt{shared\_ptr r}};
+\draw[thick,fill=green!14] (5.4,-0.15) rectangle (7.2,0.55);
+\node at (6.3,0.20) {\texttt{T}};
+\draw[thick,fill=orange!15] (5.4,-0.95) rectangle (7.2,-0.35);
+\node[font=\tiny] at (6.3,-0.65) {control block: ref=2};
+\draw[-{Latex},thick,red!70!black] (2.0,0.22)--(5.4,0.22);
+\draw[-{Latex},thick,red!70!black] (4.6,0.22)--(5.4,0.22);
+\draw[thick,dashed,gray] (5.4,0.55)--(5.4,-0.35);
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (1.0,-0.95) {shared: ref-counted};
+\node[font=\tiny,fill=violet!10,rounded corners=2pt,inner sep=2pt] at (3.6,-0.95) {\texttt{weak\_ptr} breaks cycles};
+\end{tikzpicture}
+\caption{Smart pointers: \texttt{unique\_ptr} has one owner; \texttt{shared\_ptr} shares via a control block with reference count; \texttt{weak\_ptr} observes without owning.}
+\label{fig:smart-ptrs}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <memory>
+auto p = std::make_unique<int>(42);        // unique ownership
+// auto q = p;                             // error: not copyable
+auto q = std::move(p);                     // transfer ownership; p==nullptr
+
+auto a = std::make_shared<std::string>("hello"); // shared, ref count 1
+auto b = a;                                // ref count 2, same object
+std::cout<<a.use_count()<<"\n";            // 2
+std::weak_ptr<std::string> w = a;          // weak: doesn't increment count
+// w.lock() -> shared_ptr if object still alive
+\end{lstlisting}
+Prefer \texttt{make\_unique}/\texttt{make\_shared} over raw \texttt{new}. Use \texttt{unique\_ptr} by default; \texttt{shared\_ptr} only when shared ownership is genuinely needed. \texttt{weak\_ptr} breaks cycles (\texttt{A} owns \texttt{B}, \texttt{B} observes \texttt{A} weakly).
+
+\section{Move Semantics: Stealing Instead of Copying}
+\label{sec:move}
+Copying a vector duplicates its heap buffer ($O(n)$). \emph{Moving} steals the buffer pointer and nulls the source ($O(1)$). Moves fire on \emph{rvalues} (temporaries, \texttt{std::move}'d values).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% copy
+\node[font=\tiny\bfseries] at (1.6,1.35) {Copy: duplicate buffer};
+\draw[thick,fill=blue!10] (0,0.45) rectangle (1.6,1.05);
+\node[font=\tiny] at (0.8,0.75) {\texttt{a}};
+\draw[thick,fill=green!12] (0.3,0.0) rectangle (1.3,0.35);
+\node[font=\tiny] at (0.8,0.17) {buf};
+\draw[thick,fill=blue!10] (2.2,0.45) rectangle (3.8,1.05);
+\node[font=\tiny] at (3.0,0.75) {\texttt{b}};
+\draw[thick,fill=green!12] (2.5,0.0) rectangle (3.5,0.35);
+\node[font=\tiny] at (3.0,0.17) {buf copy};
+\draw[-{Latex},thick,blue!60!black] (1.6,0.75)--(2.2,0.75) node[midway,above,font=\tiny] {$O(n)$};
+% move
+\node[font=\tiny\bfseries] at (6.8,1.35) {Move: steal pointer};
+\draw[thick,fill=blue!10] (5.2,0.45) rectangle (6.8,1.05);
+\node[font=\tiny] at (6.0,0.75) {\texttt{a (moved-from)}};
+\draw[thick,fill=gray!12] (5.5,0.0) rectangle (6.5,0.35);
+\node[font=\tiny,gray] at (6.0,0.17) {null};
+\draw[thick,fill=blue!10] (7.4,0.45) rectangle (9.0,1.05);
+\node[font=\tiny] at (8.2,0.75) {\texttt{b}};
+\draw[thick,fill=green!14] (7.7,0.0) rectangle (8.7,0.35);
+\node[font=\tiny] at (8.2,0.17) {buf};
+\draw[-{Latex},thick,red!70!black] (6.8,0.75)--(7.4,0.75) node[midway,above,font=\tiny] {$O(1)$};
+\draw[-{Latex},thick,red!60!black,dashed] (6.0,0.45)--(8.2,0.45);
+\end{tikzpicture}
+\caption{Copy duplicates the heap buffer; move transfers the pointer, leaving the source empty. Move is $O(1)$ vs.\ $O(n)$.}
+\label{fig:move-vs-copy}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+std::vector<int> a = {1,2,3,4,5};
+std::vector<int> b = a;                // copy: O(n)
+std::vector<int> c = std::move(a);     // move: O(1), a is now empty
+// a is valid but unspecified -- only safe to assign/destroy
+std::vector<int> make_vec(){ return {1,2,3}; } // NRVO/move elision
+auto d = make_vec();                   // no copy (elided)
+\end{lstlisting}
+The compiler auto-moves temporaries; write \texttt{std::move} only for named lvalues you no longer need. After move, treat the source as empty.
+
+\section{Rule of Zero / Three / Five}
+\label{sec:rule-of-five}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Rule of Zero:} if your class uses RAII members (\texttt{string}, \texttt{vector}, smart pointers), write \emph{no} custom destructor/copy/move --- the compiler does it correctly.
+    \item \textbf{Rule of Five:} if you \emph{must} write one of destructor, copy-ctor, copy-assign, move-ctor, move-assign, you likely need all five.
+    \item Prefer Zero; fall to Five only for low-level resource wrappers.
+\end{itemize}
+\begin{lstlisting}[language=C++]
+// Rule of Zero: no custom special members needed
+class Student{
+    std::string name_; std::vector<int> scores_;
+public:
+    Student(std::string n): name_(std::move(n)) {}
+    // compiler-generated dtor/copy/move are correct
+};
+\end{lstlisting}
+
+
+\section{Exception Safety and RAII in Practice}
+RAII makes exception safety almost free. Consider manual vs.\ RAII resource handling when an exception is thrown:
+
+\begin{lstlisting}[language=C++]
+void manual(){
+    int *p = new int[100];
+    FILE *f = fopen("data.txt","r");
+    risky_operation(); // if throws, leak p and f!
+    delete[] p; fclose(f);
+}
+void raii(){
+    auto p = std::make_unique<int[]>(100);
+    std::ifstream f("data.txt"); // RAII file handle
+    risky_operation(); // if throws, destructors still run -- no leak
+} // p and f destroyed automatically
+\end{lstlisting}
+Exception safety levels: \emph{basic} (no leak), \emph{strong} (rollback on failure), \emph{nothrow} (never throws). RAII types give basic safety by default; transactions give strong safety.
+
+\section{Perfect Forwarding and Modern Idioms}
+C++11 introduced \texttt{auto}, range-for, lambdas, and forwarding references. C++17/20 added structured bindings and concepts.
+
+\begin{lstlisting}[language=C++]
+auto add = [](auto a, auto b){ return a+b; }; // generic lambda (C++14)
+std::cout<<add(3,4)<<" "<<add(3.1,2.9)<<"\n";  // 7 6.0
+
+std::map<std::string,int> m={{"Asha",95},{"Bo",82}};
+for(auto &[name,score]: m) // structured binding (C++17)
+    std::cout<<name<<":"<<score<<"\n";
+
+// Perfect forwarding: preserve lvalue/rvalue nature
+template<typename T>
+void wrapper(T&& arg){ // forwarding reference
+    callee(std::forward<T>(arg)); // forwards as l- or r-value
+}
+\end{lstlisting}
+These idioms reduce boilerplate and let the compiler generate optimal code. Prefer \texttt{auto} when the type is obvious; prefer range-for over index loops; prefer lambdas over hand-written functors.
+
+\section{Chapter Notes}
+Meyers \emph{Effective Modern C++} (2014) is the definitive move/RAII guide. C++ Core Guidelines: ``R.1: Manage resources automatically using RAII.''
+
+\section{Exercises}
+\begin{enumerate}[label=E8.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{RAII proof.} Write a function that opens two files and throws midway. Show RAII handles close it correctly while manual \texttt{fopen/fclose} leaks the second file.
+\item \textbf{Ownership.} When would you choose \texttt{unique\_ptr} vs.\ \texttt{shared\_ptr} vs.\ raw \texttt{T*} (non-owning)? Give an example of each.
+\item \textbf{Move trace.} \texttt{vector<int> a=\{1,2\}; vector<int> b=std::move(a); cout<<a.size()<<" "<<b.size();} What prints? Is \texttt{a[0]} safe to read after the move?
+\item \textbf{Rule of Zero.} A class holds \texttt{string name\_} and \texttt{vector<double> grades\_}. Do you need a custom destructor? What if it held \texttt{int* buf} from \texttt{new int[10]}?
+\item \textbf{Cycle.} \texttt{struct A\{shared\_ptr<B> b;\}; struct B\{shared\_ptr<A> a;\};} Why does this leak? Fix it with \texttt{weak\_ptr} and explain the ref counts.
+\end{enumerate}
+% End of Chapter 8

@@ -1,0 +1,209 @@
+% SC1008 — Chapter 6: Inheritance, Polymorphism, Templates (0->100 ground-up)
+\chapter{Inheritance, Polymorphism, and Templates}
+\label{ch:inheritance-poly-templates}
+
+\begin{quote}
+\emph{``Inheritance is sharing; polymorphism is substituting; templates are stamping.''} Three ways to reuse code, each with a distinct cost model.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: reuse without copy-paste.} We start with why duplication hurts, then derive is-a hierarchies, virtual dispatch, and generic stamping from first principles.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item model is-a relationships with public inheritance;
+    \item explain virtual dispatch and the vtable mechanism;
+    \item use templates for generic functions and classes;
+    \item distinguish static (compile-time) vs.\ dynamic (run-time) polymorphism;
+    \item apply access specifiers and virtual destructors correctly.
+\end{enumerate}
+
+% ============================================================
+\section{Inheritance: Is-A}
+\label{sec:inheritance}
+If \texttt{Dog} is-a \texttt{Animal}, every \texttt{Dog} has the \texttt{Animal} part plus its own extensions. Inheritance captures this.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\node[draw,thick,fill=blue!12,rounded corners=3pt,minimum width=3.0cm,minimum height=0.85cm,align=center] (animal) at (0,1.6) {\textbf{Animal}\\ \texttt{virtual void speak() const}\\ \texttt{virtual \~{}Animal()}};
+\node[draw,thick,fill=green!14,rounded corners=3pt,minimum width=2.6cm,minimum height=0.85cm,align=center] (dog) at (-2.2,0) {\textbf{Dog : Animal}\\ \texttt{void speak() const override}\\ \texttt{void fetch()}};
+\node[draw,thick,fill=orange!15,rounded corners=3pt,minimum width=2.6cm,minimum height=0.85cm,align=center] (cat) at (2.2,0) {\textbf{Cat : Animal}\\ \texttt{void speak() const override}};
+\draw[-{Latex},thick,blue!60!black] (dog)--(animal);
+\draw[-{Latex},thick,blue!60!black] (cat)--(animal);
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (0,-0.95) {arrow = is-a; derived inherits base subobject};
+\end{tikzpicture}
+\caption{Inheritance hierarchy: \texttt{Dog} and \texttt{Cat} each contain an \texttt{Animal} subobject. Public inheritance models is-a.}
+\label{fig:inheritance}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+struct Animal{
+    virtual void speak() const { std::cout<<"...\n"; }
+    virtual ~Animal() = default;           // virtual dtor: essential!
+};
+struct Dog : public Animal{
+    void speak() const override { std::cout<<"Woof!\n"; }
+    void fetch() const { std::cout<<"*fetches*\n"; }
+};
+Dog d; Animal& a = d; // Dog is-an Animal: binds base ref to derived
+a.speak();            // Woof! (virtual dispatch)
+\end{lstlisting}
+\texttt{override} makes the compiler check the signature matches; always use it. Make base destructors \texttt{virtual} so \texttt{delete} through base pointer destroys the derived part.
+
+\section{Polymorphism and Virtual Dispatch}
+\label{sec:polymorphism}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% objects
+\draw[thick,fill=blue!10] (0,0) rectangle (2.6,1.1);
+\node[font=\tiny\bfseries] at (1.3,0.85) {\texttt{Dog d}};
+\node[font=\tiny] at (1.3,0.55) {Animal part};
+\node[font=\tiny] at (1.3,0.28) {Dog part};
+\node[font=\tiny,fill=orange!18,rounded corners=1pt,inner sep=1pt] at (1.3,0.05) {vptr $\to$ Dog vtable};
+\draw[thick,fill=green!10] (3.4,0) rectangle (6.0,1.1);
+\node[font=\tiny\bfseries] at (4.7,0.85) {\texttt{Cat c}};
+\node[font=\tiny] at (4.7,0.55) {Animal part};
+\node[font=\tiny] at (4.7,0.28) {Cat part};
+\node[font=\tiny,fill=orange!18,rounded corners=1pt,inner sep=1pt] at (4.7,0.05) {vptr $\to$ Cat vtable};
+% vtables
+\draw[thick,fill=violet!12] (0,-1.55) rectangle (2.6,-0.45);
+\node[font=\tiny\bfseries] at (1.3,-0.60) {Dog vtable};
+\node[font=\tiny] at (1.3,-0.92) {\texttt{speak $\to$ Dog::speak}};
+\node[font=\tiny] at (1.3,-1.22) {\texttt{\~{}Animal $\to$ Dog::\~{}Dog}};
+\draw[thick,fill=violet!12] (3.4,-1.55) rectangle (6.0,-0.45);
+\node[font=\tiny\bfseries] at (4.7,-0.60) {Cat vtable};
+\node[font=\tiny] at (4.7,-0.92) {\texttt{speak $\to$ Cat::speak}};
+\draw[-{Latex},thick,red!60!black] (1.3,0.02)--(1.3,-0.45);
+\draw[-{Latex},thick,red!60!black] (4.7,0.02)--(4.7,-0.45);
+% call
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (3.0,-2.05) {\texttt{a.speak()} follows vptr $\to$ vtable $\to$ correct override};
+\end{tikzpicture}
+\caption{Virtual dispatch: each object holds a hidden \texttt{vptr} to its class's vtable. A virtual call indirects through it, selecting the derived override at run time.}
+\label{fig:vtable}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+void chorus(const std::vector<Animal*>& v){
+    for(auto *a: v) a->speak(); // dynamic dispatch: Dog woofs, Cat meows
+}
+Dog d; Cat c;
+chorus({&d,&c}); // Woof!  Meow!
+\end{lstlisting}
+Cost: one extra indirection per virtual call. Non-virtual calls are direct (zero overhead). Prefer non-virtual by default; make virtual only when you need run-time substitution. Pure virtual (\texttt{=0}) makes a base abstract: \texttt{virtual void draw() const =0;}.
+
+\section{Templates: Compile-Time Stamping}
+\label{sec:templates}
+Templates generate code per type at compile time (static polymorphism). No vtable, no indirection --- but one instantiation per distinct type.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\node[draw,thick,fill=blue!10,rounded corners=3pt,minimum width=3.4cm,minimum height=0.85cm,align=center] (tmpl) at (0,0) {\texttt{template<typename T>}\\ \texttt{T max2(T a,T b)}};
+\node[draw,thick,fill=green!14,rounded corners=3pt,minimum width=2.4cm,minimum height=0.70cm] (i) at (4.8,0.55) {\texttt{max2<int>}};
+\node[draw,thick,fill=orange!15,rounded corners=3pt,minimum width=2.4cm,minimum height=0.70cm] (d) at (4.8,-0.55) {\texttt{max2<double>}};
+\draw[-{Latex},thick,blue!60!black] (tmpl)--(i) node[midway,above,font=\tiny] {stamp};
+\draw[-{Latex},thick,blue!60!black] (tmpl)--(d) node[midway,below,font=\tiny] {stamp};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (0,-1.10) {one template, many generated functions};
+\end{tikzpicture}
+\caption{Templates as stamps: the compiler generates a separate function/class per \texttt{T}. No run-time cost, but code bloat if overused.}
+\label{fig:template-stamp}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+template<typename T>
+T max2(T a, T b){ return (a>b)?a:b; }
+int x = max2<int>(3,7);          // explicit
+double y = max2(3.1, 2.9);       // deduced: T=double
+// Class template
+template<typename T>
+struct VecT{ T x,y; T dot(const VecT& o) const { return x*o.x + y*o.y; } };
+VecT<double> v{1.0,2.0};
+\end{lstlisting}
+Templates are type-checked after instantiation; errors can be verbose. C++20 \texttt{concept}s constrain \texttt{T} with readable diagnostics (preview in Ch.~8).
+
+\section{Static vs.\ Dynamic Polymorphism}
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule & Templates (static) & Virtual (dynamic)\\
+\midrule When chosen & compile time & run time\\
+Cost & code size per \texttt{T} & one vtable indirection\\
+Heterogeneous container & no (one \texttt{T} per container) & yes (\texttt{vector<Animal*>})\\
+\bottomrule
+\end{tabular}
+\end{center}
+Rule of thumb: use templates for generic algorithms on uniform types; use virtual for heterogeneous runtime substitution.
+
+
+\section{Access Control and Protected Members}
+\texttt{public} inheritance keeps is-a; \texttt{private}/\texttt{protected} inheritance is implementation reuse, not is-a. \texttt{protected} members are visible to derived classes but not to outsiders.
+
+\begin{lstlisting}[language=C++]
+class Base{
+protected: int prot_ = 42;  // derived can see, outsiders cannot
+private:   int priv_ = 0;
+public:    int pub_  = 1;
+};
+class Derived : public Base{
+public:
+    void foo(){ prot_ = 7; /* ok */ /* priv_=1; error */ }
+};
+Base b; // b.prot_ error -- protected not accessible outside
+\end{lstlisting}
+Prefer \texttt{private} data with \texttt{protected} accessors over \texttt{protected} data: it preserves the base's invariant while still allowing customisation.
+
+\section{Abstract Classes and Interfaces}
+A class with at least one pure virtual function (\texttt{=0}) is abstract --- it cannot be instantiated, only derived from. This models interfaces.
+
+\begin{lstlisting}[language=C++]
+struct Drawable{ // interface: pure virtual
+    virtual void draw() const = 0;
+    virtual ~Drawable() = default;
+};
+struct Circle : Drawable{
+    double r; explicit Circle(double r_): r(r_) {}
+    void draw() const override { std::cout<<"Circle r="<<r<<"\n"; }
+};
+struct Square : Drawable{
+    double s; explicit Square(double s_): s(s_) {}
+    void draw() const override { std::cout<<"Square s="<<s<<"\n"; }
+};
+void render(const std::vector<Drawable*>& v){
+    for(auto *d: v) d->draw(); // uniform interface
+}
+\end{lstlisting}
+Interfaces decouple callers from concrete types --- the foundation of plugin architectures and test mocks. In modern C++, pure abstract classes are preferred over deep hierarchies.
+
+
+\section{Template Specialisation and Non-Type Parameters}
+Templates can be specialised for specific types or take compile-time constants as parameters.
+
+\begin{lstlisting}[language=C++]
+template<typename T, int N> // non-type param: array size known at compile time
+struct Array{
+    T data[N];
+    T& operator[](int i){ return data[i]; }
+    constexpr int size() const { return N; }
+};
+Array<int,5> a; // 5 ints, no heap, size() is compile-time
+
+// Function template with overload for const char*
+template<typename T> void print2(T x){ std::cout<<x<<"\n"; }
+template<> void print2<const char*>(const char* s){ std::cout<<"C-string: "<<s<<"\n"; }
+print2(42);        // int version
+print2("hello");   // specialised for const char*
+\end{lstlisting}
+Non-type parameters enable fixed-size containers without dynamic allocation; specialisation lets you tailor behaviour per type while keeping a uniform call site.
+
+\section{Chapter Notes}
+Sutter \& Alexandrescu \emph{C++ Coding Standards} Ch.~37--40 covers inheritance discipline. STL (Ch.~7) is almost entirely templates; inheritance appears sparingly there by design.
+
+\section{Exercises}
+\begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{Slicing.} \texttt{Animal a = Dog(); a.speak();} What prints and why? How does \texttt{Animal\& a = d;} differ? Explain object slicing.
+\item \textbf{Virtual dtor.} Give a program where deleting a \texttt{Dog} through \texttt{Animal*} without a virtual destructor leaks resources. Fix it.
+\item \textbf{Template deduction.} For \texttt{template<typename T> void f(T a, T b)}, what happens with \texttt{f(1, 2.0)}? How to fix the call or the template?
+\item \textbf{Override check.} Remove \texttt{override} and misspell \texttt{speak} as \texttt{speal} in \texttt{Dog}. What happens with and without \texttt{override}? Why is \texttt{override} best practice?
+\item \textbf{Design.} Model \texttt{Shape} with \texttt{area()} and \texttt{draw()}. Should they be virtual/pure virtual? Should \texttt{Shape} be instantiable? Justify and sketch the hierarchy.
+\end{enumerate}
+% End of Chapter 6

@@ -1,0 +1,213 @@
+% SC1008 — Chapter 4: Dynamic Memory (0->100 ground-up)
+\chapter{Dynamic Memory: The Heap and Its Discipline}
+\label{ch:dynamic-memory}
+
+\begin{quote}
+\emph{``Memory management is the price of power.''} Stack memory is automatic but fixed-size; heap memory is manual but flexible. This chapter teaches you to wield \texttt{malloc} and \texttt{free} safely.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: stack vs.\ heap as two regions.} The stack grows/shrinks automatically per call; the heap is a pool you request chunks from. We draw both, then build \texttt{malloc/free} discipline with valgrind as proof.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item contrast stack and heap lifetime and size;
+    \item allocate/free heap memory with \texttt{malloc}/\texttt{calloc}/\texttt{realloc}/\texttt{free};
+    \item diagnose leaks, double-free, and use-after-free with valgrind/ASan;
+    \item implement a resizable array (vector) in C;
+    \item state and apply the ``every malloc has a free'' discipline.
+\end{enumerate}
+
+% ============================================================
+\section{Stack vs.\ Heap}
+\label{sec:stack-vs-heap}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% memory map vertical
+\draw[thick,fill=blue!10] (0,3.0) rectangle (3.0,3.9);
+\node[font=\tiny\bfseries] at (1.5,3.55) {Stack (frames)};
+\node[font=\tiny,align=center] at (1.5,3.2) {auto, LIFO\\grows $\downarrow$};
+\draw[thick,fill=orange!15] (0,1.4) rectangle (3.0,2.6);
+\node[font=\tiny\bfseries] at (1.5,2.22) {Heap (malloc)};
+\node[font=\tiny,align=center] at (1.5,1.82) {manual\\grows $\uparrow$};
+\draw[thick,fill=green!12] (0,0.0) rectangle (3.0,1.1);
+\node[font=\tiny\bfseries] at (1.5,0.75) {Static / Globals};
+\node[font=\tiny] at (1.5,0.35) {entire run};
+\draw[thick,fill=violet!10] (0,-0.9) rectangle (3.0,-0.15);
+\node[font=\tiny\bfseries] at (1.5,-0.45) {Code (text)};
+% arrows
+\draw[-{Latex},thick,red!60!black] (3.4,3.4)--(4.2,3.0) node[right,font=\tiny] {SP $\downarrow$};
+\draw[-{Latex},thick,red!60!black] (3.4,1.6)--(4.2,2.0) node[right,font=\tiny] {brk $\uparrow$};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (1.5,-1.45) {Same address space, opposite growth; they meet $\to$ out of memory};
+\end{tikzpicture}
+\caption{Process address space (simplified): stack grows down automatically; heap grows up on demand. Stack is per-call, heap is per-programmer-request.}
+\label{fig:mem-map}
+\end{figure}
+
+\begin{lstlisting}[language=C]
+void foo(void){
+    int local = 5;          // stack: freed when foo returns
+    int *heap = malloc(sizeof(int)); // heap: lives until free(heap)
+    if(!heap) return;       // malloc can fail!
+    *heap = 5;
+    free(heap); heap = NULL; // release + null to avoid dangling
+}
+\end{lstlisting}
+Stack allocation is instant and reclaimed on return; heap allocation is explicit and survives the creating function --- but you must free it.
+
+\section{malloc, calloc, realloc, free}
+\label{sec:malloc-family}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% heap blocks
+\draw[thick,fill=gray!12] (0,0) rectangle (1.2,0.75);
+\node[font=\tiny] at (0.6,0.38) {free};
+\draw[thick,fill=green!15] (1.2,0) rectangle (3.2,0.75);
+\node[font=\tiny\bfseries] at (2.2,0.48) {malloc(32)};
+\node[font=\tiny] at (2.2,0.18) {32 B};
+\draw[thick,fill=gray!12] (3.2,0) rectangle (4.0,0.75);
+\node[font=\tiny] at (3.6,0.38) {free};
+\draw[thick,fill=blue!14] (4.0,0) rectangle (6.5,0.75);
+\node[font=\tiny\bfseries] at (5.25,0.48) {malloc(48)};
+\node[font=\tiny] at (5.25,0.18) {48 B};
+\draw[thick,fill=gray!12] (6.5,0) rectangle (8.2,0.75);
+\node[font=\tiny] at (7.35,0.38) {free};
+\draw[decorate,decoration={brace,mirror},thick] (1.2,-0.12)--(3.2,-0.12) node[midway,below,font=\tiny] {header+payload};
+\draw[-{Latex},thick,red!70!black] (2.2,0.95)--(2.2,1.35) node[above,font=\tiny] {\texttt{p}};
+\draw[-{Latex},thick,red!70!black] (5.25,0.95)--(5.25,1.35) node[above,font=\tiny] {\texttt{q}};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (4.1,-0.85) {\texttt{free(p)} marks block reusable; allocator may coalesce neighbours};
+\end{tikzpicture}
+\caption{Heap as a sequence of blocks. \texttt{malloc} finds a free chunk, marks it allocated, returns its payload address. \texttt{free} marks it free again.}
+\label{fig:heap-blocks}
+\end{figure}
+
+\begin{lstlisting}[language=C]
+#include <stdlib.h>
+#include <string.h>
+int *a = malloc(10 * sizeof(*a));        // 10 ints, uninitialised
+int *b = calloc(10, sizeof(*b));         // 10 ints, zeroed
+if(!a || !b){ perror("malloc"); exit(1); }
+
+a[0]=42; b[0]=42;                         // use
+int *tmp = realloc(a, 20*sizeof(*a));    // grow to 20
+if(tmp){ a=tmp; } else { /* handle failure, old a still valid */ }
+
+free(a); free(b); a=b=NULL;              // always free what you malloc
+\end{lstlisting}
+Rules: check for \texttt{NULL}; \texttt{realloc} may move the block (use temp); \texttt{free(NULL)} is safe no-op; never \texttt{free} stack addresses or the same pointer twice.
+
+\texttt{sizeof(*a)} is preferred over \texttt{sizeof(int)} --- it stays correct if \texttt{a}'s type changes.
+
+\section{Common Heap Bugs}
+\label{sec:heap-bugs}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Leak:} \texttt{malloc} without \texttt{free} --- memory grows until exhaustion. Long-running programs crash.
+    \item \textbf{Double free:} \texttt{free(p); free(p);} --- corrupts allocator metadata.
+    \item \textbf{Use-after-free:} \texttt{free(p); *p=1;} --- writes to reclaimed memory; may corrupt next allocation.
+    \item \textbf{Buffer overflow:} writing past the allocated size --- corrupts adjacent block headers.
+\end{itemize}
+
+\section{Valgrind and AddressSanitizer}
+\label{sec:valgrind}
+Tools turn silent UB into loud errors. Compile with \texttt{-g} (debug symbols), then:
+\begin{lstlisting}[language=C]
+// leaky.c
+int main(void){ malloc(100); return 0; } // leak!
+\end{lstlisting}
+\begin{lstlisting}[language=bash]
+gcc -g -Wall leaky.c -o leaky
+valgrind --leak-check=full ./leaky        # reports 100 bytes lost
+gcc -g -fsanitize=address leaky.c -o leaky_asan && ./leaky_asan # ASan report
+\end{lstlisting}
+Valgrind output names the allocation site and bytes lost; ASan aborts on the first illegal access with a stack trace. Run one of them on every heap-using program during development. On macOS, use \texttt{leaks} or ASan (valgrind is Linux-first).
+
+\section{A Resizable Array in C}
+\label{sec:resizable-array}
+We combine structs + heap to build a minimal vector:
+
+\begin{lstlisting}[language=C]
+typedef struct { int *data; int size; int cap; } Vec;
+void vec_init(Vec *v){ v->data=NULL; v->size=0; v->cap=0; }
+void vec_push(Vec *v, int x){
+    if(v->size==v->cap){
+        int nc = v->cap ? v->cap*2 : 4;
+        int *nd = realloc(v->data, nc*sizeof(*nd));
+        if(!nd){ perror("realloc"); exit(1); }
+        v->data=nd; v->cap=nc;
+    }
+    v->data[v->size++]=x;
+}
+void vec_free(Vec *v){ free(v->data); v->data=NULL; v->size=v->cap=0; }
+\end{lstlisting}
+Doubling amortises \texttt{realloc} cost to $O(1)$ per push. Every \texttt{vec\_init} must be paired with \texttt{vec\_free}.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\foreach \i/\v in {0/10,1/20,2/30} {
+  \pgfmathsetmacro{\x}{\i*1.35}
+  \draw[thick,fill=blue!12] (\x,0) rectangle (\x+1.15,0.70);
+  \node at (\x+0.57,0.35) {\texttt{\v}};
+}
+\foreach \i in {3,4,5,6,7} {
+  \pgfmathsetmacro{\x}{\i*1.35}
+  \draw[thick,fill=gray!12] (\x,0) rectangle (\x+1.15,0.70);
+  \node[font=\tiny,gray] at (\x+0.57,0.35) {free};
+}
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (2.0,1.15) {\texttt{data $\to$ heap, cap=8, size=3}};
+\draw[-{Latex},thick,red!70!black] (0.2,1.15)--(0.57,0.72);
+\node[font=\tiny] at (7.2,-0.45) {growth: 4 $\to$ 8 $\to$ 16 $\dots$};
+\end{tikzpicture}
+\caption{Resizable array: heap buffer with spare capacity. Doubling keeps amortised $O(1)$ push and wastes at most half the buffer.}
+\label{fig:vec-growth}
+\end{figure}
+
+
+\section{Deep Copy vs.\ Shallow Copy}
+When a struct owns heap memory, copying the struct copies the pointer, not the buffer --- a shallow copy. Two structs then point to the same buffer; freeing both double-frees.
+
+\begin{lstlisting}[language=C]
+typedef struct { char *name; int age; } Person;
+Person a; a.name = malloc(16); strcpy(a.name,"Asha"); a.age=20;
+Person b = a; // shallow: b.name == a.name (same pointer!)
+free(a.name); // b.name now dangling -- use-after-free if accessed
+// Fix: deep copy
+Person c; c.name = malloc(strlen(a.name)+1); strcpy(c.name,a.name); c.age=a.age;
+\end{lstlisting}
+In C++ (Ch.~5,8) copy constructors automate deep copying. In C you must do it manually, every time.
+
+\section{Worked Example: Dynamic String Builder}
+We build a string of unknown length by doubling, mirroring Vec but for chars.
+
+\begin{lstlisting}[language=C]
+#include <string.h>
+typedef struct { char *buf; int len; int cap; } StrBuilder;
+void sb_init(StrBuilder *sb){ sb->buf=malloc(16); sb->cap=16; sb->len=0; sb->buf[0]='\0'; }
+void sb_append(StrBuilder *sb, const char *s){
+    int slen=strlen(s);
+    while(sb->len+slen+1 > sb->cap){
+        sb->cap*=2;
+        char *nb=realloc(sb->buf, sb->cap);
+        if(!nb){ perror("realloc"); exit(1);}
+        sb->buf=nb;
+    }
+    strcpy(sb->buf+sb->len, s); sb->len+=slen;
+}
+void sb_free(StrBuilder *sb){ free(sb->buf); sb->buf=NULL; sb->len=sb->cap=0; }
+\end{lstlisting}
+Every \texttt{sb\_init} pairs with \texttt{sb\_free}. The doubling keeps total copy cost $O(n)$ for $n$ appended characters.
+
+\section{Chapter Notes}
+Heap allocators (first-fit, best-fit, segregated lists) are covered in SC2005 Operating Systems. For C++ alternatives that automate freeing, see Ch.~8 (RAII, smart pointers).
+
+\section{Exercises}
+\begin{enumerate}[label=E4.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{Lifetime.} Why does returning \texttt{\&local} from a function fail, but returning \texttt{malloc}'d memory succeeds? When must the caller \texttt{free} the latter?
+\item \textbf{calloc vs malloc.} When is \texttt{calloc(n,sizeof(T))} preferable to \texttt{malloc(n*sizeof(T))}? What does ``zeroed'' mean for pointer members?
+\item \textbf{realloc pitfall.} Explain why \texttt{a = realloc(a, new\_size)} leaks on failure. Write the safe pattern with a temporary pointer.
+\item \textbf{Valgrind reading.} Write a program that leaks 3 blocks and double-frees one. Run under valgrind/ASan and explain each diagnostic line.
+\item \textbf{Vec shrink.} Extend \texttt{Vec} with \texttt{vec\_pop} and a shrink policy (e.g.\ halve when \texttt{size == cap/4}). Argue why shrinking at \texttt{size == cap/2} could cause thrashing.
+\end{enumerate}
+% End of Chapter 4

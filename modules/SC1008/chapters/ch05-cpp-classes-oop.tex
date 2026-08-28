@@ -1,0 +1,211 @@
+% SC1008 — Chapter 5: C++ Classes & OOP Basics (0->100 ground-up)
+\chapter{C++ Classes and Object-Oriented Basics}
+\label{ch:cpp-classes-oop}
+
+\begin{quote}
+\emph{``C++ is C with a better abstraction toolkit.''} A \texttt{class} bundles data with the operations that maintain its invariants --- turning a loose struct into a disciplined object.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: C structs $\to$ C++ classes.} We start with why bare structs are error-prone (anyone can break invariants), then add constructors, encapsulation, and methods step by step. No prior OOP assumed.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item define a C++ class with access control (\texttt{private}/\texttt{public});
+    \item write constructors, destructors, and use member-initialiser lists;
+    \item distinguish value vs.\ reference semantics and use \texttt{const} correctly;
+    \item explain encapsulation and class invariants;
+    \item trace object lifetime (construction $\to$ use $\to$ destruction).
+\end{enumerate}
+
+% ============================================================
+\section{From Struct to Class}
+\label{sec:struct-to-class}
+A C struct is passive: any code can set \texttt{s.gpa = 999}. A class makes data \texttt{private} and exposes only safe operations.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\node[draw,thick,rounded corners=3pt,fill=gray!10,minimum width=3.2cm,minimum height=1.6cm,align=left] (bad) at (0,0) {\textbf{struct} (open)\\ \texttt{gpa = 999} allowed\\ no invariant\\ {\tiny anyone can corrupt}};
+\node[draw,thick,rounded corners=3pt,fill=green!12,minimum width=3.2cm,minimum height=1.6cm,align=left] (good) at (5.0,0) {\textbf{class} (guarded)\\ \texttt{private: gpa}\\ \texttt{public: setGPA()}\\ checks $0\le$\texttt{gpa}$\le5$};
+\draw[-{Latex},thick,blue!60!black] (bad)--(good) node[midway,above,font=\tiny] {encapsulate};
+\draw[thick,red!60!black,dashed] (5.0,-0.85)--(5.0,0.85);
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (5.0,1.25) {boundary};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (0,-1.25) {no boundary};
+\end{tikzpicture}
+\caption{Encapsulation: a class erects a wall. Outside code must use the public interface, which can enforce invariants.}
+\label{fig:encapsulation}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <string>
+class Student{
+private:
+    int id_;
+    std::string name_;
+    double gpa_;                 // invariant: 0.0 <= gpa_ <= 5.0
+public:
+    Student(int id, std::string name, double gpa) // constructor
+      : id_(id), name_(std::move(name)), gpa_(gpa) {
+        if(gpa_<0 || gpa_>5) throw std::out_of_range("gpa");
+    }
+    double gpa() const { return gpa_; }          // getter, const = won't mutate
+    void setGPA(double g){                       // setter with check
+        if(g<0||g>5) throw std::out_of_range("gpa");
+        gpa_=g;
+    }
+    std::string name() const { return name_; }
+};
+\end{lstlisting}
+\texttt{class} defaults to \texttt{private}; \texttt{struct} defaults to \texttt{public} --- otherwise identical in C++.
+
+\section{Constructors, Destructors, Initialiser Lists}
+\label{sec:ctor-dtor}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\node[draw,thick,fill=blue!10,rounded corners=3pt,minimum width=2.0cm,minimum height=0.65cm] (def) at (0,0) {\texttt{Student s;}};
+\node[draw,thick,fill=orange!15,rounded corners=3pt,minimum width=2.6cm,minimum height=0.65cm] (par) at (3.8,0) {\texttt{Student s(1,"Asha",4.8)}};
+\node[draw,thick,fill=green!12,rounded corners=3pt,minimum width=2.0cm,minimum height=0.65cm] (cpy) at (7.6,0) {\texttt{Student t=s;}};
+\node[draw,thick,fill=violet!12,rounded corners=3pt,minimum width=3.0cm,minimum height=0.65cm] (des) at (3.8,-1.35) {destructor \texttt{\~{}Student()} at scope end};
+\draw[-{Latex},thick] (def)--(par);
+\draw[-{Latex},thick] (par)--(cpy);
+\draw[-{Latex},thick,red!60!black] (par)--(des);
+\draw[-{Latex},thick,red!60!black] (cpy)--(des);
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (3.8,0.85) {construction (initialiser list runs first)};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (3.8,-2.05) {destruction in reverse order of construction};
+\end{tikzpicture}
+\caption{Object lifetime: construction via initialiser list, then use, then automatic destruction when the scope ends. Copy construction is discussed in Ch.~8.}
+\label{fig:ctor-dtor}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+class Vec2{
+    double x_, y_;
+public:
+    Vec2(): x_(0), y_(0) {}                 // default constructor
+    Vec2(double x,double y): x_(x), y_(y) {} // parameterised
+    // member initialiser list : x_(x) runs BEFORE body -- required for const/ref members
+    double norm() const { return std::sqrt(x_*x_+y_*y_); }
+    ~Vec2(){ /* release resources if any */ } // destructor
+};
+Vec2 a;              // default
+Vec2 b(3,4);         // param
+Vec2 c = b;          // copy (memberwise for now; Ch.8 refines)
+\end{lstlisting}
+Prefer initialiser lists over assignment in the body: they directly construct members, while assignment constructs then overwrites.
+
+\section{Encapsulation and Invariants}
+\label{sec:invariants-oop}
+A class invariant is a predicate that every public operation must preserve (e.g.\ $0\le$\texttt{gpa}$\le5$, vector \texttt{size}$\le$\texttt{capacity}). By making data private and checking in setters/constructors, the invariant holds for all clients. Think of the class as a tiny machine with a valid-state set; public methods are the only buttons.
+
+\begin{lstlisting}[language=C++]
+class BoundedCounter{
+    int val_, max_;
+public:
+    BoundedCounter(int m): val_(0), max_(m) {}
+    void inc(){ if(val_<max_) ++val_; }
+    void reset(){ val_=0; }
+    int get() const { return val_; }
+    // invariant: 0 <= val_ <= max_  (always, between calls)
+};
+\end{lstlisting}
+
+\section{Const Correctness and References}
+\label{sec:const-ref}
+\begin{lstlisting}[language=C++]
+void print(const Student& s){          // const ref: no copy, no mutate
+    std::cout << s.name() << " " << s.gpa() << "\n";
+}
+Student s(1,"Asha",4.8);
+print(s);                              // binds without copying string
+// s.gpa() is const member function -- callable on const Student&
+\end{lstlisting}
+\texttt{const} on a method means \texttt{this} is \texttt{const}; it can be called on const objects. Pass large objects by \texttt{const\&} to avoid copies. Return by value for small types, by const ref for members (with lifetime care).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\draw[thick,fill=blue!10] (0,0) rectangle (2.4,0.70);
+\node at (1.2,0.35) {\texttt{Student s}};
+\draw[thick,fill=orange!15] (3.2,0) rectangle (5.6,0.70);
+\node at (4.4,0.35) {\texttt{const Student\& r = s}};
+\draw[-{Latex},thick,red!70!black] (4.4,0.70)--(1.8,0.70) node[midway,above,font=\tiny] {alias, no copy};
+\node[font=\tiny,fill=green!12,rounded corners=2pt,inner sep=2pt] at (1.2,-0.45) {owns data};
+\node[font=\tiny,fill=violet!12,rounded corners=2pt,inner sep=2pt] at (4.4,-0.45) {view, cannot mutate};
+\end{tikzpicture}
+\caption{Reference semantics: \texttt{const Student\&} is an alias (no copy) with read-only access. Value semantics would copy the whole object.}
+\label{fig:ref-semantics}
+\end{figure}
+
+
+\section{Operator Overloading}
+Classes can give meaning to operators like \texttt{+}, \texttt{==}, \texttt{<<} so objects feel like built-in types.
+
+\begin{lstlisting}[language=C++]
+class Vec2{
+    double x_,y_;
+public:
+    Vec2(double x=0,double y=0): x_(x), y_(y) {}
+    Vec2 operator+(const Vec2& o) const { return {x_+o.x_, y_+o.y_}; }
+    bool operator==(const Vec2& o) const { return x_==o.x_ && y_==o.y_; }
+    double x() const { return x_; }
+    double y() const { return y_; }
+    friend std::ostream& operator<<(std::ostream& os, const Vec2& v){
+        return os<<"("<<v.x_<<","<<v.y_<<")";
+    }
+};
+Vec2 a(1,2), b(3,4);
+Vec2 c = a+b;            // (4,6)
+std::cout<<c<<"\n";       // (4,6)
+\end{lstlisting}
+Overload only when semantics are obvious; \texttt{+} should not surprise. Stream insertion \texttt{operator<<} is idiomatically a \texttt{friend} non-member.
+
+\section{Static Members and Friends}
+\texttt{static} members belong to the class, not to any instance; \texttt{friend} grants selective access to private data.
+
+\begin{lstlisting}[language=C++]
+class Counter{
+    static int total_;   // shared across all objects
+    int id_;
+public:
+    Counter(): id_(++total_) {}
+    static int total(){ return total_; }
+    friend void debug(const Counter& c); // can read c.id_ private
+};
+int Counter::total_ = 0; // define static outside class
+void debug(const Counter& c){ std::cout<<c.id_<<"\n"; }
+\end{lstlisting}
+Static data needs an out-of-class definition (or \texttt{inline static} since C++17). Friends break encapsulation minimally --- prefer member functions when possible.
+
+
+\section{Member Functions vs.\ Non-Members}
+Not every operation should be a member. Prefer non-member non-friend when it can be implemented via the public interface --- it reduces coupling and keeps the class minimal.
+
+\begin{lstlisting}[language=C++]
+class Vec2{
+    double x_,y_;
+public:
+    Vec2(double x=0,double y=0): x_(x), y_(y) {}
+    double x() const { return x_; }
+    double y() const { return y_; }
+    Vec2& operator+=(const Vec2& o){ x_+=o.x_; y_+=o.y_; return *this; }
+};
+// non-member built from public members + +=
+Vec2 operator+(Vec2 a, const Vec2& b){ a+=b; return a; }
+double dot(const Vec2& a, const Vec2& b){ return a.x()*b.x()+a.y()*b.y(); }
+bool isZero(const Vec2& v){ return v.x()==0 && v.y()==0; }
+\end{lstlisting}
+If a function needs private access, make it a member or friend; otherwise keep it outside. This is the ``minimal interface'' principle (Meyers).
+
+\section{Chapter Notes}
+Stroustrup \emph{The C++ Programming Language} (4th ed.) and Meyers \emph{Effective C++} are the classic guides. Rule of Zero/Three/Five (when to write copy/move/destructor) is covered in Ch.~8.
+
+\section{Exercises}
+\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{Invariant.} Design \texttt{class Date\{int d,m,y\}} with invariant ``valid calendar date''. Which operations must validate? Sketch constructor and \texttt{setDay}.
+\item \textbf{Initialiser list.} Why must a \texttt{const int id\_} or \texttt{int\& ref\_} member be initialised in the member-initialiser list, not in the body?
+\item \textbf{Const.} Mark which methods should be \texttt{const} in a \texttt{BankAccount} class (\texttt{balance()}, \texttt{deposit()}, \texttt{withdraw()}, \texttt{getId()}). What breaks if you omit \texttt{const}?
+\item \textbf{Encapsulation break.} Show how returning a non-const reference to a private member (\texttt{int\& getVal()}) breaks encapsulation. Fix it.
+\item \textbf{Lifetime.} Trace construction/destruction order for \texttt{\{ Student a(1,"A",4); Student b=a; \}} How many constructor/destructor calls? Which kind?
+\end{enumerate}
+% End of Chapter 5

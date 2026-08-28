@@ -1,0 +1,210 @@
+% SC1008 — Chapter 2: Pointers & Memory (0->100 ground-up)
+\chapter{Pointers and Memory: Addresses as Data}
+\label{ch:pointers-memory}
+
+\begin{quote}
+\emph{``Pointers are the C programmer's superpower and the beginner's nightmare.''} A pointer is just an address held in a variable. Master this one idea and C's memory model becomes transparent.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: we build on Ch.~1 boxes.} Memory is a numbered array of bytes; a variable's name hides its address. We reveal the address, store it, and draw every step. No prior systems knowledge assumed.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item distinguish a variable's value from its address (\texttt{\&} vs.\ \texttt{*});
+    \item draw stack frames and explain call-by-value vs.\ call-by-reference;
+    \item perform pointer arithmetic correctly for typed pointers;
+    \item identify dangling, null, and wild pointers;
+    \item explain the stack vs.\ heap distinction at a high level (detail in Ch.~4).
+\end{enumerate}
+
+% ============================================================
+\section{Addresses and the \texttt{\&} Operator}
+\label{sec:addresses}
+Every byte in memory has an index --- its \emph{address} (like a house number). A variable \texttt{int x=42} occupies 4 bytes starting at some address, say \texttt{0x7ffc1000}. \texttt{\&x} yields that address; \texttt{*p} follows a pointer to the box it points at.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+% memory column
+\foreach \i/\addr/\val/\col in {0/0x1000/42/blue!15,1/0x1004/7/orange!15,2/0x1008/?/gray!12,3/0x100C/99/green!12} {
+  \pgfmathsetmacro{\y}{-\i*1.05}
+  \draw[thick,fill=\col] (0,\y) rectangle (2.8,\y+0.8);
+  \node[font=\tiny,anchor=east] at (-0.15,\y+0.4) {\texttt{\addr}};
+  \node at (1.4,\y+0.4) {\texttt{\val}};
+}
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (1.4,0.95) {Memory (stack)};
+% variables
+\node[draw,thick,fill=blue!10,rounded corners=2pt,minimum width=1.8cm,minimum height=0.6cm] (x) at (5.2, -0.35) {\texttt{x = 42}};
+\node[draw,thick,fill=orange!14,rounded corners=2pt,minimum width=1.8cm,minimum height=0.6cm] (y) at (5.2, -1.4) {\texttt{y = 7}};
+\node[draw,thick,fill=violet!12,rounded corners=2pt,minimum width=1.9cm,minimum height=0.6cm] (p) at (5.2,-2.95) {\texttt{p = \&x}};
+\draw[-{Latex},thick,red!70!black] (p) -- (1.7,-0.0) node[midway,below,sloped,font=\tiny] {points to};
+\node[font=\tiny,align=left] at (5.2,-3.85) {\texttt{\&x = 0x1000}\\ \texttt{*p = 42}};
+\draw[dashed,thick,gray] (1.2,-0.05)--(3.8,-0.55);
+\end{tikzpicture}
+\caption{Memory as numbered boxes. \texttt{p} stores the address of \texttt{x}; dereferencing \texttt{*p} reads box \texttt{0x1000}.}
+\label{fig:address-pointer}
+\end{figure}
+
+\begin{lstlisting}[language=C]
+int x = 42, y = 7;
+int *p = &x;          // p holds address of x; type int* = pointer to int
+printf("%p %d\n", (void*)p, *p);  // 0x7ffc1000 42
+*p = 100;             // writes through p: x is now 100
+printf("x=%d\n", x);  // 100
+int **pp = &p;        // pointer to pointer
+\end{lstlisting}
+\texttt{*p} is an \emph{lvalue}: you can assign to it. \texttt{NULL} (i.e.\ \texttt{(void*)0}) means ``points nowhere'' --- dereferencing it crashes.
+
+\section{The Stack: Frames on Call}
+\label{sec:stack-frames}
+Each function call pushes a \emph{frame} (activation record) onto the call stack: parameters, local variables, return address.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% stack growing downward
+\draw[thick,fill=green!10] (0,0) rectangle (3.2,1.1);
+\node[font=\tiny\bfseries] at (1.6,0.85) {\texttt{main()} frame};
+\node[font=\tiny,align=left] at (1.6,0.32) {\texttt{a = 5}\\ \texttt{b = 9}};
+\draw[thick,fill=blue!12] (0,-1.35) rectangle (3.2,-0.15);
+\node[font=\tiny\bfseries] at (1.6,-0.35) {\texttt{swap(\&a,\&b)} frame};
+\node[font=\tiny,align=left] at (1.6,-0.90) {\texttt{pa $\to$ 0xA0}\\ \texttt{pb $\to$ 0xA4}\\ \texttt{tmp}};
+\draw[thick,fill=orange!16] (0,-2.65) rectangle (3.2,-1.55);
+\node[font=\tiny,align=center] at (1.6,-2.10) {return address\\ saved registers};
+\draw[-{Latex},thick,red!60!black] (1.0,-0.70)--(0.6,-0.05);
+\draw[-{Latex},thick,red!60!black] (1.9,-0.70)--(2.3,-0.05);
+\node[font=\tiny,fill=white,inner sep=1pt,align=left] at (4.4,-0.7) {pa/pb point\\into caller's frame};
+\node[font=\tiny] at (1.6,-3.05) {stack grows $\downarrow$ \quad SP $\to$ top};
+\draw[->,thick] (3.5,-2.65)--(3.5,0.6);
+\end{tikzpicture}
+\caption{Stack frames: \texttt{main} calls \texttt{swap(\&a,\&b)}; the callee's pointers reach back into the caller's frame to modify \texttt{a},\texttt{b}.}
+\label{fig:stack-frames}
+\end{figure}
+
+Call-by-value copies; to modify the caller, pass the address:
+\begin{lstlisting}[language=C]
+void swap(int *pa, int *pb){
+    int tmp = *pa; *pa = *pb; *pb = tmp;
+}
+int main(void){
+    int a=5,b=9; swap(&a,&b); // a=9 b=5
+}
+\end{lstlisting}
+Without pointers, \texttt{swap(a,b)} would swap copies and the caller would see no change --- a classic bug.
+
+\section{Pointer Arithmetic: Typed Steps}
+\label{sec:pointer-arith}
+A pointer's type determines its stride. If \texttt{p} is \texttt{int*}, then \texttt{p+1} advances by \texttt{sizeof(int)} bytes (typically 4), not 1. The compiler scales for you.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.70,every node/.style={font=\scriptsize}]
+\foreach \i in {0,...,4} {
+  \pgfmathsetmacro{\x}{\i*1.75}
+  \draw[thick,fill=blue!10] (\x,0) rectangle (\x+1.55,0.75);
+  \node[font=\tiny] at (\x+0.77,0.42) {\texttt{a[\i]}};
+  \node[font=\tiny,fill=white,inner sep=1pt] at (\x+0.77,-0.22) {\texttt{+0x\i*4}};
+}
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (1.0,1.15) {\texttt{int *p = \&a[0]}};
+\draw[-{Latex},thick,red!70!black] (0.77,-0.55)--(0.77,-0.05);
+\node[font=\tiny,red!70!black] at (0.77,-0.82) {\texttt{p}};
+\draw[-{Latex},thick,red!70!black] (2.52,-0.55)--(2.52,-0.05);
+\node[font=\tiny,red!70!black] at (2.52,-0.82) {\texttt{p+1}};
+\draw[-{Latex},thick,violet!70!black] (6.02,-0.55)--(6.02,-0.05);
+\node[font=\tiny,violet!70!black] at (6.02,-0.82) {\texttt{p+3}};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (4.4,1.15) {stride = sizeof(int) = 4 bytes};
+\end{tikzpicture}
+\caption{Typed pointer arithmetic: \texttt{p+1} jumps one \texttt{int} (4 bytes), not one byte. \texttt{a[i]} is sugar for \texttt{*(a+i)}.}
+\label{fig:pointer-arith}
+\end{figure}
+
+\begin{lstlisting}[language=C]
+int a[5]={10,20,30,40,50};
+int *p = a;              // array decays to &a[0]
+printf("%d\n", *(p+2));  // 30  == a[2]
+printf("%d\n", p[3]);    // 40  == *(p+3)
+char *cp = (char*)p;     // cp+1 advances 1 byte
+printf("%ld %ld\n", (long)(p+1)-(long)p, (long)(cp+1)-(long)cp); // 4 1
+\end{lstlisting}
+\texttt{void*} has no stride (cannot do arithmetic); cast first. Subtracting two \texttt{int*} gives element distance, not byte distance.
+
+\section{Dangerous Pointers}
+\texttt{NULL} dereference, \emph{wild} (uninitialised), \emph{dangling} (points to freed/reclaimed stack frame), and \emph{out-of-bounds} pointers are undefined behaviour. Always initialise: \texttt{int *q=NULL;} and check before dereferencing. Never return the address of a local variable.
+
+
+\section{Const Pointers and Pointer-to-Const}
+C distinguishes three related types; the position of \texttt{const} matters.
+
+\begin{lstlisting}[language=C]
+int x=5, y=9;
+const int *p1 = &x;       // pointer to const int: *p1 cannot be changed, p1 can
+int *const p2 = &x;       // const pointer to int: p2 cannot be changed, *p2 can
+const int *const p3 = &x; // both const
+// p1 = &y; ok   *p1=10; error
+// p2 = &y; error *p2=10; ok
+\end{lstlisting}
+Read declarations right-to-left: ``\texttt{p1} is a pointer to a \texttt{const int}''. Use \texttt{const int*} for read-only views of data you do not own.
+
+\section{Arrays, Pointers, and Function Parameters}
+An array name decays to a pointer in most contexts, but \texttt{sizeof} and \texttt{\&} are exceptions (Ch.~3 elaborates). When you pass an array to a function, you really pass a pointer --- the callee cannot know the length.
+
+\begin{lstlisting}[language=C]
+void print_arr(const int *a, int n){
+    for(int i=0;i<n;i++) printf("%d ", a[i]); // a[i] == *(a+i)
+    // a is really int*: sizeof(a)==8 on 64-bit, not 20!
+}
+int main(void){
+    int arr[5]={1,2,3,4,5};
+    printf("sizeof arr=%zu\n", sizeof(arr)); // 20
+    print_arr(arr, 5);                        // arr decays to &arr[0]
+}
+\end{lstlisting}
+Always pass the length explicitly. For 2-D arrays, all dimensions except the first must be known: \texttt{void f(int a[][3], int rows)}.
+
+\section{Worked Example: Pass-by-Reference via Pointers}
+C has only pass-by-value. To let a function return two values, pass output pointers:
+
+\begin{lstlisting}[language=C]
+#include <stdbool.h>
+bool divmod(int a, int b, int *q, int *r){
+    if(b==0) return false;
+    *q = a/b; *r = a%b; return true;
+}
+int main(void){
+    int q,r;
+    if(divmod(17,5,&q,&r)) printf("17/5 = %d rem %d\n", q,r); // 3 rem 2
+}
+\end{lstlisting}
+The caller lends the address; the callee writes through it. This pattern --- output parameters via pointers --- pervades C APIs (\texttt{scanf} itself uses it).
+
+
+\section{Pointer Safety Checklist}
+Before dereferencing any pointer, ask four questions:
+\begin{enumerate}[leftmargin=*]
+    \item Is it initialised? (wild if not)
+    \item Is it \texttt{NULL}? (null dereference crashes)
+    \item Does it still point to live storage? (dangling if freed/returned local)
+    \item Is the access in bounds? (overflow corrupts neighbours)
+\end{enumerate}
+Adopt the habit: initialise to \texttt{NULL}, check before use, null after \texttt{free}, never return locals. Tools like AddressSanitizer (\texttt{-fsanitize=address}) turn silent UB into immediate aborts with stack traces --- use them during development.
+
+\begin{lstlisting}[language=C]
+int *p = NULL;             // 1. initialise
+p = malloc(sizeof(*p));
+if(!p) return;             // 2. check allocation
+*p = 42;                   // 3. live and in bounds
+free(p); p = NULL;         // 4. free + null (prevents dangling)
+// if(p) *p = 1;           // safe: null check guards
+\end{lstlisting}
+
+\section{Chapter Notes}
+The stack/heap split is elaborated in Ch.~4. For deeper C memory, see Bryant \& O'Hallaron \emph{CS:APP} Ch.~3, 9.
+
+\section{Exercises}
+\begin{enumerate}[label=E2.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{Trace.} \texttt{int x=3; int *p=\&x; int y=*p+1; *p=10;} What are \texttt{x, y, *p} after each line? Draw the boxes.
+\item \textbf{Swap failure.} Explain why \texttt{void bad\_swap(int a,int b)\{int t=a;a=b;b=t;\}} does not swap the caller's variables. Fix it with pointers.
+\item \textbf{Arithmetic.} On a machine with 4-byte \texttt{int}, if \texttt{p=0x1000} is \texttt{int*}, what are \texttt{p+1}, \texttt{p+5} numerically? What about \texttt{(char*)p+1}?
+\item \textbf{Dangling.} Why is \texttt{int *f()\{int x=5; return \&x;\}} dangerous? What might go wrong when the caller uses the returned pointer?
+\item \textbf{Double pointer.} Write \texttt{void set\_to\_zero(int **pp)} that allocates no memory but makes \texttt{*pp = NULL} visible to the caller. Why does \texttt{void foo(int *p)\{p=NULL;\}} not do the same?
+\end{enumerate}
+% End of Chapter 2

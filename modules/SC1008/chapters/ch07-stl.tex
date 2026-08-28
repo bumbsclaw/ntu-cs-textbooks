@@ -1,0 +1,201 @@
+% SC1008 — Chapter 7: STL — Vectors, Maps, Iterators (0->100 ground-up)
+\chapter{The Standard Template Library: Vectors, Maps, and Iterators}
+\label{ch:stl}
+
+\begin{quote}
+\emph{``STL is not a library you call --- it is a language you think in.''} Containers hold data; iterators traverse it; algorithms operate on it. Learn the trinity and you read modern C++ fluently.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: we generalise Ch.~4's Vec and Ch.~3's arrays.} STL containers automate the heap discipline; iterators generalise pointers; algorithms generalise loops. Pictures before code throughout.}}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item use \texttt{vector}, \texttt{string}, \texttt{map}/\texttt{unordered\_map}, \texttt{set} idiomatically;
+    \item traverse any container with iterators and range-for;
+    \item apply STL algorithms (\texttt{sort}, \texttt{find}, \texttt{accumulate});
+    \item state complexity guarantees of key containers;
+    \item choose the right container for a task.
+\end{enumerate}
+
+% ============================================================
+\section{Sequence Containers: vector and string}
+\label{sec:vector-string}
+\texttt{std::vector<T>} is Ch.~4's resizable array done right: heap buffer, size, capacity, automatic growth, RAII cleanup.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% vector object (stack)
+\draw[thick,fill=blue!10] (0,0) rectangle (2.4,1.35);
+\node[font=\tiny\bfseries] at (1.2,1.12) {\texttt{vector<int> v}};
+\node[font=\tiny,align=left] at (1.2,0.68) {\texttt{size = 3}\\ \texttt{cap = 4}\\ \texttt{data $\to$ heap}};
+% heap
+\foreach \i/\v in {0/10,1/20,2/30} {
+  \pgfmathsetmacro{\x}{3.6+\i*1.25}
+  \draw[thick,fill=green!14] (\x,0) rectangle (\x+1.05,0.70);
+  \node at (\x+0.52,0.35) {\texttt{\v}};
+}
+\draw[thick,fill=gray!12] (7.35,0) rectangle (8.40,0.70);
+\node[font=\tiny,gray] at (7.87,0.35) {spare};
+\draw[-{Latex},thick,red!70!black] (2.4,0.55)--(3.6,0.55);
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (1.2,1.75) {stack object};
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (5.7,1.15) {heap buffer (capacity 4)};
+\end{tikzpicture}
+\caption{\texttt{vector} layout: small stack handle (size/cap/pointer) owns a heap array. Growth doubles capacity; spare slots avoid reallocation on push.}
+\label{fig:vector-layout}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <vector>
+#include <string>
+std::vector<int> v = {10,20,30};
+v.push_back(40);                 // may reallocate; amortised O(1)
+v[0]=99; v.at(1)=21;             // at() bounds-checks, [] does not
+for(int x: v) std::cout<<x<<" "; // range-for (sugar for iterators)
+std::string s="Hello";
+s += " NTU";                     // string is vector<char> with extras
+s.substr(0,5);                   // "Hello"
+\end{lstlisting}
+Reserve when you know the size: \texttt{v.reserve(1000)} avoids repeated reallocations. References/pointers into a vector may dangle after reallocation --- a common bug.
+
+\section{Associative Containers: map, set, unordered\_map}
+\label{sec:associative}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+% map as balanced tree (ordered)
+\begin{scope}
+\node[draw,thick,fill=blue!12,circle,inner sep=2pt] (m30) at (0,0) {\texttt{30}};
+\node[draw,thick,fill=blue!10,circle,inner sep=2pt] (m10) at (-1.3,-0.85) {\texttt{10}};
+\node[draw,thick,fill=blue!10,circle,inner sep=2pt] (m50) at (1.3,-0.85) {\texttt{50}};
+\draw[thick] (m30)--(m10); \draw[thick] (m30)--(m50);
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (0,-1.55) {\texttt{map}: ordered, $O(\log n)$};
+\end{scope}
+\begin{scope}[xshift=5.2cm]
+\foreach \i/\k in {0/a,1/b,2/c} {
+  \pgfmathsetmacro{\y}{0.55-\i*0.75}
+  \draw[thick,fill=orange!14] (0,\y) rectangle (1.1,\y+0.50);
+  \node[font=\tiny] at (0.55,\y+0.25) {\texttt{\k}};
+  \draw[thick,fill=green!14] (1.1,\y) rectangle (2.2,\y+0.50);
+  \node[font=\tiny] at (1.65,\y+0.25) {\tiny val};
+  \draw[-{Latex},thick,gray] (0.55,\y)--(0.55,\y-0.25);
+}
+\draw[thick,dashed,gray] (-0.2,1.0) rectangle (2.4,-1.45);
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (1.1,-1.85) {\texttt{unordered\_map}: hash, avg $O(1)$};
+\end{scope}
+\end{tikzpicture}
+\caption{Ordered \texttt{map} (balanced BST, sorted) vs.\ \texttt{unordered\_map} (hash table, unsorted but faster average).}
+\label{fig:map-vs-hash}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <map>
+#include <unordered_map>
+#include <set>
+std::map<std::string,int> scores;          // ordered by key
+scores["Asha"]=95; scores["Bo"]=82;
+for(auto &kv: scores) std::cout<<kv.first<<":"<<kv.second<<"\n"; // sorted
+
+std::unordered_map<std::string,int> h = {{"Asha",95}};
+h["Bo"]=82;                                // avg O(1)
+if(h.find("Asha")!=h.end()) std::cout<<"found\n";
+std::set<int> s={3,1,4,1,5};               // {1,3,4,5} sorted unique
+\end{lstlisting}
+Complexity: \texttt{map}/\texttt{set} $O(\log n)$ per op (red-black tree); \texttt{unordered\_map}/\texttt{unordered\_set} average $O(1)$, worst $O(n)$ on hash collision. Prefer unordered when order is irrelevant.
+
+\section{Iterators: Generalised Pointers}
+\label{sec:iterators}
+An iterator is a pointer-like object that knows how to step through a container. All STL algorithms speak iterators, not containers.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
+\foreach \i/\v in {0/10,1/20,2/30,3/40} {
+  \pgfmathsetmacro{\x}{\i*1.45}
+  \draw[thick,fill=blue!10] (\x,0) rectangle (\x+1.25,0.65);
+  \node at (\x+0.62,0.32) {\texttt{\v}};
+}
+\draw[-{Latex},thick,red!70!black] (0.62,-0.55)--(0.62,-0.05) node[below,font=\tiny,red!70!black] at (0.62,-0.55) {\texttt{begin()}};
+\draw[-{Latex},thick,red!70!black] (5.82,-0.55)--(5.82,-0.05) node[below,font=\tiny,red!70!black] at (5.82,-0.55) {\texttt{end()}};
+\draw[-{Latex},thick,blue!60!black] (0.62,0.78)--(2.07,0.78) node[midway,above,font=\tiny] {\texttt{++it}};
+\node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt] at (2.9,1.25) {range \texttt{[begin, end)} half-open};
+% invalidation warning
+\node[font=\tiny,fill=orange!15,rounded corners=2pt,inner sep=2pt] at (2.9,-1.15) {after \texttt{push\_back} iterators may dangle (reallocation)};
+\end{tikzpicture}
+\caption{Iterator range \texttt{[begin, end)}: \texttt{begin} points to first element, \texttt{end} is one past the last. Increment advances; dereference reads.}
+\label{fig:iterators}
+\end{figure}
+
+\begin{lstlisting}[language=C++]
+#include <algorithm>
+#include <numeric>
+std::vector<int> v={4,1,3,2};
+std::sort(v.begin(), v.end());                    // 1 2 3 4
+auto it = std::find(v.begin(), v.end(), 3);       // iterator to 3
+if(it!=v.end()) std::cout<<"at "<<(it-v.begin())<<"\n";
+int sum = std::accumulate(v.begin(), v.end(), 0); // 10
+// range-for is sugar:
+// for(auto it=v.begin(); it!=v.end(); ++it) ...
+for(int &x: v) x*=2;                              // mutate via ref
+\end{lstlisting}
+Iterator categories: random-access (vector), bidirectional (map), forward (forward\_list). Algorithms state which they require.
+
+\section{Choosing a Container}
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule Need & Use & Why\\
+\midrule Resizable array & \texttt{vector} & cache-friendly, $O(1)$ push\\
+Sorted lookup & \texttt{map}/\texttt{set} & $O(\log n)$, ordered\\
+Fast lookup, no order & \texttt{unordered\_map} & avg $O(1)$\\
+Unique sorted values & \texttt{set} & dedup + order\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+\section{STL Algorithms in Depth}
+Algorithms are function templates that operate on iterator ranges. They never modify container structure directly; they read/write through iterators.
+
+\begin{lstlisting}[language=C++]
+#include <algorithm>
+#include <numeric>
+std::vector<int> v={5,2,8,1,9};
+// sort, reverse, count, transform
+std::sort(v.begin(), v.end());                    // 1 2 5 8 9
+std::reverse(v.begin(), v.end());                 // 9 8 5 2 1
+int cnt = std::count(v.begin(), v.end(), 5);      // 1
+std::vector<int> w(v.size());
+std::transform(v.begin(), v.end(), w.begin(),
+               [](int x){ return x*2; });         // w = 18 16 10 4 2
+int sum = std::accumulate(v.begin(), v.end(), 0); // 25
+bool any = std::any_of(v.begin(), v.end(),
+                       [](int x){ return x>8; }); // true
+\end{lstlisting}
+All algorithms work on any container with the required iterator category. Prefer algorithms over hand-written loops: they are optimised, self-documenting, and less error-prone.
+
+\section{Complexity Guarantees and Big-O of Containers}
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule Operation & \texttt{vector} & \texttt{map} & \texttt{unordered\_map}\\
+\midrule \texttt{push\_back} & amort.\ $O(1)$ & --- & ---\\
+\texttt{find} & $O(n)$ & $O(\log n)$ & avg $O(1)$\\
+\texttt{insert} & $O(n)$\tiny\ (middle) & $O(\log n)$ & avg $O(1)$\\
+\texttt{operator[]} & $O(1)$ & $O(\log n)$ & avg $O(1)$\\
+Memory & contiguous & tree nodes & hash buckets\\
+\bottomrule
+\end{tabular}
+\end{center}
+These guarantees drive container choice. \texttt{vector} wins for iteration (cache locality); \texttt{map} wins when order matters; \texttt{unordered\_map} wins for raw lookup speed.
+
+\section{Chapter Notes}
+Josuttis \emph{The C++ Standard Library} is the STL handbook. Complexity details are in the standard and at \texttt{cppreference.com}. Do not store raw owning pointers in containers; use values or smart pointers (Ch.~8).
+
+\section{Exercises}
+\begin{enumerate}[label=E7.\arabic*, leftmargin=*, itemsep=0.6em]
+\item \textbf{Invalidation.} \texttt{auto it=v.begin(); v.push\_back(99); *it=1;} When can this be UB? How does \texttt{reserve} help? What about \texttt{std::list}?
+\item \textbf{Map vs unordered.} You need to count word frequencies and later print them alphabetically. Which map type? What if you only need fast lookup?
+\item \textbf{Algorithm.} Use \texttt{std::sort} + \texttt{std::find} to sort a vector and locate a value. What iterator does \texttt{find} return on failure? How to check?
+\item \textbf{Complexity.} State big-$O$ for \texttt{vector::push\_back}, \texttt{map::find}, \texttt{unordered\_map::find} (average/worst). When does unordered degrade?
+\item \textbf{Range-for desugar.} Rewrite \texttt{for(auto \&x: v) x++} using explicit iterators. Explain why \texttt{auto \&} vs.\ \texttt{auto} matters.
+\end{enumerate}
+% End of Chapter 7

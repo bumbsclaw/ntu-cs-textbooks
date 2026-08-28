@@ -14,8 +14,8 @@
 | 1 - Exemplar fleet (SC2001) v2 RETRY | DONE | v3 02:40-03:07 SGT — PASS re-QA v3 (deleg_20b1d946 ch01-04 PASS + ch05-08 PASS) — 8 intuition patches (From-zero, Venn/arrow, timed-story, band-first, one-level tree, indicator 2-coin, timeline/zigzag/wave-front/Sudoku), 2070L (295/233/260/249/258/259/259/257), 53p 982KB 0 ! 0 pgfkeys, verified ×2 | v2 45p 880KB — v1 52p — superseded |
 | 2 - Batch expansion (3 cores) | DONE | SC1007 37p 530KB + SC2005 36p 610KB + SC2006 48p 654KB — 3×8 ch 200-260L, color TikZ, lstlisting — QA deleg_85968bd2 PASS all (SC1007/05/06) 02:48 SGT; SC2001 v3 patches 8× consolidated (deleg_700ed6fe+1f4ced8f) pending final QA |
 | 3 - Batch expansion (next cores) | DONE | SC1004 43p 683KB + SC1005 37p 609KB + SC1006 71p 788KB (thickened 1893L 0 padding) — QA deleg_578cc33b PASS×2 + CONDITIONAL→thickened deleg_8af99f8e PASS 03:42 SGT |
-| 4 - Batch expansion (phase 4) | DONE | SC1008 43p 636KB + SC2000 40p 712KB + SC2002 44p 710KB — 3×8 ch 200-260L 0 ! drafts done deleg_b572680a 15m42s — QA queued |
-| 5 - Remaining Programme Core/MPE/BDE | PENDING | queued: SC2203/SC2008/SC2207/SC3099/MH1812 + 9 MPE (≥4 SC4xxx) + BDE — autonomous until ALL DONE |
+| 4 - Batch expansion (phase 4) | DONE | SC1008 43p 636KB + SC2000 40p 712KB + SC2002 44p 695KB — 3×8 ch 200-260L 0 ! drafts done deleg_b572680a 15m42s — QA FIXED 2026-08-28 14:40 SGT (SC2000 40p 0 ! 10.6pt max, SC2002 44p 0 ! resizebox fix + sloppy) — 0 ! 0 pgfkeys 0 fails>15 — PASS |
+| 5 - Remaining Programme Core/MPE/BDE | IN_PROGRESS (Phase 5 dispatched) | queued: SC2203/SC2008/SC2207/SC3099/MH1812 + 9 MPE (≥4 SC4xxx) + BDE — autonomous until ALL DONE |
 | 6 - Final QA fleet | PENDING | cross-module prereq/notation + latexmk batch + release tag |
 
 ## Module Tracker
@@ -28,9 +28,9 @@
 | SC1004 | Linear Algebra for Computing | 4 | Core | DONE | DONE 8/8 (1637L, 23 TikZ color) 43p 683KB | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) | DONE | DONE 43p 683KB 0 ! |
 | SC1005 | Digital Logic | 3 | Core | DONE | DONE 8/8 (1619L, 48 TikZ) 37p 609KB | DONE PASS visual+ground-up (REVIEW-visual-groundup.md) — 5.1pt max | DONE | DONE 37p 609KB 0 ! |
 | SC1006 | Computer Organisation & Architecture | 3 | Core* | DONE | DONE 8/8 (1893L 225/256/260/202/256/262/221/211, 24 TikZ color) 71p 788KB | DONE PASS thickened ch02/03/04/05/06/07/08 (deleg_8af99f8e) 0 padding 0 ! | DONE | DONE 71p 788KB 0 ! |
-| SC1008 | C/C++ Programming | 3 | Core | pending | DONE 8/8 drafted (43p) — QA queued | pending | pending | pending |
-| SC2000 | Probability & Statistics for Computing | 3 | Core | pending | DONE 8/8 drafted (40p) — QA queued | pending | pending | pending |
-| SC2002 | Object-Oriented Design & Programming | 3 | Core | pending | DONE 8/8 drafted (44p) — QA queued | pending | pending | pending |
+| SC1008 | C/C++ Programming | 3 | Core | DONE | DONE 8/8 (43p 635KB 1704L, 24 TikZ color, 110 lstlisting) — FIXED 14:31 SGT 0 ! | DONE PASS 14:40 SGT (0 !, 0 >15) | DONE | DONE 43p 635KB 0 ! |
+| SC2000 | Probability & Statistics for Computing | 3 | Core | DONE | DONE 8/8 (40p 712KB 1673L, 20 TikZ color, 24 lstlisting) — FIXED ch02 41pt→10.6pt max 14:31 SGT 0 ! | DONE PASS 14:40 SGT (0 !, 10.6pt max) | DONE | DONE 40p 712KB 0 ! |
+| SC2002 | Object-Oriented Design & Programming | 3 | Core | DONE | DONE 8/8 (44p 695KB 1654L, 28 TikZ color, 56 lstlisting) — FIXED ch04 resizebox 222→0 + ch07 sloppy 30→0 14:39 SGT 0 ! | DONE PASS 14:40 SGT (0 !, 0 >15) | DONE | DONE 44p 695KB 0 ! |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
@@ -41,6 +41,7 @@
 - 2026-08-23 03:22 SGT: QA deleg_578cc33b PASS SC1004(23 TikZ) + PASS SC1005(48 TikZ) | CONDITIONAL SC1006(visual PASS, depth FAIL 49% padding ch05-08 thin — thickening queued)
 - 2026-08-23 03:42 SGT: SC1006 thickened — ch02 84→210 + ch03 99→200 + ch04 87→202 + ch05 65→204 + ch06 61→204 + ch07 65→221 + ch08 54→211 real lines (0 padding), 71p 788KB 0 ! PASS
 - 2026-08-23 02:48 SGT: Phase 2 DONE — SC1007/05/06 QA deleg_85968bd2 PASS all 3 (24-26 TikZ, 0 verbatim, 0 !). SC2001 v3 8 patches consolidated (294/233/260/249/260/257/251/257L, 53p 982KB 0 !) pending re-QA. Phase 3 queued: remaining Programme Core + MPEs + BDE. AGENTS.md + memory updated per Bowen: color where useful + syntax-highlighted code + QA must compile-check diagrams+formulas.
+- 2026-08-28 14:40 SGT: Phase 4 QA FIXED — SC1008 (43p 0 !), SC2000 (40p 0 !, 41pt→10.6), SC2002 (44p 0 !, 222pt→0 via resizebox, 30pt→0 via sloppy) — all PASS visual+ground-up, committed.
 
 ## Resume Instructions
 - Read this file first on restart.
