@@ -1,0 +1,247 @@
+% SC4002 --- Chapter 7: Pretraining --- BERT, GPT, Fine-Tuning, Prompting (0->100 ground-up)
+\chapter{Pretraining: BERT, GPT, Fine-Tuning, and Prompting}
+\label{ch:pretraining}
+
+\begin{quote}
+\emph{``Pretraining teaches a model the language; fine-tuning teaches it the job; prompting tells it the job in words.''} --- This chapter covers the paradigm that reshaped NLP: train once on raw text, reuse everywhere.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no pretraining background assumed.} We start from the everyday idea of learning general knowledge before specializing, then ask why predicting hidden words yields useful language understanding. We build to BERT and GPT objectives, fine-tuning, and prompting from intuition to formal equations. Every formula is motivated by a picture first.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain the pretrain--then--fine-tune paradigm and why self-supervision scales;
+    \item write the BERT masked language model and next sentence prediction objectives;
+    \item contrast bidirectional and autoregressive pretraining and state when each helps;
+    \item describe fine-tuning with \texttt{[CLS]}, prompting as conditioning, and in-context learning;
+    \item explain adapter and LoRA parameter-efficient tuning at an intuitive level.
+\end{enumerate}
+
+% ============================================================
+\section{Why Pretrain? The Paradigm}
+\label{sec:pretrain-intuition}
+\paragraph{Intuition.} Humans learn language for years before learning a specific job like medical diagnosis. NLP does the same: first read billions of words with no labels, then specialize with a small labeled set. Raw text is abundant; labeled data is scarce. Pretraining turns the abundant signal into reusable weights.
+
+Imagine filling blanks in a sentence: ``The cat \_\_ on the mat.'' To guess ``sat'' you need syntax, semantics, and world knowledge. A model that gets good at this blank-filling has implicitly learned grammar and facts. Afterward, adapting it to sentiment or question answering needs far less supervision.
+
+\paragraph{Formal view.} A pretrained language model (PLM) learns parameters $\theta$ by self-supervision on unlabeled corpus $\mathcal{C}=\{\mathbf{x}^{(i)}\}_{i=1}^N$. Then for downstream task $\mathcal{D}=\{(\mathbf{x}^{(i)},y^{(i)})\}$ we either update $\theta$ (fine-tuning) or keep $\theta$ frozen and shape the input (prompting). The pretraining objective needs no human labels: the text itself provides supervision by hiding and predicting parts.
+
+Why not predict left-to-right only? That gives only left context. To represent a word fully we want both sides: ``bank'' in ``river bank'' versus ``bank account'' is disambiguated by words on both sides. This motivates masked language modeling.
+
+% ============================================================
+\section{BERT: Masked Language Modeling and NSP}
+\label{sec:bert}
+\paragraph{Intuition.} BERT (Devlin et al., 2019) plays a cloze test: randomly cover 15\% of tokens with \texttt{[MASK]} and ask the Transformer encoder to recover them using \emph{all} surrounding words (left and right). Because the encoder has no causal restriction, each position attends to every other position---the context is bidirectional. A second task, next sentence prediction (NSP), teaches sentence relationships: given sentence pair $(A,B)$, predict whether $B$ actually follows $A$.
+
+\paragraph{Formal: MLM objective.} Let $\mathbf{x}=(x_1,\dots,x_T)$ and $\mathcal{M}\subset\{1,\dots,T\}$ be masked positions ($|\mathcal{M}|\approx 0.15T$). Let $\tilde{\mathbf{x}}$ be $\mathbf{x}$ with $x_i$ replaced by \texttt{[MASK]} (80\%), a random token (10\%), or kept (10\%) for $i\in\mathcal{M}$. The encoder produces $\mathbf{h}_i=f_\theta(\tilde{\mathbf{x}})_i$. Then
+\begin{equation}
+\mathcal{L}_{\text{MLM}}(\theta)= -\,\mathbb{E}_{\mathbf{x}\sim\mathcal{C}}\sum_{i\in\mathcal{M}}\log P_\theta(x_i\mid\tilde{\mathbf{x}}),\quad
+P_\theta(x_i\mid\tilde{\mathbf{x}})=\mathrm{softmax}(\mathbf{W}_o\mathbf{h}_i+\mathbf{b}_o)_{x_i}.
+\label{eq:mlm}
+\end{equation}
+Only masked positions contribute to the loss; the model cannot cheat by copying the input because the input at $i\in\mathcal{M}$ is hidden. Bidirectionality is key: $\mathbf{h}_i$ depends on $\tilde{\mathbf{x}}_{1:T}$, not just $\tilde{\mathbf{x}}_{<i}$.
+
+\paragraph{Formal: NSP objective.} Input is $\mathbf{x}_{\text{pair}}=[\text{[CLS]}\,A\,\text{[SEP]}\,B\,\text{[SEP]}]$. Let $\mathbf{h}_{\text{CLS}}$ be the final hidden state of \texttt{[CLS]}. NSP is binary classification:
+\begin{equation}
+\mathcal{L}_{\text{NSP}}(\theta)= -\,\mathbb{E}_{(A,B,y)}\big[y\log\sigma(\mathbf{w}^\top\mathbf{h}_{\text{CLS}})+(1-y)\log(1-\sigma(\mathbf{w}^\top\mathbf{h}_{\text{CLS}}))\big],
+\label{eq:nsp}
+\end{equation}
+where $y=1$ if $B$ is the true next sentence, else $0$. Total pretraining loss is $\mathcal{L}_{\text{BERT}}=\mathcal{L}_{\text{MLM}}+\mathcal{L}_{\text{NSP}}$. Later work shows NSP contributes less than MLM, but the \texttt{[CLS]} representation trained this way becomes a sentence-level vector for fine-tuning.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  tok/.style={rectangle, draw=blue!60!black, thick, fill=blue!12, minimum width=1.1cm, minimum height=0.62cm, font=\scriptsize, rounded corners=2pt},
+  msk/.style={rectangle, draw=red!60!black, thick, fill=red!15, minimum width=1.1cm, minimum height=0.62cm, font=\scriptsize, rounded corners=2pt},
+  hid/.style={rectangle, draw=violet!60!black, thick, fill=violet!12, minimum width=1.1cm, minimum height=0.62cm, font=\scriptsize, rounded corners=2pt},
+  pred/.style={rectangle, draw=green!55!black, thick, fill=green!15, minimum width=1.1cm, minimum height=0.62cm, font=\scriptsize, rounded corners=2pt},
+  arr/.style={-{Latex[length=1.9mm]}, thick, color=gray!70!black},
+  attn/.style={<->, thin, orange!70!black, opacity=0.55}
+]
+% Input row
+\node[tok] (t0) at (0,0) {\texttt{[CLS]}};
+\node[tok] (t1) at (1.55,0) {the};
+\node[msk] (t2) at (3.1,0) {\texttt{[MASK]}};
+\node[tok] (t3) at (4.65,0) {on};
+\node[tok] (t4) at (6.2,0) {the};
+\node[tok] (t5) at (7.75,0) {mat};
+\node[tok] (t6) at (9.1,0) {\texttt{[SEP]}};
+\node[font=\tiny, color=gray!60!black] at (4.55,-0.6) {masked input $\tilde{\mathbf{x}}$: ``cat sat'' $\to$ \texttt{[MASK]}};
+% Hidden row
+\node[hid] (h0) at (0,1.55) {$\mathbf{h}_0$};
+\node[hid] (h1) at (1.55,1.55) {$\mathbf{h}_1$};
+\node[hid, fill=orange!15, draw=orange!60!black] (h2) at (3.1,1.55) {$\mathbf{h}_2$};
+\node[hid] (h3) at (4.65,1.55) {$\mathbf{h}_3$};
+\node[hid] (h4) at (6.2,1.55) {$\mathbf{h}_4$};
+\node[hid] (h5) at (7.75,1.55) {$\mathbf{h}_5$};
+\node[hid] (h6) at (9.1,1.55) {$\mathbf{h}_6$};
+% Bidirectional attention hint
+\draw[attn] (h1.north) to[bend left=18] (h5.north); \draw[attn] (h2.north) to[bend left=22] (h4.north);
+\draw[attn] (h0.north) to[bend left=14] (h3.north);
+\node[font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt, inner sep=2pt] at (4.55,2.55) {bidirectional: every $\mathbf{h}_i$ sees all of $\tilde{\mathbf{x}}$};
+% Arrows input -> hidden (Transformer block)
+\foreach \i in {0,1,2,3,4,5,6} \draw[arr, color=violet!60!black] (t\i.north) -- (h\i.south);
+\node[draw=gray!50, thick, fill=gray!5, rounded corners=3pt, fit=(h0)(h6), inner sep=5pt, label={[font=\tiny, fill=violet!10, rounded corners=2pt, inner sep=2pt]north:Transformer encoder (no causal mask)}] (enc) {};
+% Output predictions
+\node[pred] (o2) at (3.1,3.75) {softmax};
+\node[font=\tiny, color=green!55!black] at (3.1,4.35) {predict ``cat''};
+\draw[arr, thick, color=green!55!black] (h2.north) -- (o2.south);
+\node[font=\tiny, fill=red!8, rounded corners=2pt, inner sep=2pt, color=red!60!black] at (6.6,3.75) {loss only on $\mathcal{M}$};
+\node[font=\tiny, align=left, fill=yellow!8, draw=gray!40, rounded corners=2pt, inner sep=3pt] at (4.55,-1.35) {\textcolor{blue!60!black}{$\blacksquare$ input} \ \textcolor{red!60!black}{$\blacksquare$ masked} \ \textcolor{violet!60!black}{$\blacksquare$ hidden} \ \textcolor{green!50!black}{$\blacksquare$ prediction}};
+\end{tikzpicture}
+\caption{BERT masked language modeling. Input tokens are partially masked; the Transformer encoder attends bidirectionally (orange arcs) to produce hidden states $\mathbf{h}_i$. Only masked positions (orange highlight) predict the original token via a softmax; other positions contribute no MLM loss.}
+\label{fig:bert-mask}
+\end{figure}
+
+% ============================================================
+\section{GPT: Autoregressive (Causal) Pretraining}
+\label{sec:gpt}
+\paragraph{Intuition.} GPT (Radford et al., 2018) learns like writing left-to-right: given ``The cat sat'', predict what comes next, one word at a time. The model never sees the future during training, so at test time it can generate fluently by feeding its own predictions back.
+
+\paragraph{Formal: causal LM objective.} For sequence $\mathbf{x}=(x_1,\dots,x_T)$,
+\begin{equation}
+\mathcal{L}_{\text{LM}}(\theta)= -\,\mathbb{E}_{\mathbf{x}\sim\mathcal{C}}\sum_{t=1}^{T}\log P_\theta(x_t\mid x_{<t}),\quad
+P_\theta(x_t\mid x_{<t})=\mathrm{softmax}(\mathbf{W}_o\mathbf{h}_{t-1}+\mathbf{b}_o)_{x_t},
+\label{eq:gpt-lm}
+\end{equation}
+where $\mathbf{h}_{t-1}$ is the Transformer decoder hidden state at position $t-1$. Causality is enforced by a triangular attention mask $M_{ij}=-\infty$ for $j>i$, so position $i$ attends only to $j\le i$:
+\begin{equation}
+\mathrm{Attn}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V.
+\label{eq:causal-mask}
+\end{equation}
+Without $M$ the model would see $x_t$ when predicting it---trivial and useless for generation. Fig.~\ref{fig:gpt-causal} contrasts the mask with BERT's full attention.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  cell/.style={rectangle, draw=gray!50, minimum size=6.5mm, font=\tiny},
+  allowed/.style={cell, fill=blue!20},
+  blocked/.style={cell, fill=gray!12},
+  tok/.style={rectangle, draw=teal!60!black, thick, fill=teal!14, minimum width=1.15cm, minimum height=0.6cm, font=\scriptsize, rounded corners=2pt}
+]
+% Left: sequence with causal arrows
+\node[tok] (g1) at (0,3.2) {The};
+\node[tok] (g2) at (1.7,3.2) {cat};
+\node[tok] (g3) at (3.4,3.2) {sat};
+\node[tok] (g4) at (5.1,3.2) {on};
+\node[tok] (g5) at (6.8,3.2) {mat};
+\foreach \s/\t in {1/2,1/3,2/3,1/4,2/4,3/4,1/5,2/5,3/5,4/5} \draw[-{Latex[length=1.6mm]}, thin, orange!70!black, opacity=0.6] (g\s.north) to[bend left=20] (g\t.north);
+\node[font=\tiny, fill=orange!10, rounded corners=2pt, inner sep=2pt] at (3.4,4.15) {GPT: attend only to left (causal)};
+% Right: attention mask matrix
+\begin{scope}[shift={(9.5,2.0)}]
+  \foreach \r in {1,...,5} \foreach \c in {1,...,5} {
+    \pgfmathtruncatemacro{\allowed}{\c <= \r ? 1 : 0}
+    \ifnum\allowed=1 \node[allowed] at (\c*0.72,-\r*0.72) {}; \else \node[blocked] at (\c*0.72,-\r*0.72) {}; \fi
+  }
+  \foreach \r in {1,...,5} \node[font=\tiny, color=teal!60!black] at (0.0,-\r*0.72) {$q_\r$};
+  \foreach \c in {1,...,5} \node[font=\tiny, color=teal!60!black] at (\c*0.72,0.45) {$k_\c$};
+  \node[font=\scriptsize, align=center] at (2.2,-4.7) {causal mask\\$M_{ij}=0$ if $j\le i$\\$M_{ij}=-\infty$ if $j>i$};
+  \node[font=\tiny, fill=blue!8, rounded corners=2pt, inner sep=2pt] at (1.45,-4.05) {\textcolor{blue!60!black}{$\blacksquare$ attend}};
+  \node[font=\tiny, fill=gray!12, rounded corners=2pt, inner sep=2pt, draw=gray!40] at (3.05,-4.05) {$\square$ blocked};
+\end{scope}
+\end{tikzpicture}
+\caption{GPT causal language modeling. Left: each token can only attend to itself and earlier tokens (orange arcs). Right: the $5\times5$ attention mask is lower-triangular; gray cells are set to $-\infty$ before softmax so future tokens get zero weight. BERT would fill the whole matrix blue.}
+\label{fig:gpt-causal}
+\end{figure}
+
+BERT is bidirectional but non-generative (needs masking trick to avoid leakage); GPT is unidirectional but naturally generative. Downstream, BERT excels at understanding, GPT at generation; modern models often blend both.
+
+% ============================================================
+\section{Fine-Tuning, Prompting, and Efficient Adaptation}
+\label{sec:adaptation}
+\paragraph{Fine-tuning with \texttt{[CLS]}.} After pretraining, add a task head atop $\mathbf{h}_{\text{CLS}}$. For classification with $C$ classes,
+\begin{equation}
+P(y\mid\mathbf{x})=\mathrm{softmax}(\mathbf{W}_c\mathbf{h}_{\text{CLS}}+\mathbf{b}_c)_y,\quad
+\mathcal{L}_{\text{FT}}=-\sum_{i=1}^{|\mathcal{D}|}\log P(y^{(i)}\mid\mathbf{x}^{(i)}).
+\label{eq:finetune}
+\end{equation}
+All parameters (including the PLM) are updated with a small learning rate ($2{\times}10^{-5}$), or optionally only the head is trained (feature extraction). The same PLM spawns many fine-tuned copies, one per task.
+
+\paragraph{Prompting as conditioning.} Instead of updating $\theta$, wrap $\mathbf{x}$ in a natural-language template and let the frozen PLM complete it. \emph{Discrete prompts} use a hand-written pattern, e.g.\ sentiment: ``Review: \textit{Great film!} Sentiment: \texttt{[MASK]}'' $\to$ model predicts ``positive''. Formally we compute $P(y\mid\text{prompt}(\mathbf{x}))$ without gradient steps.
+
+\emph{In-context learning} (Brown et al., 2020) concatenates $k$ demonstrations
+before the query: $\mathbf{x}_{\text{ctx}}=[(x^{(1)},y^{(1)}),\dots,$
+$(x^{(k)},y^{(k)}),x]$.
+No weight update occurs; the model conditions on the context via attention alone. \emph{Instruction tuning} fine-tunes once on a mixture of instruction--response pairs (e.g.\ FLAN, InstructGPT), so at test time a plain instruction like ``Translate to French:'' works zero-shot.
+
+\paragraph{Parameter-efficient tuning.} Full fine-tuning copies 110M--175B parameters per task. Two efficient alternatives keep the base frozen:
+\textit{Adapter:} insert a small bottleneck $\mathbf{h}\gets\mathbf{h}+ \mathbf{W}_{\text{up}}\,\sigma(\mathbf{W}_{\text{down}}\mathbf{h})$ inside each Transformer block; only $\mathbf{W}_{\text{down}}\in\mathbb{R}^{m\times d},\mathbf{W}_{\text{up}}\in\mathbb{R}^{d\times m}$ with $m\ll d$ are trained ($\sim$1--3\% params).
+\textit{LoRA} (Hu et al., 2022): freeze $\mathbf{W}_0$ and learn a low-rank delta $\Delta\mathbf{W}=\mathbf{B}\mathbf{A}$ with $\mathbf{B}\in\mathbb{R}^{d\times r},\mathbf{A}\in\mathbb{R}^{r\times k}$, $r\ll\min(d,k)$:
+\begin{equation}
+\mathbf{h}=\mathbf{W}_0\mathbf{x}+\tfrac{\alpha}{r}\mathbf{B}\mathbf{A}\mathbf{x},
+\label{eq:lora}
+\end{equation}
+used for query/value projections. Only $\mathbf{B},\mathbf{A}$ are stored per task---megabytes, not gigabytes---yet performance nears full fine-tuning.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  box/.style={rectangle, draw=black!60, thick, rounded corners=3pt, align=center, font=\scriptsize, inner sep=4pt},
+  arrow/.style={-{Latex[length=2.2mm]}, thick, color=blue!60!black}
+]
+% Pretraining
+\node[box, fill=orange!15, minimum width=2.8cm, minimum height=1.1cm] (pre) at (0,0) {Pretraining\\{\tiny raw corpus} $\to$ \texttt{[MASK]}/next-token loss};
+% PLM center
+\node[box, fill=blue!15, minimum width=3.0cm, minimum height=1.0cm] (plm) at (5.0,0) {PLM backbone\\\texttt{BERT} / \texttt{GPT} weights $\theta$};
+\draw[arrow] (pre.east) -- (plm.west) node[midway, above, font=\tiny, fill=white, inner sep=1pt] {once};
+% Downstream branches
+\node[box, fill=green!15, minimum width=2.8cm] (ft) at (10.2,1.6) {Fine-tune:\\all $\theta$ + $\mathbf{W}_c$\\{\tiny $\mathbf{h}_{\text{CLS}}\!\to\!$ logits}};
+\node[box, fill=violet!12, minimum width=2.8cm] (pr) at (10.2,0) {Prompting:\\$\theta$ frozen\\{\tiny prompt $\to$ generate}};
+\node[box, fill=teal!12, minimum width=2.8cm] (pe) at (10.2,-1.6) {Efficient:\\Adapter / LoRA\\{\tiny train 1--3\% params}};
+\foreach \dest in {ft,pr,pe} \draw[arrow, color=blue!40!black] (plm.east) -- (\dest.west);
+\node[font=\tiny, fill=yellow!10, draw=gray!40, rounded corners=2pt, inner sep=2pt] at (5.0,-1.35) {one backbone $\to$ many adaptations};
+\end{tikzpicture}
+\caption{Pretrain--then--adapt pipeline. A single self-supervised pretraining run yields a reusable PLM. Three adaptation paths reuse it: full fine-tuning (update all weights via a \texttt{[CLS]} head), prompting (freeze $\theta$, condition via text), and parameter-efficient tuning (freeze $\theta$, train small adapter/LoRA deltas).}
+\label{fig:pipeline}
+\end{figure}
+
+\begin{lstlisting}[language=Python, caption={BERT mask filling and prompting with Hugging Face \texttt{transformers}. The same checkpoint does cloze and zero-shot classification via prompts.}, label={lst:bert-prompt}]
+from transformers import pipeline, AutoTokenizer, AutoModelForMaskedLM
+import torch
+
+# --- 1. BERT masked LM cloze ---
+fill = pipeline("fill-mask", model="bert-base-uncased")
+print(fill("The cat [MASK] on the mat."))
+# [{'token_str': 'sat', 'score': 0.42}, {'token_str': 'lay', ...}]
+
+# --- 2. Manual MLM with logits ---
+tok = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
+inputs = tok("The capital of France is [MASK].", return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits          # [1, T, V]
+mask_id = tok.mask_token_id
+pred_id = logits[0, (inputs.input_ids == mask_id).nonzero(as_tuple=True)[1]].argmax(-1)
+print("Predicted:", tok.decode(pred_id))     # -> 'paris'
+
+# --- 3. Prompting as zero-shot classification (no weight update) ---
+zeroshot = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+print(zeroshot("I loved the movie, it was fantastic!", candidate_labels=["positive", "negative"]))
+# {'labels': ['positive', 'negative'], 'scores': [0.98, 0.02]}
+
+# --- 4. In-context few-shot prompt for GPT-style model ---
+prompt = """Review: This film was dull. Sentiment: negative
+Review: A masterpiece! Sentiment: positive
+Review: It was okay, not great. Sentiment:"""
+# feed `prompt` to an autoregressive LM; it continues with 'negative'/'positive'
+print(prompt)
+\end{lstlisting}
+
+% ============================================================
+\section{Chapter Notes}
+BERT (Devlin et al., 2019) introduced MLM+NSP; RoBERTa (Liu et al., 2019) showed NSP is expendable and longer training matters. GPT-2/3 (Radford 2019; Brown 2020) scaled causal LM to few-shot prompting. Parameter-efficient tuning surveys: adapters (Houlsby et al., 2019), LoRA (Hu et al., 2022). Instruction tuning was popularized by FLAN (Wei et al., 2022) and InstructGPT (Ouyang et al., 2022).
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch07-exercises}
+\begin{enumerate}[label=E7.\arabic*, leftmargin=*, itemsep=0.7em]
+    \item \textbf{MLM objective.} A 10-token sentence has 2 masked positions. Write Eq.~\eqref{eq:mlm} for this sentence and explain why loss on unmasked positions would let the model copy inputs. How does the 80/10/10 masking mix discourage reliance on \texttt{[MASK]} at fine-tuning time?
+    \item \textbf{Bidirectional vs.\ causal.} Give a word-sense example where BERT's bidirectional context succeeds but a left-only model fails (e.g.\ ``bank'' disambiguated by a word to its right). Write the attention reach for each model at the target position.
+    \item \textbf{Causal mask.} For $T=4$, write the $4\times4$ matrix $M$ in Eq.~\eqref{eq:causal-mask} with entries $0$ or $-\infty$. If a bug leaves $M_{2,4}=0$, which token can illegally see the future and what does this do to next-token prediction?
+    \item \textbf{Fine-tune vs.\ prompt.} You have 32 labeled sentiment examples. Compare fine-tuning a \texttt{[CLS]} head (Eq.~\eqref{eq:finetune}) versus in-context prompting with $k=8$ examples: which updates weights, which scales with context length, and which needs more labeled data? When would you choose LoRA instead?
+    \item \textbf{LoRA arithmetic.} A query projection has $\mathbf{W}_0\in\mathbb{R}^{768\times768}$. LoRA uses $r=8$. How many trainable parameters does $\Delta\mathbf{W}=\mathbf{B}\mathbf{A}$ add? Compare to full fine-tuning and to an adapter bottleneck $m=64$ in each of 12 layers. Why does $r\ll d$ still work?
+\end{enumerate}
+% End of Chapter 7
