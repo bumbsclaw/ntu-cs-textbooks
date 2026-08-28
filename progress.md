@@ -20,7 +20,7 @@
 | 7 - Batch expansion (phase 7) | DONE | SC3010 51p 791KB + SC3020 48p 738KB + SC4001 46p 702KB — 3×8 ch 1673/1746/1621L 24/20/18 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 15:47 SGT deleg_9702d10b (886s/690s/316s→fixed) |
 | 8 - Batch expansion (phase 8) | DONE | SC4002 47p 868KB + SC4012 46p 750KB + SC4051 45p 626KB — 3×8 ch 1964/1649/1707L 24/20/18 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 16:30 SGT deleg_6018dfda (952s/539s fix/501s) |
 | 9 - Batch expansion (phase 9) | DONE | SC4040 45p 694KB + SC4055 42p 688KB + BDE 32p 500KB — 3×8+5 ch 1725/1633/1063L 18/14/10 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 16:30 SGT deleg_14a73ddc (571s/657s/847s) |
-| 10 - Final QA fleet | IN_PROGRESS | cross-module prereq/notation + latexmk batch + release tag — autonomous |
+| 10 - Final QA fleet | DONE | 25/25 PASS — 1128 pages, 51M, 0 ! 0 >15 0 pgfkeys, geometry 1.3/1.2 small-screen, color TikZ + lstlisting verified — release v1.0 tagged 2026-08-28 16:40 SGT |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
@@ -66,6 +66,7 @@
 - 2026-08-28 15:47 SGT: Phase 7 DONE — SC3010 51p 1673L 0 ! 0.67 max, SC3020 48p 1746L 0 ! 3.01 max, SC4001 46p 1621L 0 ! 2.54 max — deleg_9702d10b 2 PASS + 1 fixed (72 !→0 via \end{chapter}+snake+ch08 TikZ) — committed.
 - 2026-08-28 16:30 SGT: Phase 8 DONE — SC4002 47p 1964L 0 ! 12.72 max, SC4012 46p 1649L 0 ! 11.31 max (fixed 1 !+9 >15 via item bracket+sloppy), SC4051 45p 1707L 0 ! — deleg_6018dfda (952s/539s/501s) — committed.
 - 2026-08-28 16:34 SGT: Phase 9 DONE — SC4040 45p 1725L 0 ! 13.46 max, SC4055 42p 1633L 0 !, BDE 32p 1063L 0 ! 7.14 max — deleg_14a73ddc (571s/657s/847s) — committed.
+- 2026-08-28 16:40 SGT: Final QA DONE — 25/25 PASS 1128 pages 51M 0 ! 0 >15 0 pgfkeys, small-screen 1.3/1.2, color TikZ + lstlisting, prereq graph verified, latexmk batch verified, release v1.0 tagged.
 
 ## Resume Instructions
 - Read this file first on restart.
