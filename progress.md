@@ -19,8 +19,8 @@
 | 6 - Batch expansion (phase 6) | DONE | SC3099 46p 688KB + MH1812 45p 676KB + SC3000 46p 827KB — 3×8 ch 1710/2078/1762L 2-4 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 15:24 SGT deleg_62e8848f (1324s/1070s/1031s) |
 | 7 - Batch expansion (phase 7) | DONE | SC3010 51p 791KB + SC3020 48p 738KB + SC4001 46p 702KB — 3×8 ch 1673/1746/1621L 24/20/18 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 15:47 SGT deleg_9702d10b (886s/690s/316s→fixed) |
 | 8 - Batch expansion (phase 8) | DONE | SC4002 47p 868KB + SC4012 46p 750KB + SC4051 45p 626KB — 3×8 ch 1964/1649/1707L 24/20/18 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 16:30 SGT deleg_6018dfda (952s/539s fix/501s) |
-| 9 - Remaining MPE/BDE | IN_PROGRESS (Phase 9 dispatched) | queued: SC4040/SC4055/BDE — autonomous until ALL DONE |
-| 10 - Final QA fleet | PENDING | cross-module prereq/notation + latexmk batch + release tag |
+| 9 - Batch expansion (phase 9) | DONE | SC4040 45p 694KB + SC4055 42p 688KB + BDE 32p 500KB — 3×8+5 ch 1725/1633/1063L 18/14/10 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 16:30 SGT deleg_14a73ddc (571s/657s/847s) |
+| 10 - Final QA fleet | IN_PROGRESS | cross-module prereq/notation + latexmk batch + release tag — autonomous |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
@@ -47,6 +47,9 @@
 | SC4002 | Natural Language Processing | 3 | MPE | DONE | DONE 8/8 (47p 868KB 1964L 24 TikZ color) 16:04 SGT | DONE PASS 16:30 SGT (0 !, 12.72 max) | DONE | DONE 47p 868KB 0 ! |
 | SC4012 | Software Security | 3 | MPE | DONE | DONE 8/8 (46p 750KB 1649L 20 TikZ color) 16:30 SGT — fixed \item bracket+9 overfull 83→11 | DONE PASS 16:30 SGT (0 !, 11.31 max) | DONE | DONE 46p 750KB 0 ! |
 | SC4051 | Distributed Systems | 3 | MPE | DONE | DONE 8/8 (45p 626KB 1707L 18 TikZ color) 15:56 SGT | DONE PASS 16:30 SGT (0 !, 0 max) | DONE | DONE 45p 626KB 0 ! |
+| SC4040 | Advanced Topics in Algorithms | 3 | MPE | DONE | DONE 8/8 (45p 694KB 1725L 18 TikZ color) 16:30 SGT | DONE PASS 16:30 SGT (0 !, 13.46 max) | DONE | DONE 45p 694KB 0 ! |
+| SC4055 | Introduction to Quantum Computing | 3 | MPE | DONE | DONE 8/8 (42p 688KB 1633L 14 TikZ color) 16:31 SGT | DONE PASS 16:31 SGT (0 !, 0 max) | DONE | DONE 42p 688KB 0 ! |
+| BDE | Broadening & University/College Core Guide | 20 | BDE | DONE | DONE 5+app (32p 500KB 1063L 10 TikZ color) 16:30 SGT | DONE PASS 16:34 SGT (0 !, 7.14 max) | DONE | DONE 32p 500KB 0 ! |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
@@ -62,6 +65,7 @@
 - 2026-08-28 15:25 SGT: Phase 6 DONE — SC3099 46p 1710L 0 ! 14.91 max, MH1812 45p 2078L 0 !, SC3000 46p 1762L 0 ! — deleg_62e8848f PASS, committed.
 - 2026-08-28 15:47 SGT: Phase 7 DONE — SC3010 51p 1673L 0 ! 0.67 max, SC3020 48p 1746L 0 ! 3.01 max, SC4001 46p 1621L 0 ! 2.54 max — deleg_9702d10b 2 PASS + 1 fixed (72 !→0 via \end{chapter}+snake+ch08 TikZ) — committed.
 - 2026-08-28 16:30 SGT: Phase 8 DONE — SC4002 47p 1964L 0 ! 12.72 max, SC4012 46p 1649L 0 ! 11.31 max (fixed 1 !+9 >15 via item bracket+sloppy), SC4051 45p 1707L 0 ! — deleg_6018dfda (952s/539s/501s) — committed.
+- 2026-08-28 16:34 SGT: Phase 9 DONE — SC4040 45p 1725L 0 ! 13.46 max, SC4055 42p 1633L 0 !, BDE 32p 1063L 0 ! 7.14 max — deleg_14a73ddc (571s/657s/847s) — committed.
 
 ## Resume Instructions
 - Read this file first on restart.
