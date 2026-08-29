@@ -1,0 +1,250 @@
+% SC4024 --- Chapter 8: Tools & Storytelling (0->100 ground-up)
+\chapter{Tools \& Storytelling}
+\label{ch:tools-storytelling}
+\sloppy
+
+\begin{quote}
+\emph{``Data without a story is noise; a story without data is anecdote.''} --- Tools turn encodings into pictures; narrative turns pictures into arguments that move decisions.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: we build here, no prior tool or storytelling training needed.} We introduce the modern stack---D3.js, Vega-Lite, Tableau, Python---from intuition, then build layered specs, data joins, and narrative structures, with code that runs. No prior web or design background is required.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item contrast imperative (D3) vs declarative (Vega-Lite) vs GUI (Tableau) tool models;
+    \item write a Vega-Lite spec: data, transform, mark, encoding, view composition;
+    \item script a D3 data join with scales, axes, and transitions;
+    \item structure a data narrative: martini-glass, drill-down, scrollytelling, and dashboard;
+    \item deliver an end-to-end story from dataset to sketches to interactive presentation.
+\end{enumerate}
+
+% ============================================================
+\section{The Tool Landscape}
+\label{sec:tool-landscape}
+\paragraph{Intuition.} You can hammer every nail by hand (D3: full control, full code), use a nail gun with templates (Vega-Lite: declare what you want, the engine decides how), or buy pre-hung doors (Tableau: drag, drop, publish). Control trades against speed and scaffolding. No tool wins for all tasks; professionals use at least two.
+
+\begin{definition}[Tool spectrum]\label{def:tools}
+\emph{D3.js}: low-level JavaScript library binding data to DOM/SVG, explicit scales and transitions, maximal expressiveness. \emph{Vega} and \emph{Vega-Lite}: declarative grammars; Vega-Lite is a higher-level JSON grammar compiling to Vega, with automatic scales/axes/legends and view composition (layer, concat, facet). \emph{Tableau/Power BI}: GUI shelf model (rows/columns/marks), rapid exploration, limited custom encodings. \emph{Python stack}: Matplotlib (imperative, publication), Altair (Python Vega-Lite), Plotly (interactive, WebGL).
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.80,every node/.style={font=\scriptsize}]
+% pyramid
+\draw[thick,fill=blue!12] (0,0) -- (6,0) -- (3,3.0) -- cycle;
+\draw[thick,fill=blue!18] (0.6,0) -- (5.4,0) -- (3,2.4) -- cycle;
+\draw[thick,fill=teal!14] (1.2,0) -- (4.8,0) -- (3,1.8) -- cycle;
+\draw[thick,fill=green!14] (1.8,0) -- (4.2,0) -- (3,1.2) -- cycle;
+\node[font=\tiny\bfseries] at (3,2.65) {D3.js (imperative)};
+\node[font=\tiny] at (3,2.35) {data join, scales, SVG};
+\node[font=\tiny\bfseries] at (3,1.95) {Vega};
+\node[font=\tiny] at (3,1.70) {declarative, JSON};
+\node[font=\tiny\bfseries] at (3,1.35) {Vega-Lite / Altair};
+\node[font=\tiny] at (3,1.10) {grammar, auto scales};
+\node[font=\tiny\bfseries] at (3,0.55) {Tableau / Power BI};
+\node[font=\tiny] at (3,0.30) {GUI, shelf, quick publish};
+\node[font=\tiny,fill=yellow!10,rounded corners=2pt] at (3,-0.35) {control $\downarrow$ as you go down; speed $\uparrow$};
+% expressiveness vs ease arrow
+\draw[->,thick,>=Stealth,blue!60!black] (6.4,0.3) -- (6.4,2.8) node[midway,right,font=\tiny] {control};
+\draw[->,thick,>=Stealth,green!60!black] (6.7,2.8) -- (6.7,0.3) node[midway,right,font=\tiny] {ease};
+% side: Python bridge
+\begin{scope}[xshift=8.2cm]
+\node[draw,thick,fill=orange!14,rounded corners=4pt,minimum width=3.0cm,minimum height=0.9cm,align=center] (py) at (1.5,2.4) {Python\\{\tiny Matplotlib / Altair / Plotly}};
+\node[draw,thick,fill=violet!12,rounded corners=4pt,minimum width=3.0cm,minimum height=0.9cm,align=center] (web) at (1.5,1.3) {Web\\{\tiny D3 / Vega-Lite / Observable}};
+\node[draw,thick,fill=yellow!16,rounded corners=4pt,minimum width=3.0cm,minimum height=0.9cm,align=center] (gui) at (1.5,0.2) {GUI\\{\tiny Tableau / Power BI}};
+\draw[<->,thick,>=Stealth,gray!60] (py) -- (web) node[midway,right,font=\tiny] {JSON};
+\draw[<->,thick,>=Stealth,gray!60] (web) -- (gui) node[midway,right,font=\tiny] {data};
+\node[font=\tiny,fill=gray!10,rounded corners=2pt] at (1.5,-0.55) {Altair $\leftrightarrow$ Vega-Lite JSON};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (5.6,-0.80) {\textcolor{blue!60!black}{$\blacksquare$ imperative} \quad \textcolor{teal!60!black}{$\blacksquare$ declarative} \quad \textcolor{green!50!black}{$\blacksquare$ GUI} \quad \textcolor{orange!70!black}{$\blacksquare$ Python}};
+\end{tikzpicture}
+\caption{Tool pyramid: D3 at the top (most control), Vega-Lite/Altair in the middle (grammar), Tableau at the base (GUI speed). Altair compiles Python to Vega-Lite JSON, bridging Python and the Web.}
+\label{fig:tool-pyramid}
+\end{figure}
+
+Rule of thumb: prototype in Altair/Tableau, refine in Vega-Lite, and drop to D3 only when you need a custom encoding or interaction Vega-Lite cannot express.
+
+% ============================================================
+\section{Vega-Lite: A Grammar of Interactive Graphics}
+\label{sec:vegalite}
+\paragraph{Intuition.} Instead of ``draw a circle at ($x,y$)'', say ``map GDP to $x$, life expectancy to $y$, continent to colour, and use a point mark; facet by year.'' The grammar decides scales, axes, and legends. Composition then builds dashboards from simple views.
+
+\begin{definition}[Vega-Lite spec]\label{def:vegalite}
+A spec is JSON with: \texttt{data} (values or URL), \texttt{transform} (filter, calculate, bin, aggregate), \texttt{mark} (point, bar, line, area, rect, arc), \texttt{encoding} (channel $\to$ field with type \texttt{Q/N/O/T} and scale), and \texttt{view composition}: \texttt{layer} (superpose), \texttt{hconcat/vconcat} (juxtapose), \texttt{facet} (small multiples), \texttt{concat} with \texttt{selection} for brushing/linking.
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+\node[draw,thick,fill=yellow!16,rounded corners=3pt,minimum width=2.6cm,minimum height=0.9cm,align=center] (data) at (0,2.6) {\texttt{data}\\{\tiny values / URL}};
+\node[draw,thick,fill=blue!14,rounded corners=3pt,minimum width=2.6cm,minimum height=0.9cm,align=center] (trans) at (3.8,2.6) {\texttt{transform}\\{\tiny filter, bin, aggregate}};
+\node[draw,thick,fill=teal!14,rounded corners=3pt,minimum width=2.6cm,minimum height=0.9cm,align=center] (mark) at (7.6,2.6) {\texttt{mark}\\{\tiny point / bar / line}};
+\node[draw,thick,fill=green!14,rounded corners=3pt,minimum width=2.6cm,minimum height=0.9cm,align=center] (enc) at (11.2,2.6) {\texttt{encoding}\\{\tiny x, y, color, size}};
+\draw[->,thick,>=Stealth] (data)--(trans); \draw[->,thick,>=Stealth] (trans)--(mark); \draw[->,thick,>=Stealth] (mark)--(enc);
+% composition
+\begin{scope}[yshift=-0.6cm]
+\node[draw,thick,fill=violet!12,rounded corners=3pt,minimum width=3.6cm,minimum height=0.9cm,align=center] (layer) at (1.8,1.0) {\texttt{layer} (superpose)};
+\node[draw,thick,fill=orange!14,rounded corners=3pt,minimum width=3.6cm,minimum height=0.9cm,align=center] (concat) at (6.0,1.0) {\texttt{hconcat/vconcat} (juxtapose)};
+\node[draw,thick,fill=red!10,rounded corners=3pt,minimum width=3.6cm,minimum height=0.9cm,align=center] (facet) at (10.2,1.0) {\texttt{facet} (small multiples)};
+\draw[->,thick,>=Stealth,gray!60] (enc.south) -- ++(0,-0.35) -| (layer.north);
+\draw[->,thick,>=Stealth,gray!60] (enc.south) -- ++(0,-0.45) -| (concat.north);
+\draw[->,thick,>=Stealth,gray!60] (enc.south) -- ++(0,-0.55) -| (facet.north);
+\end{scope}
+% example mini spec
+\begin{scope}[yshift=-1.6cm]
+\draw[fill=gray!8,draw=gray!40,rounded corners=3pt] (0,-0.9) rectangle (12.8,0.2);
+\node[font=\tiny,align=left,anchor=west] at (0.2,-0.35) {\texttt{mark: point, encoding: x=gdp(Q), y=lifeExp(Q), color=continent(N)}};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (6.4,-1.35) {\textcolor{yellow!60!black}{$\blacksquare$ data} \quad \textcolor{blue!60!black}{$\blacksquare$ transform} \quad \textcolor{teal!60!black}{$\blacksquare$ mark} \quad \textcolor{green!50!black}{$\blacksquare$ encoding}};
+\end{tikzpicture}
+\caption{Vega-Lite spec anatomy: data $\to$ transform $\to$ mark $\to$ encoding, then composed by layer, concat, or facet. Bottom: a minimal point spec.}
+\label{fig:vegalite-anatomy}
+\end{figure}
+
+Selections are the interaction extension: a \texttt{selection\_interval} bound to $x$ or $xy$ becomes a brush; \texttt{condition} ties colour or opacity to selection state; \texttt{transform\_filter} links views.
+
+% ============================================================
+\section{D3.js: Data Joins, Scales, and Transitions}
+\label{sec:d3}
+\paragraph{Intuition.} D3 thinks in \emph{data joins}: bind an array to DOM elements, handle entering, updating, and exiting elements, and let scales map data to pixels. You own every pixel---and every bug.
+
+\begin{definition}[D3 join]\label{def:d3-join}
+\texttt{selection.data(data, key).join(enter, update, exit)} creates/updates/removes SVG elements per data item. \emph{Scales} (\texttt{scaleLinear, scaleBand, scaleOrdinal}) map domain $\to$ range; \emph{axes} (\texttt{axisBottom}) render ticks; \emph{transitions} interpolate attributes over time. The general update pattern---data $\to$ join $\to$ scales $\to$ axes $\to$ transition---powers most D3 charts.
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+\node[draw,thick,fill=blue!14,rounded corners=4pt,minimum width=2.8cm,minimum height=0.9cm,align=center] (data) at (0,1.4) {Data array\\{\tiny [12, 19, 7, 25]}};
+\node[draw,thick,fill=orange!14,rounded corners=4pt,minimum width=2.8cm,minimum height=0.9cm,align=center] (join) at (4.0,1.4) {Join\\{\tiny enter / update / exit}};
+\node[draw,thick,fill=teal!14,rounded corners=4pt,minimum width=2.8cm,minimum height=0.9cm,align=center] (svg) at (8.0,1.4) {SVG rects\\{\tiny $<$rect$>$ per datum}};
+\node[draw,thick,fill=green!14,rounded corners=4pt,minimum width=2.8cm,minimum height=0.9cm,align=center] (scale) at (11.6,1.4) {Scale + axis\\{\tiny domain $\to$ pixels}};
+\draw[->,thick,>=Stealth] (data)--(join) node[midway,above,font=\tiny] {\texttt{.data()}};
+\draw[->,thick,>=Stealth] (join)--(svg) node[midway,above,font=\tiny] {\texttt{.join()}};
+\draw[->,thick,>=Stealth] (svg)--(scale) node[midway,above,font=\tiny] {\texttt{scaleLinear}};
+% bars sketch
+\begin{scope}[yshift=-1.0cm]
+\fill[blue!55] (1.0,0) rectangle (2.2,0.7) node[pos=.5,font=\tiny,white] {12};
+\fill[blue!55] (2.4,0) rectangle (3.6,1.1) node[pos=.5,font=\tiny,white] {19};
+\fill[orange!55] (3.8,0) rectangle (5.0,0.4) node[pos=.5,font=\tiny,white] {7};
+\fill[blue!55] (5.2,0) rectangle (6.4,1.4) node[pos=.5,font=\tiny,white] {25};
+\draw[->,thick,gray!60] (0.6,0) -- (7.0,0) node[below,font=\tiny] {scale maps value $\to$ bar height};
+\draw[thick,red!60!black,dashed] (3.8,-0.15) rectangle (5.0,1.25) node[above,font=\tiny,fill=red!8,rounded corners=2pt] at (4.4,1.45) {update: colour if filtered};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (5.8,-1.45) {\textcolor{blue!60!black}{$\blacksquare$ data} \quad \textcolor{orange!70!black}{$\blacksquare$ join} \quad \textcolor{teal!60!black}{$\blacksquare$ SVG} \quad \textcolor{green!50!black}{$\blacksquare$ scale}};
+\end{tikzpicture}
+\caption{D3 data join: data $\to$ join (enter/update/exit) $\to$ SVG elements $\to$ scales. Changing data updates bars via the join, not by redrawing everything.}
+\label{fig:d3-join}
+\end{figure}
+
+When Vega-Lite suffices, prefer it; when you need a bespoke force layout, hierarchical edge bundling, or scrollytelling step control, D3 repays its cost.
+
+% ============================================================
+\section{Storytelling: From Exploration to Narrative}
+\label{sec:storytelling}
+\paragraph{Intuition.} An exploratory dashboard lets readers ask any question; a narrative answers one question well, guiding attention step by step. The best pieces do both: an author-driven opening that makes the point, then a reader-driven coda where the audience explores.
+
+\begin{definition}[Narrative structures]\label{def:narrative}
+\emph{Martini-glass}: author-driven intro (narrowing) $\to$ reader-driven exploration (broad). \emph{Interactive slideshow}: discrete steps with forward/back, each step a filtered view with annotation. \emph{Drill-down}: overview $\to$ detail on demand via clicks. \emph{Scrollytelling}: scroll position drives view transitions. All rely on \emph{annotation} (labels, arrows, shaded regions) and \emph{sequencing} (order matters more than any single view).
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+% martini glass
+\draw[thick,fill=blue!8] (0,0) -- (3.0,0) -- (2.2,1.4) -- (0.8,1.4) -- cycle;
+\draw[thick,fill=green!10] (0.8,1.4) -- (2.2,1.4) -- (2.6,2.6) -- (0.4,2.6) -- cycle;
+\draw[thick,fill=orange!12] (0.4,2.6) -- (2.6,2.6) -- (3.0,3.4) -- (0,3.4) -- cycle;
+\node[font=\tiny] at (1.5,0.7) {reader-driven};
+\node[font=\tiny] at (1.5,1.85) {narrowing};
+\node[font=\tiny] at (1.5,2.95) {author-driven};
+\draw[->,thick,>=Stealth,blue!60!black] (3.4,0.7) -- (3.4,3.2) node[midway,right,font=\tiny] {story progress};
+\node[font=\tiny,fill=blue!8,rounded corners=2pt] at (1.5,-0.35) {Martini-glass: broad $\to$ narrow $\to$ broad};
+% annotation example
+\begin{scope}[xshift=5.2cm]
+\draw[->,thick] (0,0) -- (3.6,0) node[below,font=\tiny] {year};
+\draw[->,thick] (0,0) -- (0,3.0) node[left,font=\tiny] {value};
+\draw[thick,blue!60!black,smooth] plot coordinates {(0.2,0.6) (1.0,1.2) (1.8,1.0) (2.6,2.2) (3.2,2.0)};
+\fill[red!60] (2.6,2.2) circle (0.07);
+\draw[->,thick,>=Stealth,red!60!black] (2.6,2.2) -- (2.0,2.7) node[above,font=\tiny,fill=red!8,rounded corners=2pt] {annotation: policy change};
+\fill[orange!18,opacity=0.5] (1.6,0) rectangle (2.8,3.0);
+\node[font=\tiny,fill=orange!10,rounded corners=2pt] at (2.2,0.3) {shaded region};
+\node[font=\tiny,fill=green!10,rounded corners=2pt] at (1.8,-0.35) {annotation guides attention};
+\end{scope}
+% dashboard vs story
+\begin{scope}[xshift=9.6cm]
+\node[font=\footnotesize\bfseries] at (1.6,3.4) {Dashboard vs Story};
+\draw[fill=gray!10,draw=gray!40] (0,1.8) rectangle (3.2,3.0);
+\foreach \x in {0.3,0.8,1.3} \foreach \y in {2.0,2.5} \fill[blue!30] (\x,\y) rectangle +(0.4,0.25);
+\node[font=\tiny] at (1.6,1.55) {dashboard: many views};
+\draw[fill=blue!12,draw=blue!40] (0,0.2) rectangle (3.2,1.2);
+\draw[thick,blue!60!black] (0.3,0.4) -- (2.9,0.9);
+\fill[red!60] (1.6,0.65) circle (0.06);
+\node[font=\tiny] at (1.6,-0.15) {story: sequenced, annotated};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (6.0,-0.80) {\textcolor{blue!60!black}{$\blacksquare$ author} \quad \textcolor{green!50!black}{$\blacksquare$ reader} \quad \textcolor{red!60!black}{$\blacksquare$ annotation} \quad \textcolor{orange!70!black}{$\blacksquare$ dashboard}};
+\end{tikzpicture}
+\caption{Narrative structures: martini-glass (left), annotation guiding a time-series (centre), and dashboard (overview) vs story (sequence) contrast (right).}
+\label{fig:narrative}
+\end{figure}
+
+Practical recipe: start with sketches on paper (2--3 alternatives), choose the narrative arc, annotate the one view that carries the main claim, and test on one colleague whether they get the point in 30 seconds.
+
+\begin{lstlisting}[language=Python, caption={Altair/Vega-Lite: layered, faceted, and brushed specs.}, label={lst:altair-story}]
+import altair as alt, pandas as pd, numpy as np
+np.random.seed(2)
+df = pd.DataFrame({"year": np.repeat([2019,2020,2021], 80),
+                   "value": np.random.randn(240).cumsum(),
+                   "group": np.tile(["A","B"], 120)})
+# Layered: line + annotated rule
+line = alt.Chart(df).mark_line().encode(x="year:O", y="mean(value):Q", color="group:N")
+rule = alt.Chart(pd.DataFrame({"year":[2020]})).mark_rule(color="red", strokeDash=[4,4]).encode(x="year:O")
+chart_layer = line + rule  # layer
+# Facet: small multiples per group
+chart_facet = alt.Chart(df).mark_point().encode(x="value:Q", y="value:Q").facet(column="group:N")
+# Brush linking (as in Ch 4)
+brush = alt.selection_interval(encodings=["x"])
+base = alt.Chart(df).mark_point().encode(x="value:Q", y="value:Q", color=alt.condition(brush, alt.value("steelblue"), alt.value("lightgray"))).add_params(brush)
+chart_layer  # renders in notebook; .to_json() for Vega-Lite
+\end{lstlisting}
+
+\begin{lstlisting}[language=JavaScript, caption={D3 data join with transition (JavaScript).}, label={lst:d3-join}]
+// General update pattern: data -> join -> transition
+const svg = d3.select("svg"), x = d3.scaleBand().padding(0.1), y = d3.scaleLinear();
+function update(data) {
+  x.domain(data.map(d=>d.name)).range([0, width]);
+  y.domain([0, d3.max(data,d=>d.value)]).range([height, 0]);
+  svg.selectAll("rect").data(data, d=>d.name)
+    .join(
+      enter => enter.append("rect").attr("y", height).attr("height", 0),
+      update => update,
+      exit => exit.transition().duration(400).attr("y", height).attr("height", 0).remove()
+    )
+    .transition().duration(600)
+    .attr("x", d=>x(d.name)).attr("y", d=>y(d.value))
+    .attr("width", x.bandwidth()).attr("height", d=>height - y(d.value))
+    .attr("fill", "steelblue");
+  svg.select(".x-axis").call(d3.axisBottom(x));
+  svg.select(".y-axis").call(d3.axisLeft(y));
+}
+update([{name:"A",value:12},{name:"B",value:19},{name:"C",value:7}]);
+\end{lstlisting}
+
+% ============================================================
+\section{Capstone: From Dataset to Story}
+Pick a dataset you care about (e.g.\ gapminder, COVID, or a personal log). Sketch 3 story arcs, choose one, prototype 2 views in Altair, add one annotation that states the takeaway, and present as a 3-minute scrollytelling or slide. Evaluation: can a peer state your claim, the evidence, and one limitation after viewing?
+
+% ============================================================
+\section{Chapter Notes}
+Munzner (2014) framed the tool--task match; Heer et al.\ created D3 (2011) and Vega/Vega-Lite (2016--17); Satyanarayan et al.\ formalised the grammar and composition; Tableau's shelf model derives from Polaris (Stolte et al.\, 2002); narrative structures from Segel and Heer (2010) and Kosara and Mackinlay (2013); scrollytelling popularised by the New York Times. This closes the 0$\to$100 arc: perceive $\to$ encode $\to$ design $\to$ interact $\to$ connect $\to$ render $\to$ validate $\to$ narrate.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch08-exercises}
+\begin{enumerate}[label=E8.\arabic*, leftmargin=*, itemsep=0.8em]
+    \item \textbf{Vega-Lite spec.} Write a Vega-Lite JSON spec for a layered chart: bars for mean value per continent with error bars ($\pm$1 sd) and a red rule at the global mean. Include \texttt{transform} for aggregation and \texttt{layer} for composition.
+    \item \textbf{D3 join.} Using the update pattern in Listing~\ref{lst:d3-join}, implement adding, updating, and removing bars when data changes from $[12,19,7]$ to $[19,7,25,10]$. Describe which bars enter, update, and exit and how the transition looks.
+    \item \textbf{Tool choice memo.} For tasks (a) quick CEO dashboard, (b) custom hierarchical edge bundling paper figure, (c) reproducible lab report, recommend D3 vs Vega-Lite vs Tableau/Python and justify with control vs speed and reproducibility.
+    \item \textbf{Martini-glass storyboard.} Take the gapminder dataset (GDP vs life expectancy over time). Sketch a 4-step martini-glass story: opening claim, narrowing evidence (two views), and reader-driven exploration. Annotate the key frame.
+    \item \textbf{Capstone critique.} Build a 2-view interactive story in Altair or D3 on any dataset. Ask two peers to state your claim and one limitation after 60 seconds. Report where they succeeded or missed and revise one annotation or sequencing choice.
+\end{enumerate}
+% End of Chapter 8

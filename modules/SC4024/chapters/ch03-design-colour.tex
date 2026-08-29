@@ -1,0 +1,237 @@
+% SC4024 --- Chapter 3: Design Principles & Colour Theory (0->100 ground-up)
+\chapter{Design Principles \& Colour Theory}
+\label{ch:design-colour}
+\sloppy
+
+\begin{quote}
+\emph{``Good visualisation is not decoration---it is argument made visible.''} --- Every inked pixel should earn its keep, and colour should help seeing, not merely please the eye.
+\end{quote}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: we build here, no prior design needed.} We start from what ink does on a page and how eyes group it, then formalise design rules, colour spaces, and palettes, with before/after fixes and code. No prior art training is required.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item apply data-ink ratio, lie factor, and chartjunk critiques to a chart;
+    \item use Gestalt laws (proximity, similarity, continuity, closure) to guide layout;
+    \item distinguish colour spaces RGB, HSL, Lab/HCL and choose the right one;
+    \item design sequential, diverging, and qualitative palettes and check CVD safety;
+    \item redesign a flawed chart with annotation, hierarchy, and colour fixes.
+\end{enumerate}
+
+% ============================================================
+\section{Design Honesty: Ink, Lies, and Clutter}
+\label{sec:honesty}
+\paragraph{Intuition.} Imagine a bar chart where most ink is gridlines, 3-D bevels, and a pictorial icon whose height and area tell different stories. The data is a minority of the ink and the eye is misled. Edward Tufte called the remedy the \emph{data-ink ratio}: maximise ink that encodes data, erase the rest.
+
+\paragraph{Formal view.} Data-ink ratio $= (\text{ink for data}) / (\text{total ink})$. \emph{Chartjunk} is ink that conveys no information (or worse, distracts). The \emph{lie factor} $= (\text{size of effect in graphic}) / (\text{size of effect in data})$ should be $1$; a bar whose length doubles while data rises 10\% has lie factor $20$, a gross distortion. \emph{Data density} is data per unit area; higher is better provided legibility remains.
+
+\begin{definition}[Tufte principles]\label{def:tufte}
+\emph{Maximise data-ink} within reason: remove borders, redundant ticks, and decoration that repeats what position already says. \emph{Avoid chartjunk}: no 3-D extrusion on 2-D data, no gratuitous icons. \emph{Lie factor $\approx1$}: encodings must be proportional to data, with zero baselines for length/area. \emph{Layer and separate}: use thin gridlines behind data, not over it.
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.80,every node/.style={font=\scriptsize}]
+% before: chartjunk
+\begin{scope}
+\node[font=\footnotesize\bfseries] at (1.6,3.6) {Before: chartjunk};
+\draw[fill=gray!10,draw=gray!40] (0,0.4) rectangle (3.2,2.8);
+% 3D bars fake
+\fill[blue!30,draw=blue!60!black] (0.4,0.4) rectangle (1.0,1.8);
+\fill[blue!18] (1.0,1.8) -- (1.25,2.0) -- (1.25,0.6) -- (1.0,0.4) -- cycle;
+\fill[blue!42] (1.0,1.8) -- (1.25,2.0) -- (0.65,2.0) -- (0.4,1.8) -- cycle;
+\fill[orange!30,draw=orange!60!black] (1.6,0.4) rectangle (2.2,2.4);
+\fill[orange!18] (2.2,2.4) -- (2.45,2.6) -- (2.45,0.6) -- (2.2,0.4) -- cycle;
+\fill[orange!42] (2.2,2.4) -- (2.45,2.6) -- (1.85,2.6) -- (1.6,2.4) -- cycle;
+\draw[thick,gray!60] (0,0.4) -- (3.2,0.4);
+\node[font=\tiny,fill=red!10,rounded corners=2pt] at (1.6,0.0) {lie: 3-D volume $\neq$ height};
+\end{scope}
+% after: clean
+\begin{scope}[xshift=5.0cm]
+\node[font=\footnotesize\bfseries] at (1.6,3.6) {After: high data-ink};
+\draw[draw=gray!30] (0,0.4) rectangle (3.2,2.8);
+\draw[gray!30,thin] (0,1.2) -- (3.2,1.2); \draw[gray!30,thin] (0,2.0) -- (3.2,2.0);
+\fill[blue!55] (0.4,0.4) rectangle (1.2,1.8);
+\fill[orange!60] (1.7,0.4) rectangle (2.5,2.4);
+\draw[thick,black] (0,0.4) -- (3.2,0.4);
+\node[font=\tiny,fill=green!10,rounded corners=2pt] at (1.6,0.0) {flat bars, clear baseline, no 3-D};
+\end{scope}
+% lie factor annotation
+\begin{scope}[xshift=9.5cm]
+\node[font=\footnotesize\bfseries] at (1.4,3.6) {Lie factor};
+\draw[thick,gray!40] (0,0.4) -- (2.8,0.4); \draw[thick,gray!40] (0,0.4) -- (0,2.8);
+\fill[teal!35] (0.4,0.4) rectangle (1.1,1.0) node[pos=.5,font=\tiny] {data};
+\fill[red!28] (1.6,0.4) rectangle (2.3,2.2) node[pos=.5,font=\tiny] {graphic};
+\draw[<->,thick,>=Stealth,red!60!black] (1.15,0.7) -- (1.55,0.7) node[midway,above,font=\tiny] {lie};
+\node[font=\tiny,align=center] at (1.4,0.0) {lie = effect$_{graphic}$/effect$_{data}$};
+\node[font=\tiny,fill=yellow!10,rounded corners=2pt] at (1.4,-0.35) {ideal = 1.0};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (5.0,-0.75) {\textcolor{blue!60!black}{$\blacksquare$ data ink} \quad \textcolor{red!60!black}{$\blacksquare$ lie} \quad \textcolor{gray!60!black}{$\blacksquare$ non-data ink}};
+\end{tikzpicture}
+\caption{Tufte's principles: remove chartjunk and 3-D distortion (left $\to$ centre); keep the lie factor at 1 (right). The repaired chart uses position and length honestly.}
+\label{fig:tufte}
+\end{figure}
+
+% ============================================================
+\section{Gestalt: How Eyes Group}
+\label{sec:gestalt}
+\paragraph{Intuition.} Place six dots in two tight clusters and you see two groups without being told. Colour three of them red and the rest blue and you see colour groups. The visual system groups by \emph{Gestalt laws} before conscious reasoning---design can recruit this or fight it.
+
+\begin{definition}[Gestalt laws for layout]\label{def:gestalt}
+\emph{Proximity}: nearby elements group. \emph{Similarity}: similar colour/shape groups. \emph{Continuity/good continuation}: aligned elements read as a path. \emph{Closure}: incomplete contours are perceived as closed. \emph{Figure--ground}: one region reads as figure, the rest as ground. \emph{Common fate}: elements moving together group.
+\end{definition}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.80,every node/.style={font=\scriptsize}]
+% proximity
+\begin{scope}
+\node[font=\footnotesize\bfseries] at (1.2,3.3) {Proximity};
+\foreach \x in {0.4,0.9,1.4} \foreach \y in {1.8,2.2} \fill[gray!70] (\x,\y) circle (0.10);
+\foreach \x in {0.4,0.9,1.4} \foreach \y in {0.6,1.0} \fill[gray!70] (\x,\y) circle (0.10);
+\draw[dashed,gray,rounded corners=3pt] (0.2,1.5) rectangle (1.6,2.5);
+\draw[dashed,gray,rounded corners=3pt] (0.2,0.3) rectangle (1.6,1.3);
+\node[font=\tiny,fill=blue!8,rounded corners=2pt] at (0.9,-0.15) {near = grouped};
+\end{scope}
+% similarity
+\begin{scope}[xshift=3.4cm]
+\node[font=\footnotesize\bfseries] at (1.2,3.3) {Similarity};
+\foreach \x/\c in {0.4/red,0.9/blue,1.4/red} \foreach \y in {1.8,2.2} \fill[\c!60] (\x,\y) circle (0.10);
+\foreach \x/\c in {0.4/blue,0.9/red,1.4/blue} \foreach \y in {0.6,1.0} \fill[\c!60] (\x,\y) circle (0.10);
+\node[font=\tiny,fill=red!8,rounded corners=2pt] at (0.9,-0.15) {same colour = grouped};
+\end{scope}
+% continuity
+\begin{scope}[xshift=6.8cm]
+\node[font=\footnotesize\bfseries] at (1.4,3.3) {Continuity};
+\draw[thick,blue!60!black] (0.2,2.4) .. controls (0.9,2.0) and (1.6,1.2) .. (2.4,0.6);
+\foreach \p in {0.2,0.6,1.0,1.5,2.0} \fill[blue!60] (0.2+1.1*\p/1.5,2.4-0.9*\p/1.5) circle (0.07);
+\draw[thick,orange!70!black,dashed] (0.3,0.6) -- (2.4,2.4);
+\node[font=\tiny,fill=orange!10,rounded corners=2pt] at (1.3,-0.15) {aligned = path};
+\end{scope}
+% figure-ground
+\begin{scope}[xshift=10.2cm]
+\node[font=\footnotesize\bfseries] at (1.2,3.3) {Figure--ground};
+\fill[gray!18] (0,0.3) rectangle (2.4,2.6);
+\fill[white,draw=gray!60,thick] (0.5,0.8) rectangle (1.9,2.1);
+\node[font=\tiny] at (1.2,1.45) {figure};
+\node[font=\tiny,fill=gray!10,rounded corners=2pt] at (1.2,-0.15) {contrast isolates};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (5.8,-0.65) {\textcolor{blue!60!black}{$\blacksquare$ proximity} \quad \textcolor{red!60!black}{$\blacksquare$ similarity} \quad \textcolor{orange!70!black}{$\blacksquare$ continuity}};
+\end{tikzpicture}
+\caption{Gestalt laws: proximity, similarity (colour), continuity, and figure--ground. Good layout places related items near, colours them alike, and aligns them.}
+\label{fig:gestalt}
+\end{figure}
+
+Practical rules: put related charts near each other, colour related series alike, align axes, and close a layout with a border or background so it reads as one figure.
+
+% ============================================================
+\section{Colour: Spaces and Palettes}
+\label{sec:colour}
+\paragraph{Intuition.} The rainbow looks uniform but is not: yellow and cyan appear brighter and more distinct than deep blue, so a rainbow colormap makes yellows shout even where data is flat. RGB, the monitor's language, is also non-uniform. For faithful visualisation we need a space where equal steps in numbers give equal steps in perception.
+
+\begin{definition}[Colour spaces]\label{def:colour-spaces}
+\emph{RGB}: additive red-green-blue cube (device-dependent, not perceptually uniform). \emph{HSL/HSV}: hue--saturation--lightness/value (intuitive but not uniform). \emph{CIE Lab}: $L$ luminance, $a$ green--red, $b$ blue--yellow, designed so Euclidean distance $\Delta E$ approximates perceived difference. \emph{HCL}: polar Lab (hue, chroma, luminance)---intuitive and approximately uniform; preferred for palettes.
+\end{definition}
+
+Palette types: \emph{sequential} (one hue, luminance ramp; for ordered/quantitative from low to high), \emph{diverging} (two hues with neutral midpoint; for deviation from centre), \emph{qualitative} (distinct hues at similar luminance/chroma; for nominal). ColorBrewer codifies these; append CVD (colour-vision deficiency) simulation to verify.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.78,every node/.style={font=\scriptsize}]
+% RGB vs Lab uniform
+\node[font=\footnotesize\bfseries] at (2.2,4.4) {RGB / rainbow: not uniform};
+\foreach \i in {0,...,7} {
+  \pgfmathsetmacro{\hue}{\i*360/8}
+  \definecolor{tmp}{Hsb}{\hue,0.85,0.95}
+  \fill[tmp] (0.55*\i,3.3) rectangle +(0.5,0.7);
+}
+\node[font=\tiny,fill=red!8,rounded corners=2pt] at (2.2,2.95) {yellow pops: false high};
+\node[font=\footnotesize\bfseries] at (2.2,2.5) {Lab / HCL: perceptually uniform};
+\foreach \i in {0,...,7} {
+  \pgfmathsetmacro{\lum}{30+7*\i}
+  \fill[blue!\lum] (0.55*\i,1.5) rectangle +(0.5,0.7);
+}
+\node[font=\tiny,fill=green!8,rounded corners=2pt] at (2.2,1.15) {equal steps = equal perception};
+% palette swatches
+\begin{scope}[xshift=6.8cm]
+\node[font=\footnotesize\bfseries] at (1.8,4.4) {Sequential (blue ramp)};
+\foreach \i in {0,...,5} {\pgfmathsetmacro{\s}{18+12*\i} \fill[blue!\s] (0.45*\i,3.5) rectangle +(0.42,0.5);}
+\node[font=\tiny] at (1.35,3.2) {one hue, luminance varies};
+\node[font=\footnotesize\bfseries] at (1.8,2.75) {Diverging (RdBu)};
+\foreach \i in {0,...,5} {
+  \ifnum\i<3 \pgfmathsetmacro{\s}{30+18*\i} \fill[red!\s] (0.45*\i,1.95) rectangle +(0.42,0.5);
+  \else \pgfmathsetmacro{\s}{78-12*\i} \fill[blue!\s] (0.45*\i,1.95) rectangle +(0.42,0.5); \fi
+}
+\node[font=\tiny] at (1.35,1.65) {two hues, neutral centre};
+\node[font=\footnotesize\bfseries] at (1.8,1.3) {Qualitative (nominal)};
+\fill[red!55] (0,0.55) rectangle (0.42,1.05); \fill[blue!45] (0.55,0.55) rectangle (0.97,1.05);
+\fill[green!45] (1.10,0.55) rectangle (1.52,1.05); \fill[orange!55] (1.65,0.55) rectangle (2.07,1.05);
+\fill[violet!40] (2.20,0.55) rectangle (2.62,1.05);
+\node[font=\tiny] at (1.35,0.3) {distinct hues, similar luminance};
+\end{scope}
+% CVD annotation
+\begin{scope}[xshift=10.8cm]
+\node[font=\footnotesize\bfseries] at (1.5,4.4) {Check CVD};
+\fill[red!55] (0.3,3.5) rectangle (1.0,4.0); \fill[green!55] (1.2,3.5) rectangle (1.9,4.0);
+\node[font=\tiny] at (1.1,3.25) {red vs green};
+\draw[->,thick,>=Stealth] (1.1,3.15) -- (1.1,2.85);
+\fill[orange!45] (0.3,2.2) rectangle (1.0,2.7); \fill[blue!45] (1.2,2.2) rectangle (1.9,2.7);
+\node[font=\tiny,fill=green!10,rounded corners=2pt] at (1.1,1.85) {blue--orange safe};
+\node[font=\tiny,fill=red!10,rounded corners=2pt] at (1.1,1.55) {never red--green alone};
+\end{scope}
+\node[font=\tiny,draw=gray!40,fill=yellow!8,rounded corners=2pt,inner sep=3pt] at (6.0,0.0) {\textcolor{blue!60!black}{$\blacksquare$ sequential} \quad \textcolor{red!60!black}{$\blacksquare$ diverging} \quad \textcolor{violet!60!black}{$\blacksquare$ qualitative} \quad \textcolor{orange!70!black}{$\blacksquare$ CVD safe}};
+\end{tikzpicture}
+\caption{Colour: rainbow RGB is not perceptually uniform (top left); Lab/HCL ramps are (centre left). Right: sequential, diverging, and qualitative palettes, plus the red--green CVD pitfall and its blue--orange remedy.}
+\label{fig:colour}
+\end{figure}
+
+\begin{lstlisting}[language=Python, caption={Building honest palettes: sequential, diverging, qualitative, and CVD check.}, label={lst:palettes}]
+import matplotlib.pyplot as plt, numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+
+# Sequential: single-hue luminance ramp (perceptually ordered)
+seq = LinearSegmentedColormap.from_list("seq", ["#f7fbff","#08306b"])
+# Diverging: two hues with neutral centre
+div = LinearSegmentedColormap.from_list("div", ["#b2182b","#f7f7f7","#2166ac"])
+# Qualitative: distinct hues, similar luminance
+qual = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00"]
+# demo: apply sequential to a gradient
+vals = np.linspace(0, 1, 10)
+fig, ax = plt.subplots(figsize=(6,1.2))
+ax.imshow([vals], cmap=seq, aspect="auto"); ax.set_title("Sequential blue ramp (ordered)")
+ax.set_axis_off(); plt.savefig("seq.pdf")
+# CVD note: test with colorspacious or simulate deuteranopia; avoid red-green alone
+\end{lstlisting}
+
+\begin{lstlisting}[language=Python, caption={Lie-factor audit and data-ink sketch.}, label={lst:lie}]
+# Lie factor = size_of_effect_graphic / size_of_effect_data
+def lie_factor(data_old, data_new, graphic_old, graphic_new):
+    return (graphic_new-graphic_old)/graphic_old / ((data_new-data_old)/data_old)
+
+print(lie_factor(100, 110, 2.0, 4.0))  # 10% data, 100% graphic -> lie=10 (dishonest)
+print(lie_factor(100, 110, 2.0, 2.2))  # honest: both +10% -> lie=1.0
+
+# Data-ink: count non-data pixels (grid, border) vs data pixels in a mock
+# In practice: remove border, lighten grid to 0.3 alpha, drop 3-D
+\end{lstlisting}
+
+% ============================================================
+\section{Before/After: A Redesign}
+\label{sec:redesign}
+\paragraph{Intuition.} A flawed chart: rainbow background, 3-D bars, truncated y-axis at 50, legend far from data, tiny labels. Fix sequence: restore zero baseline (lie factor to 1), flatten to 2-D, replace rainbow with single-hue sequential, move legend beside data (proximity), align and enlarge labels, add one annotation that states the takeaway. Each fix maps to a principle above.
+
+% ============================================================
+\section{Chapter Notes}
+Tufte (1983, 1990) defined data-ink, lie factor, and chartjunk; Ware (2020) grounded them in perception; Brewer (ColorBrewer) systematised palettes; Stone et al.\ and Wong (2011) codified CVD-safe design; Munzner (2014) framed honesty as across-level validation. The next chapter applies these rules to statistical charts and interaction.
+
+% ============================================================
+\section{Exercises}
+\label{sec:ch03-exercises}
+\begin{enumerate}[label=E3.\arabic*, leftmargin=*, itemsep=0.8em]
+    \item \textbf{Lie factor.} A company's profit rose from \$80M to \$88M (+10\%) but its bar grew from 2\,cm to 3\,cm (+50\%). Compute the lie factor. Redraw with a zero baseline and report the new factor.
+    \item \textbf{Chartjunk audit.} Take a chart with heavy grid, border, and background shading. Estimate data-ink ratio before and after removing non-data ink. Which removals most improved the ratio without harming legibility?
+    \item \textbf{Palette design.} Design three palettes for the same 7-category nominal, 9-step sequential, and $\pm$ diverging tasks. Show swatches and argue hue/luminance choices. Simulate deuteranopia (e.g.\ via colorspacious) and revise any failing pair.
+    \item \textbf{Gestalt redesign.} A dashboard scatters 6 unrelated charts with equal spacing and random colours. Use proximity, similarity, and alignment to regroup them into 2 tasks $\times$ 3 views. Sketch before/after and label each Gestalt law applied.
+    \item \textbf{Lab vs RGB interpolation.} Interpolate between blue and yellow in RGB and in Lab (via \texttt{colorspacious} or Altair's HCL). Plot the midpoint swatches and explain why the RGB midpoint looks muddy grey while Lab stays vivid and uniform.
+\end{enumerate}
+% End of Chapter 3
