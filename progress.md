@@ -23,8 +23,8 @@
 | 10 - Final QA v1.0 | DONE | 25/25 PASS — 1128 pages, 51M, 0 ! 0 >15 0 pgfkeys, geometry 1.3/1.2 small-screen, color TikZ + lstlisting verified — release v1.0 tagged 2026-08-28 16:40 SGT |
 | 11 - Exhaustive MPE (phase 11) | DONE | SC4023 49p 744K + SC3050 51p 684K + SC4013 49p 713K — 3×8 ch 1623/1647/1624L 20/24/24 TikZ/color, lstlisting — 0 ! 0 >15 PASS 2026-08-28 19:31 SGT deleg_92b82690 (12 fleets, planner+2 writers+reviewer) |
 | 12 - Exhaustive MPE (phase 12) | DONE | SC4063 45p 679K + SC4050 42p 753K + SC4064 45p 715K — 3×8 ch 1707/1631/1632L 0 ! 0 >15 PASS 2026-08-30 16:00 SGT (muse-spark ONLY, SC4064 REVIEW.md PASS after 6 trivial patches) |
-| 13 - Exhaustive MPE (phase 13) | IN_PROGRESS | SC3270/SC4021/SC4022 — 3×8 ch 0→100, muse-spark ONLY — deleg_phase13 |
-| 14 - Exhaustive MPE (phase 14) | PENDING | SC4053/SC4242/SC4024 — 3×8 ch 0→100, muse-spark ONLY |
+| 13 - Exhaustive MPE (phase 13) | DONE | SC3270 44p 647K + SC4021 45p 640K + SC4022 42p 720K — 3×8 ch 1607/1668/1688L 48/48/48 TikZ 0 ! 0 >15 PASS 2026-08-30 16:05 SGT deleg_fac00063 (muse-spark ONLY) |
+| 14 - Exhaustive MPE (phase 14) | IN_PROGRESS | SC4053/SC4242/SC4024 — 3×8 ch 0→100, muse-spark ONLY — deleg_phase14 |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
@@ -60,6 +60,9 @@
 | SC4063 | Network Security | 3 | MPE | DONE (OUTLINE 95L) | DONE 8/8 (45p 679K 1707L 24 TikZ) 2026-08-30 | DONE PASS 2026-08-30 (0 !, 0 max) | DONE | DONE 45p 679K 0 ! |
 | SC4050 | Parallel Computing | 3 | MPE | DONE (OUTLINE 96L) | DONE 8/8 (42p 753K 1631L 24 TikZ) 2026-08-30 | DONE PASS 2026-08-30 (0 !, 0 max) | DONE | DONE 42p 753K 0 ! |
 | SC4064 | GPU Programming | 3 | MPE | DONE (OUTLINE 88L) | DONE 8/8 (45p 715K 1632L 24 TikZ) 2026-08-30 | DONE PASS REVIEW.md 2026-08-30 (0 !, 8.45 max) | DONE | DONE 45p 715K 0 ! |
+| SC3270 | Reasoning About Programs | 3 | MPE | DONE (OUTLINE 95L) | DONE 8/8 (44p 647K 1607L 48 TikZ) 2026-08-30 | DONE PASS 2026-08-30 (0 !, 2.00 max) | DONE | DONE 44p 647K 0 ! |
+| SC4021 | Information Retrieval | 3 | MPE | DONE (OUTLINE 102L) | DONE 8/8 (45p 640K 1668L 48 TikZ) 2026-08-30 | DONE PASS 2026-08-30 (0 !, 7.51 max) | DONE | DONE 45p 640K 0 ! |
+| SC4022 | Network Science | 3 | MPE | DONE (OUTLINE 103L) | DONE 8/8 (42p 720K 1688L 48 TikZ) 2026-08-30 | DONE PASS 2026-08-30 (0 !, 0 max) | DONE | DONE 42p 720K 0 ! |
 
 ## Research Log
 - 2026-08-23: Phase 0 kicked off. Sources: ntu.edu.sg/ccds official, public forums (Reddit r/NTU). Private GDrives excluded per policy.
@@ -84,3 +87,4 @@
 - Check last completed phase above.
 - Continue from first PENDING row.
 - 2026-08-30 16:00 SGT: Phase 12 DONE — SC4063 45p 1707L 0 !, SC4050 42p 1631L 0 !, SC4064 45p 1632L 0 ! — all 0 ! 0 >15 PASS (SC4064 detailed REVIEW.md PASS after 6 trivial patches step→stage etc.) — committed.
+- 2026-08-30 16:05 SGT: Phase 13 DONE — SC3270 44p 1607L 48 TikZ 0 !, SC4021 45p 1668L 48 TikZ 0 ! 7.51 max, SC4022 42p 1688L 48 TikZ 0 ! — deleg_fac00063 PASS — committed.

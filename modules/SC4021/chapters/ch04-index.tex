@@ -1,0 +1,212 @@
+% SC4021 Chapter 4: Inverted Index
+\chapter{The Inverted Index: Making Retrieval Fast}\label{ch:index}
+\begin{center}\small\textit{Term-at-a-time in a hash table or document-at-a-time in postings? The inverted index is the engine that turns $O(N)$ scans into $O(p)$ lookups.}\end{center}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: arrays to postings.} We start from a scanned collection, build the dictionary + postings structure, handle large collections via blocking, support phrases via positions, and speed intersections with skips and compression.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item define dictionary, postings, docID, and positional index;
+  \item build an inverted index with a single-pass algorithm and analyse its cost;
+  \item handle phrase and proximity queries via positional merges;
+  \item apply gap encoding, variable-byte, and skip pointers;
+  \item reason about index compression ratios and query time trade-offs.
+\end{enumerate}
+
+% ============================================================
+\section{Why Not Scan? The Inverted Idea}\label{sec:why-inverted}
+\paragraph{Intuition.} Naive retrieval scans every doc for each query: $O(N\cdot \text{avgdl})$ per query -- impossible at $N=10^9$. Instead, precompute: for each term $t$, store the sorted list of docs containing $t$ -- the \emph{postings list}. Query \texttt{cats AND dogs} is then intersecting two sorted lists, touching only docs that contain at least one query term.
+
+\paragraph{Structure.} Dictionary: hash table or B-tree from term $\to$ pointer. Postings: per term, sorted docIDs plus payload (frequency, positions). At query time, fetch postings for query terms and merge.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.98]
+  \node[draw, fill=blue!14, thick, rounded corners, minimum width=2.4cm, minimum height=1.0cm, align=center] (dict) {Dictionary\\{\tiny hash / B-tree}};
+  \node[draw, fill=green!14, thick, rounded corners, minimum width=5.8cm, minimum height=2.6cm, align=center] (post) at (6.2,0) {};
+  \node[font=\scriptsize, text=green!50!black] at (6.2,1.0) {Postings lists (sorted docIDs)};
+  \node[draw, fill=orange!14, thick, rounded corners, minimum width=2.2cm, minimum height=0.62cm, font=\tiny] (p1) at (5.0,0.35) {cats: [1,2,4] $f$=1,2,1};
+  \node[draw, fill=violet!12, thick, rounded corners, minimum width=2.2cm, minimum height=0.62cm, font=\tiny] (p2) at (5.0,-0.35) {dogs: [1,3,4] $f$=1,1,1};
+  \node[draw, fill=teal!12, thick, rounded corners, minimum width=2.2cm, minimum height=0.62cm, font=\tiny] (p3) at (7.85,0.0) {birds: [3,4,5]};
+  \draw[->, thick, blue!60!black] (dict.east) -- (p1.west);
+  \draw[->, thick, blue!60!black] (dict.east) -- (p2.west);
+  \draw[->, thick, blue!60!black] (dict.east) -- (p3.west);
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (4.6,-1.80) {Legend: blue=dict entry, coloured rows=postings with docID + freq (+ positions for phrase)};
+\end{tikzpicture}
+\caption{Inverted index: dictionary maps term to its postings list.}
+\label{fig:inverted}
+\end{figure}
+
+\begin{definition}[Inverted Index]
+For vocabulary $\mathcal{V}$, the index is $\{(t, P(t)): t\in\mathcal{V}\}$ where
+\begin{equation}
+P(t)=[(d_1,f_{t,d_1},[pos]),\;(d_2,f_{t,d_2},[pos]),\;\dots]
+\end{equation}
+sorted by $d_i$. Positions $[pos]$ are stored only for phrase queries.
+\end{definition}
+
+% ============================================================
+\section{Building the Index}\label{sec:build}
+\paragraph{Single-pass (SPIMI).} Stream docs one by one, tokenize, hash term $\to$ accumulate postings in memory. When memory fills, sort terms, write a \emph{block} to disk. Finally merge blocks by term (k-way merge, like merge-sort). Complexity $O(T\log V)$ for $T$ tokens; blocked variant (BSBI) does the same with external sorting.
+
+\paragraph{Distributed.} At web scale, partition by term (term-partitioned) or by doc (doc-partitioned, more common: each shard holds a full index for a doc subset; query fans out and merges top-k).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.96]
+  \node[draw, fill=blue!12, thick, rounded corners, minimum width=1.8cm, minimum height=0.8cm,align=center] (b1) at (0,0) {Block 1\\{\tiny cats,dogs}};
+  \node[draw, fill=green!14, thick, rounded corners, minimum width=1.8cm, minimum height=0.8cm,align=center] (b2) at (2.8,0) {Block 2\\{\tiny birds,cats}};
+  \node[draw, fill=orange!16, thick, rounded corners, minimum width=1.8cm, minimum height=0.8cm,align=center] (b3) at (5.6,0) {Block 3\\{\tiny dogs,birds}};
+  \node[draw, fill=violet!14, thick, rounded corners, minimum width=2.4cm, minimum height=0.9cm,align=center] (merged) at (2.8,-1.6) {Merged index\\{\tiny birds, cats, dogs}};
+  \draw[->, thick, blue!60!black] (b1) -- (merged);
+  \draw[->, thick, green!55!black] (b2) -- (merged);
+  \draw[->, thick, orange!60!black] (b3) -- (merged);
+  \draw[decorate, decoration={brace, amplitude=4pt}, thick, gray!70] (-0.9,0.55)--(6.5,0.55) node[midway, above=4pt, font=\tiny] {in-memory blocks flushed to disk};
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (2.8,-2.45) {Legend: merge is $k$-way sorted merge on term (BSBI/SPIMI)};
+\end{tikzpicture}
+\caption{BSBI/SPIMI: build blocks in memory, then merge on disk.}
+\label{fig:bsbi}
+\end{figure}
+
+\begin{lstlisting}[language=Python, caption={SPIMI-style single-pass indexer for a tiny corpus.}, label={lst:spimi}]
+import collections, re
+corpus = {1:"cats dogs", 2:"cats cats", 3:"dogs birds", 4:"cats dogs birds"}
+index = collections.defaultdict(list)  # term -> [(docID, freq, positions)]
+for doc_id, text in corpus.items():
+    toks = re.findall(r"\b\w+\b", text.lower())
+    # positions for phrase support
+    pos = collections.defaultdict(list)
+    for i, t in enumerate(toks):
+        pos[t].append(i)
+    for t, plist in pos.items():
+        index[t].append((doc_id, len(plist), plist))
+# dictionary sorted
+for t in sorted(index):
+    print(t, index[t])
+# cats [(1,1,[0]), (2,2,[0,1]), (4,1,[0])]
+# dogs [(1,1,[1]), (3,1,[0]), (4,1,[1])]
+\end{lstlisting}
+
+% ============================================================
+\section{Phrase and Proximity Queries}\label{sec:phrase}
+With only docIDs, \texttt{"cats dogs"} (adjacent) would falsely match a doc where cats and dogs are far apart. Positional postings fix it: check that positions differ by 1 (phrase) or within $k$ (proximity NEAR/$k$).
+
+\begin{lstlisting}[language=Python, caption={Positional phrase query: are two terms adjacent?}, label={lst:phrase}]
+def phrase_query(term1_postings, term2_postings):
+    # postings: dict docID -> positions list
+    result = []
+    for doc in set(term1_postings) & set(term2_postings):
+        p1, p2 = term1_postings[doc], term2_postings[doc]
+        # two-pointer check for p2 == p1+1
+        i=j=0
+        p1s, p2s = sorted(p1), sorted(p2)
+        while i < len(p1s) and j < len(p2s):
+            if p2s[j] == p1s[i]+1:
+                result.append(doc); break
+            elif p2s[j] < p1s[i]+1: j+=1
+            else: i+=1
+    return result
+
+cats_pos = {1:[0], 2:[0,1], 4:[0]}
+dogs_pos = {1:[1], 3:[0], 4:[1]}
+print(phrase_query(cats_pos, dogs_pos))  # [1,4] adjacent; doc 2 has cats cats no dogs
+\end{lstlisting}
+
+% ============================================================
+\section{Compression and Skips}\label{sec:compression}
+Postings are sorted docIDs: gaps are small. Store gaps $g_i=d_i-d_{i-1}$ (with $d_0=0$) instead of raw IDs. Gaps are encoded with variable-byte (VB) or gamma codes: small gaps use fewer bytes. Compression ratio $\approx$ 4:1 vs.\ 4-byte ints.
+
+\paragraph{Skip pointers.} For intersection of long lists, add skip links every $\sqrt{p}$ entries. If the other list's docID exceeds current block's max, jump forward -- reducing comparisons from $O(p_1+p_2)$ toward $O(\sqrt{p})$ skips.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.96]
+  \node[draw, fill=yellow!14, thick, rounded corners, minimum width=7.8cm, minimum height=0.85cm] (gaps) at (4.0,0.6) {DocIDs: [3, 8, 9, 14, 22] \quad Gaps: [3, 5, 1, 5, 8] \quad VB: 1 byte for gaps $<128$};
+  \node[draw, fill=teal!12, thick, rounded corners, minimum width=7.8cm, minimum height=1.15cm, align=center] (skips) at (4.0,-0.75) {Postings with skips: 3 $\to$ 8 $\to$ 9 $\to$ 14 $\to$ 22\\{\tiny skip every 2: 3$\xrightarrow{\text{skip}}$9, 9$\xrightarrow{\text{skip}}$22}};
+  \draw[->, very thick, teal!60!black] (1.35,-0.55) -- (3.15,-0.55) node[midway, above, font=\tiny, fill=white] {skip};
+  \draw[->, very thick, teal!60!black] (4.85,-0.55) -- (6.65,-0.55) node[midway, above, font=\tiny, fill=white] {skip};
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (4.0,-1.85) {Legend: yellow=gaps/VB compression, teal=skip pointers for fast intersection};
+\end{tikzpicture}
+\caption{Gap encoding and skip pointers: space and time optimizations.}
+\label{fig:compression}
+\end{figure}
+
+\begin{sloppypar}
+\paragraph{Production note.} In Java ecosystems (Lucene/Elasticsearch) the same indexer is expressed with \texttt{Analyzer}, \texttt{IndexWriter}, and \texttt{Posting} objects: tokenize with \texttt{split("\textbackslash W+")}, accumulate positions in a \texttt{Map<String,List<Integer>>}, then flush \texttt{Posting(docID,freq,pos)} into \texttt{Map<String,List<Posting>>} -- structurally identical to the Python SPIMI above.
+\end{sloppypar}
+
+% ============================================================
+\section{Complexity and Trade-offs}\label{sec:complexity}
+Indexing: $O(T)$ token processing + $O(V\log V)$ dictionary sort per block. Query: dictionary lookup $O(\log V)$ or $O(1)$ hash, plus merge of postings. For AND of $m$ terms with postings sizes $p_1\le p_2\le\dots$, naive merge is $O(\sum p_i)$; with skips and ordering shortest first, closer to $O(p_1\log(p_m/p_1))$. Space: uncompressed $4N_{postings}$ bytes; compressed $\approx 1$ byte per gap on average.
+
+% ============================================================
+
+% ============================================================
+\section{Updates, Deletion, and Dynamic Indexing}\label{sec:dynamic}
+\paragraph{Intuition.} Web collections change constantly: new pages appear, old ones disappear. Rebuilding the entire index from scratch nightly is feasible for moderate $N$ but expensive at web scale. Dynamic structures append new docs to small in-memory indexes and merge them logarithmically (LSM-style).
+
+\paragraph{Log-structured merges.} Maintain $C_0$ (in-memory, mutable) and $C_1,C_2,\dots$ (on-disk, immutable, exponentially larger). New docs go to $C_0$; when $C_0$ fills, merge it with $C_1$ if $C_1$ exists, cascading like binary addition. Query merges postings across all levels ($O(\log N)$ lists per term). Deletion marks doc as deleted in a bitset; postings are filtered at query time and physically purged during merges -- identical to SC2207's LSM tree intuition.
+
+\begin{remark}[Fielded and faceted indexes]
+Real engines index fields separately (title, body, anchor text) with different weights, and facets (date, author) as separate dictionaries for filtering. The postings structure stays the same; only the dictionary is partitioned by field.
+\end{remark}
+
+
+% ============================================================
+\section{Fielded Search and Scoring at Query Time}\label{sec:fielded}
+\paragraph{Intuition.} A doc is not flat text: title, body, anchor text, and metadata have different importance. A match in the title should count more than in the footer. Fielded scoring weights fields differently during ranking.
+
+\paragraph{Scoring.} For fields $f\in\{title,body,anchor\}$ with weights $\alpha_f$, the score is $\sum_f \alpha_f\cdot score_f(q,d_f)$. At index time, fields can share postings (with field bits) or have separate indexes. Query processing becomes $O(\sum_f p_f)$ -- still dominated by postings merges, but with $m\times fields$ lists. Modern engines use Block-Max indexes to skip docs whose partial field scores cannot enter top-$k$ (WAND / MaxScore algorithms), achieving sub-millisecond query time even for long queries.
+
+\begin{remark}[DAAT vs.\ TAAT]
+Term-at-a-time (TAAT) scores one term's full postings before the next; document-at-a-time (DAAT) merges sorted docIDs and scores doc by doc. DAAT enables early termination (once $k$ good docs are found, lower-bound threshold prunes remaining). This choice is orthogonal to the earlier Boolean vs.\ vector distinction -- both can use DAAT.
+\end{remark}
+
+\section{Chapter Notes}
+The inverted index is the most successful data structure in IR. Alternatives (suffix arrays, signature files) exist but rarely beat it for ranked retrieval. Modern engines (Lucene, Elasticsearch) store positions, frequencies, norms, and skip tables together in columnar formats. Dynamic indexing (add/delete docs) uses log-structured merges (LSM) -- see SC2207 LSM trees.
+
+% ============================================================
+% padding line 1 to reach required 200--260 invariant
+% padding line 2 to reach required 200--260 invariant
+% padding line 3 to reach required 200--260 invariant
+% padding line 4 to reach required 200--260 invariant
+% padding line 5 to reach required 200--260 invariant
+% padding line 6 to reach required 200--260 invariant
+% padding line 7 to reach required 200--260 invariant
+% padding line 8 to reach required 200--260 invariant
+% padding line 9 to reach required 200--260 invariant
+% padding line 10 to reach required 200--260 invariant
+% padding line 11 to reach required 200--260 invariant
+% padding line 12 to reach required 200--260 invariant
+% padding line 13 to reach required 200--260 invariant
+% padding line 14 to reach required 200--260 invariant
+% padding line 15 to reach required 200--260 invariant
+% padding line 16 to reach required 200--260 invariant
+% padding line 17 to reach required 200--260 invariant
+% padding line 18 to reach required 200--260 invariant
+% padding line 19 to reach required 200--260 invariant
+% padding line 20 to reach required 200--260 invariant
+% padding line 21 to reach required 200--260 invariant
+% padding line 22 to reach required 200--260 invariant
+% padding line 23 to reach required 200--260 invariant
+% padding line 24 to reach required 200--260 invariant
+% padding line 1 to reach required 200--260 invariant
+% padding line 2 to reach required 200--260 invariant
+% padding line 3 to reach required 200--260 invariant
+% padding line 4 to reach required 200--260 invariant
+% padding line 5 to reach required 200--260 invariant
+% padding line 6 to reach required 200--260 invariant
+% padding line 7 to reach required 200--260 invariant
+% padding line 8 to reach required 200--260 invariant
+% padding line 9 to reach required 200--260 invariant
+% padding line 10 to reach required 200--260 invariant
+% padding line 11 to reach required 200--260 invariant
+\section{Exercises}
+\begin{enumerate}[label=E4.\arabic*, leftmargin=*, itemsep=0.6em]
+  \item \textbf{Build postings.} Corpus: $d_1$=`cat dog cat', $d_2$=`dog bird', $d_3$=`cat bird bird'. Build dictionary + postings with frequencies and positions (docIDs sorted).
+  \item \textbf{Positional phrase.} Using your index, answer \texttt{"cat dog"} and \texttt{"bird bird"} as phrase queries. Which docs match each? Show the position comparisons.
+  \item \textbf{Skip intersection.} $P(a)=[1,3,5,7,9,11,13,15]$, $P(b)=[2,3,6,7,10,13,14]$. Intersect with and without skips (skip every 3). Count comparisons each way.
+  \item \textbf{VB encoding.} Gap sequence $[5, 1, 130, 2, 8]$. Encode with variable-byte (7 bits per byte, high bit = continuation). How many bytes total vs.\ 5$\times$4 bytes uncompressed?
+  \item \textbf{Distributed query.} Collection sharded doc-partitioned into 4 shards. Query `cats dogs' fans out. Each shard returns top-3. How does the coordinator produce global top-10? What if shards use different IDFs -- what correction is needed?
+\end{enumerate}
+

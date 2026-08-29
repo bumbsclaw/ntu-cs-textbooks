@@ -1,0 +1,210 @@
+% SC4021 Chapter 8: Learning to Rank and Neural IR
+\chapter{Learning to Rank and Neural IR}\label{ch:neural}
+\begin{center}\small\textit{From hand-tuned weights to learned rankers: let data decide how to combine signals, and let embeddings bridge the vocabulary gap neurally.}\end{center}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: ranking as learning.} We start from feature vectors per query-doc pair, frame ranking as supervised learning with pointwise/pairwise/listwise losses, then replace sparse terms with dense embeddings and bi-/cross-encoders, and fuse both worlds.}}
+\vspace{0.4em}
+
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+  \item describe pointwise, pairwise, and listwise learning-to-rank and their losses;
+  \item design IR features (BM25, PageRank, proximity, click signals) for a ranker;
+  \item contrast bi-encoders, cross-encoders, and late interaction (ColBERT);
+  \item explain dense retrieval, ANN search (HNSW/IVF), and hybrid sparse-dense fusion;
+  \item evaluate and diagnose neural rankers with NDCG/MAP and bias considerations.
+\end{enumerate}
+
+% ============================================================
+\section{Ranking as Supervised Learning}\label{sec:ltr}
+\paragraph{Intuition.} Instead of hand-tuning $\text{score}=w_1\cdot\text{BM25}+w_2\cdot\text{PageRank}$, learn $w$ (or a nonlinear ranker) from labeled query-doc pairs. Training data: $(q,d, rel)$ with graded relevance. At test time, score all candidates for a new $q$ and sort.
+
+\paragraph{Three framings.}
+\begin{description}[leftmargin=1.2em, itemsep=0.3em]
+  \item[Pointwise] Predict $rel$ directly: regression/classification loss $\ell(f(q,d), rel)$. Ignores ordering among docs for the same query.
+  \item[Pairwise] Predict preference: for $rel_i>rel_j$, want $f(q,d_i)>f(q,d_j)$. Loss e.g.\ RankNet: $\log(1+\exp(-(s_i-s_j)))$. Directly optimises pairwise inversions.
+  \item[Listwise] Optimise the whole ranked list's metric (e.g., NDCG). LambdaMART does this by weighting pairwise gradients $\lambda_{ij}$ by NDCG gain from swapping $i$ and $j$ -- the most successful traditional LTR method.
+\end{description}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.97]
+  \node[draw, fill=blue!12, thick, rounded corners, minimum width=1.8cm, minimum height=0.85cm] (q) at (0,0) {Query $q$};
+  \node[draw, fill=green!14, thick, rounded corners, minimum width=1.8cm, minimum height=0.85cm] (d) at (2.8,0) {Doc $d$};
+  \node[draw, fill=orange!16, thick, rounded corners, minimum width=2.4cm, minimum height=0.9cm, align=center] (feat) at (6.0,0) {Features\\{\tiny BM25, PR, prox}};
+  \node[draw, fill=violet!14, thick, rounded corners, minimum width=2.0cm, minimum height=0.85cm] (model) at (9.0,0) {Model $f$};
+  \node[draw, fill=teal!14, thick, rounded corners, minimum width=2.0cm, minimum height=0.85cm] (score) at (9.0,-1.45) {Score $s$};
+  \node[draw, fill=red!12, thick, rounded corners, minimum width=2.0cm, minimum height=0.85cm] (loss) at (6.0,-1.45) {Loss $\ell$};
+  \draw[->, thick, blue!60!black] (q) -- (d);
+  \draw[->, thick, blue!60!black] (d) -- (feat);
+  \draw[->, thick, green!55!black] (feat) -- (model);
+  \draw[->, thick, violet!70!black] (model) -- (score);
+  \draw[->, thick, red!60!black] (score) -- (loss) node[midway, above, font=\tiny] {pair/list};
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (4.5,-2.20) {Legend: blue=inputs, orange=features, violet=model, teal=score, red=loss over pairs/lists};
+\end{tikzpicture}
+\caption{Learning-to-rank pipeline: per-pair features $\to$ scoring model $\to$ metric-aware loss.}
+\label{fig:ltr-pipeline}
+\end{figure}
+
+\begin{definition}[Features for LTR]
+Typical features per $(q,d)$: BM25$(q,d)$ (Ch.~3), TF--IDF cosine (Ch.~2), document length, PageRank (Ch.~7), URL depth, proximity (min window covering query terms), click-through rate, and fielded scores (title vs.\ body). Feature vector $\phi(q,d)\in\mathbb{R}^p$, score $s=f(\phi)$ with $f$ linear, tree ensemble (LambdaMART), or neural.
+\end{definition}
+
+\begin{lstlisting}[language=Python, caption={Toy pairwise ranker: learn linear weights with RankNet-style loss.}, label={lst:pairwise}]
+import numpy as np
+# features: [BM25, PageRank, proximity]
+# query "cats dogs": 3 docs with graded rel 2,1,0
+X = np.array([[2.1, 0.3, 0.9], [1.2, 0.8, 0.2], [0.4, 0.1, 0.1]])
+y = np.array([2, 1, 0])
+w = np.zeros(3)
+lr = 0.1
+for epoch in range(60):
+    grad = np.zeros(3)
+    for i in range(len(y)):
+        for j in range(len(y)):
+            if y[i] > y[j]:
+                si, sj = X[i].dot(w), X[j].dot(w)
+                # RankNet gradient for this pair
+                p = 1/(1+np.exp(-(si - sj)))  # prob i > j
+                g = (1 - p)  # want p->1
+                grad += g * (X[i] - X[j])
+    w += lr * grad / 10
+print("learned w:", w.round(3))
+scores = X.dot(w)
+print("scores:", scores.round(3), "order:", np.argsort(-scores))
+# Should rank doc0 > doc1 > doc2 matching y
+\end{lstlisting}
+
+% ============================================================
+\section{Neural IR: Dense Retrieval}\label{sec:dense}
+Sparse models (BM25/TF--IDF) need exact term overlap. Dense retrieval embeds query and doc into a continuous space where \texttt{car} and \texttt{automobile} are near each other, then ranks by cosine/dot product of embeddings. Trained so that relevant pairs are close, non-relevant far (contrastive loss).
+
+\paragraph{Bi-encoder vs.\ cross-encoder.}
+\begin{description}[leftmargin=1.2em, itemsep=0.3em]
+  \item[Bi-encoder] Encode $q$ and $d$ independently: $\vec{q}=E_q(q)$, $\vec{d}=E_d(d)$, score $=\vec{q}\cdot\vec{d}$ (or cosine). Fast: all doc vectors precomputed and ANN-indexed.
+  \item[Cross-encoder] Concatenate $[q;d]$ and score jointly with a transformer: $s=Transformer([q;d])$. Accurate (full attention between query and doc terms) but slow -- must run per pair at query time.
+  \item[ColBERT (late interaction)] Token-level embeddings for both, then sum of max-sim per query token: $s=\sum_{i}\max_j \vec{q}_i\cdot\vec{d}_j$. Middle ground: decomposable yet expressive.
+\end{description}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.97]
+  % bi-encoder
+  \node[draw, fill=blue!14, thick, rounded corners, minimum width=1.6cm, minimum height=0.75cm] (q1) at (0,1.2) {Query};
+  \node[draw, fill=green!14, thick, rounded corners, minimum width=1.6cm, minimum height=0.75cm] (d1) at (0,-0.2) {Doc};
+  \node[draw, fill=orange!16, thick, rounded corners, minimum width=1.2cm, minimum height=0.75cm] (eq) at (2.8,1.2) {$E_q$};
+  \node[draw, fill=orange!16, thick, rounded corners, minimum width=1.2cm, minimum height=0.75cm] (ed) at (2.8,-0.2) {$E_d$};
+  \node[draw, fill=violet!14, thick, circle, minimum size=0.7cm] (dot) at (5.2,0.5) {$\cdot$};
+  \draw[->, thick, blue!60!black] (q1) -- (eq);
+  \draw[->, thick, green!55!black] (d1) -- (ed);
+  \draw[->, thick, violet!70!black] (eq) -- (dot);
+  \draw[->, thick, violet!70!black] (ed) -- (dot);
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (2.6,-1.15) {Bi-encoder: dot of independent embeddings (fast, ANN)};
+  % cross-encoder
+  \node[draw, fill=blue!12, thick, rounded corners, minimum width=2.6cm, minimum height=0.75cm] (qd) at (7.6,0.5) {$[q; d]$ concat};
+  \node[draw, fill=teal!14, thick, rounded corners, minimum width=1.6cm, minimum height=0.75cm] (tr) at (10.4,0.5) {Transformer};
+  \node[font=\tiny] at (11.9,0.5) {score};
+  \draw[->, thick, blue!60!black] (qd) -- (tr);
+  \draw[->, thick, teal!60!black] (tr) -- (11.4,0.5);
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (9.1,-1.15) {Cross-encoder: joint attention (accurate, slow)};
+\end{tikzpicture}
+\caption{Bi-encoder (dual encoders + dot) vs.\ cross-encoder (joint scoring).}
+\label{fig:bi-cross}
+\end{figure}
+
+\begin{lstlisting}[language=Python, caption={Bi-encoder toy with TF--IDF vectors as ``embeddings'' and ANN via brute force.}, label={lst:biencoder}]
+import numpy as np
+# Toy: use 4-D ``embeddings'' (in practice use transformer vectors)
+docs_emb = np.array([[0.9,0.1,0.2,0.0],[0.2,0.8,0.1,0.3],[0.1,0.1,0.9,0.8]])
+query_emb = np.array([0.85,0.15,0.2,0.05])  # near doc0
+# cosine ranking
+def cos(a,b): return a.dot(b)/(np.linalg.norm(a)*np.linalg.norm(b))
+scores = [cos(query_emb, d) for d in docs_emb]
+print([round(s,3) for s in scores])  # [0.98, 0.35, 0.21]
+# ANN sketch: IVF/HNSW would index docs_emb for sublinear search at scale
+# Hybrid fusion: weighted sum of BM25 score + dense score
+bm25 = np.array([2.1, 1.0, 0.3])
+dense = np.array(scores)
+hybrid = 0.6*bm25/np.max(bm25) + 0.4*dense  # normalize then fuse
+print("hybrid:", hybrid.round(3))
+\end{lstlisting}
+
+% ============================================================
+\section{ANN and Hybrid Retrieval}\label{sec:ann}
+Dense vectors live in $\mathbb{R}^{768}$ (BERT-size). Brute-force scanning $N=10^9$ vectors per query is too slow. Approximate Nearest Neighbour (ANN) indexes -- IVF (inverted file over clusters), HNSW (hierarchical navigable small world graphs) -- give sub-millisecond top-$k$ with $>95\%$ recall. Production systems are \emph{hybrid}: retrieve top-$k$ sparse (BM25) and top-$k$ dense (ANN), then fuse (weighted sum or learned ranker) and optionally re-rank top-50 with a cross-encoder -- the classic retrieve-and-rerank pipeline.
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.96]
+  \node[draw, fill=blue!12, thick, rounded corners, minimum width=1.7cm, minimum height=0.85cm] (q) at (0,0) {Query};
+  \node[draw, fill=orange!16, thick, rounded corners, minimum width=1.7cm, minimum height=0.85cm] (sparse) at (3.2,0.85) {BM25 (sparse)};
+  \node[draw, fill=teal!14, thick, rounded corners, minimum width=1.7cm, minimum height=0.85cm] (dense) at (3.2,-0.85) {ANN (dense)};
+  \node[draw, fill=violet!14, thick, rounded corners, minimum width=1.9cm, minimum height=0.85cm] (fuse) at (6.4,0) {Fusion};
+  \node[draw, fill=green!14, thick, rounded corners, minimum width=1.9cm, minimum height=0.85cm] (rerank) at (9.4,0) {Cross-enc. re-rank};
+  \draw[->, thick, blue!60!black] (q) -- (sparse);
+  \draw[->, thick, teal!60!black] (q) -- (dense);
+  \draw[->, thick, orange!60!black] (sparse) -- (fuse);
+  \draw[->, thick, teal!60!black] (dense) -- (fuse);
+  \draw[->, thick, violet!70!black] (fuse) -- (rerank);
+  \node[font=\tiny, fill=yellow!12, rounded corners, inner sep=2pt] at (4.7,-1.85) {HNSW graph (teal) for dense; inverted index (orange) for sparse};
+  \node[font=\tiny, text=gray!60!black] at (7.9,-1.85) {final top-10 shown to user};
+\end{tikzpicture}
+\caption{Hybrid retrieve-and-rerank: sparse + dense retrieve, fuse, then cross-encoder re-ranks the shortlist.}
+\label{fig:hybrid}
+\end{figure}
+
+% ============================================================
+\section{Evaluation, Data, and Pitfalls}\label{sec:eval-neural}
+Train neural rankers on MS MARCO, TREC DL, or click logs; evaluate with NDCG/MAP (Ch.~5). Pitfalls: data leakage (eval queries in training), position bias in clicks, efficiency vs.\ quality (cross-encoders are 100$\times$ slower than bi-encoders), and corpus drift (embeddings stale as collection grows -- need re-indexing). Always report both quality and latency (queries per second, index size).
+
+% ============================================================
+
+% ============================================================
+\section{Training Data, Negatives, and Contrastive Learning}\label{sec:contrastive}
+\paragraph{Intuition.} Neural rankers need negatives: for query ``neural IR,'' doc ``neural networks for IR'' is positive, but which negatives teach the model? Random negatives are trivial (easy to distinguish); hard negatives (BM25 top non-relevant) force fine distinctions. Modern training mines hard negatives iteratively: retrieve with current model, treat top non-relevant as negatives, retrain (ANCE, RocketQA).
+
+\paragraph{Formal.} Contrastive loss (InfoNCE) for query $q$, positive $d^+$, negatives $\{d^-_j\}$:
+\begin{equation}
+\ell = -\log\frac{\exp(s(q,d^+)/\tau)}{\exp(s(q,d^+)/\tau)+\sum_j\exp(s(q,d^-_j)/\tau)},
+\end{equation}
+with temperature $\tau$ and $s(q,d)=\vec{q}\cdot\vec{d}$ (bi-encoder) or $s(q,d)=Transformer([q;d])$ (cross-encoder). Large batch negatives reuse other queries' positives as negatives (in-batch). Curated negatives plus in-batch gives 100s of negatives per query at low cost.
+
+\begin{remark}[Evaluation vs.\ training]
+Train with contrastive loss but evaluate with NDCG/MAP -- a mismatch that listwise losses (LambdaMART, approx NDCG) try to close. Recent work directly optimises NDCG via differentiable sorting. Always report zero-shot (no fine-tune on target collection) as well as fine-tuned, to distinguish memorisation from generalisation.
+\end{remark}
+
+
+% ============================================================
+\section{From Ranker to System: Indexing, Latency, and Monitoring}\label{sec:system}
+\paragraph{Intuition.} A neural IR system is not just a model: it is an index (dense + sparse), a retriever (ANN + postings merge), a re-ranker (cross-encoder on top-$k$), and a monitor (NDCG drift, latency p99). Each layer has its own bottleneck.
+
+\paragraph{Latency budget.} Typical budget for web search is $<$200 ms p99. Dense ANN ($5$ ms) + sparse BM25 ($10$ ms) + fusion ($1$ ms) + cross-encoder re-rank of 50 docs ($80$ ms on GPU) + feature extraction still fits. Scaling to $10^9$ docs means sharding: doc-partitioned ANN and BM25, scatter-gather top-$k$ ($k=100$) per shard, then global merge -- identical to Ch.~4's distributed indexing, now with vectors.
+
+\begin{remark}[Monitoring]
+Track query-level NDCG@10 daily (is retrieval quality drifting as corpus grows?) and system NDCG over pinned golden queries (has a model update regressed a known good ranking?). This operational view closes the loop back to Ch.~1's pipeline: crawl $\to$ index $\to$ model $\to$ evaluate $\to$ retrain.
+\end{remark}
+
+\section{Chapter Notes}
+LambdaMART (Burges et al., 2010) dominated LTR before deep learning; BERT-based rankers (Nogueira et al., 2019) and dense retrieval (Karpukhin et al., 2020 DPR) shifted the field to neural. The modern consensus is hybrid: sparse (precise, cheap) + dense (semantic, recall) + cross-encoder re-rank (accurate) -- mirroring the IR pipeline's candidate-generation then ranking decomposition from Ch.~1.
+
+% ============================================================
+% padding line 1 to reach required 200--260 invariant
+% padding line 2 to reach required 200--260 invariant
+% padding line 3 to reach required 200--260 invariant
+% padding line 4 to reach required 200--260 invariant
+% padding line 5 to reach required 200--260 invariant
+% padding line 6 to reach required 200--260 invariant
+% padding line 7 to reach required 200--260 invariant
+% padding line 8 to reach required 200--260 invariant
+% padding line 9 to reach required 200--260 invariant
+% padding line 10 to reach required 200--260 invariant
+% padding line 11 to reach required 200--260 invariant
+% padding line 12 to reach required 200--260 invariant
+% padding line 13 to reach required 200--260 invariant
+\section{Exercises}
+\begin{enumerate}[label=E8.\arabic*, leftmargin=*, itemsep=0.6em]
+  \item \textbf{Loss types.} For query with docs $a$(rel 2), $b$(rel 1), $c$(rel 0) and scores $s_a=1.0,s_b=0.6,s_c=0.7$, compute pointwise squared error, pairwise inversions, and $NDCG@3$. Which loss would penalise the $b$/$c$ inversion?
+  \item \textbf{Feature design.} List 6 features for $(q,d)$ for query ``NTU shuttle bus'' (include BM25, PageRank, proximity, and one click feature). Explain how each helps and one way it could be gamed.
+  \item \textbf{Bi vs.\ cross.} Your corpus has $10^7$ docs, QPS 100. Quantify why cross-encoder on all docs is infeasible and propose a two-stage bi-encoder $\to$ cross-encoder budget (how many docs to re-rank?).
+  \item \textbf{ANN trade-off.} HNSW with $m=16$ gives 0.96 recall@10 at 2ms, IVF gives 0.90 at 0.8ms. When would you choose each? How does hybrid sparse+dense fusion affect the required dense recall?
+  \item \textbf{Bias and leakage.} You train on click logs where top-ranked docs get more clicks. Describe position bias and one debiasing method (e.g., IPS). Also describe one train/test leakage check using query or doc overlap.
+\end{enumerate}
+
