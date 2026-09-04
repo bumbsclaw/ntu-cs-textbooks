@@ -27,6 +27,7 @@
 | 14 - Exhaustive MPE (phase 14) | DONE | SC4053 41p 663K + SC4242 40p 720K + SC4024 41p 685K — 3×8 ch 1636/1677/1737L 48/50/46 TikZ 0 ! 0 >15 PASS 2026-08-30 02:15 SGT deleg_4d6ab55f (muse-spark ONLY) |
 | 15 - Comprehensive QA (37/37) | DONE | 37/37 PASS 2026-09-04 SGT deleg_95ebff80 (6 slices A–F, 1461L evidence /tmp/review_slice_*.md) — 1662p 0 ! 0 pgfkeys 0 >15 0 verbatim — global 13/14 + README 25→37 sync fixed here — REVIEW-COMPREHENSIVE.md |
 | 16 - v1.2 nits + comprehensiveness + rendering | DONE | All v1.2 nits patched 2026-09-05 deleg_116ce498 (4 fix workers, coord-verified SC4013+SC4001 rebuilds exit 0) — 1673p (+11) 0 ! 0 >15 0 Token — core/MPE comprehensiveness audits (/tmp/comprehensiveness_*.md: 3 Core MAJORs) + rendering spot-check RENDER-PASS (24 PNGs vision-inspected) — REVIEW-COMPREHENSIVE.md §5 |
+| 17 - Core MAJOR gaps closed | DONE | SC2001 max-flow (ch07 259→246L, 54p) + SC2008 NAT/IPv6 (ch05 202→228L, 52p) + SC1008 file-I/O (ch07 201→224L, 44p) — deleg_4562db19, coord-verified SC2001 rebuild exit 0 — 1677p 0 ! 0 >15 — REVIEW-COMPREHENSIVE.md §6 |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |

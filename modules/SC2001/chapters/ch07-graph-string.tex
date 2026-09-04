@@ -17,6 +17,7 @@ After this chapter you will be able to:
     \item implement Dijkstra with a binary heap and prove correctness via its set invariant;
     \item run Bellman--Ford, detect negative cycles, and derive Floyd--Warshall as DP over $k$;
     \item compute the KMP prefix function $\pi$, simulate its automaton, and analyse Rabin--Karp rolling hash.
+    \item run Ford--Fulkerson on small networks, explain residual graphs, and state the max-flow min-cut theorem.
 \end{enumerate}
 
 % ============================================================
@@ -39,13 +40,9 @@ Let $G=(V,E)$ be unweighted for traversal; weights return in \S\ref{sec:shortest
 It uses a FIFO \emph{queue} $Q$: $s$ is enqueued, then repeatedly dequeued, and each undiscovered neighbour is enqueued.
 
 \begin{quote}\ttfamily\scriptsize
-\textsc{BFS}$(G,s)$\\
-1\ dist$[s]\gets0$; parent$[s]\gets\textsc{nil}$; $Q\gets[s]$; visited$\gets\{s\}$\\
-2\ \textbf{while} $Q\neq\emptyset$ \textbf{do}\\
-3\ \ \ $u\gets\textsc{Dequeue}(Q)$\\
-4\ \ \ \textbf{for} each $(u,v)\in E$ \textbf{do}\\
-5\ \ \ \ \ \ \textbf{if} $v\notin$ visited \textbf{then} visited$\cup\{v\}$;\\
-\ \ \ \ \ \ \ \ \ dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
+\textsc{BFS}$(G,s)$: dist$[s]\gets0$; $Q\gets[s]$; visited$\gets\{s\}$\\
+\textbf{while} $Q\neq\emptyset$: $u\gets\textsc{Dequeue}(Q)$\\
+\textbf{for} each $(u,v)\in E$: \textbf{if} $v\notin$ visited \textbf{then} dist$[v]\gets$dist$[u]+1$; parent$[v]\gets u$; \textsc{Enqueue}$(Q,v)$
 \end{quote}
 
 \begin{figure}[h]\centering\begin{tikzpicture}[scale=0.68,every node/.style={font=\scriptsize}]
@@ -58,20 +55,14 @@ The \emph{layering} property: $Q$ always contains vertices of at most two consec
 
 \begin{figure}[h]\centering
 \begin{tikzpicture}[every node/.style={circle,draw,thick,minimum size=7mm,font=\small},xscale=1.15,yscale=0.95]
-\node[fill=blue!18] (s) at (0,2) {$s$};
-\node[fill=green!18] (a) at (-1.6,0.6) {$a$}; \node[fill=green!18] (b) at (1.6,0.6) {$b$};
+\node[fill=blue!18] (s) at (0,2) {$s$}; \node[fill=green!18] (a) at (-1.6,0.6) {$a$}; \node[fill=green!18] (b) at (1.6,0.6) {$b$};
 \node[fill=orange!18] (c) at (-2.4,-0.9) {$c$}; \node[fill=orange!18] (d) at (0,-0.9) {$d$}; \node[fill=orange!18] (e) at (2.4,-0.9) {$e$};
 \draw[thick,->,blue!60!black] (s)--(a); \draw[thick,->,blue!60!black] (s)--(b);
 \draw[thick,->,green!55!black] (a)--(c); \draw[thick,->,green!55!black] (a)--(d); \draw[thick,->,green!55!black] (b)--(d); \draw[thick,->,green!55!black] (b)--(e);
 \draw[thick,dashed,->,orange!75!black] (c) to[bend left=18] (d); \draw[thick,dashed,->,orange!75!black] (d) to[bend left=18] (e);
-\node[draw=none,font=\scriptsize] at (0,2.65) {layer 0};
-\node[draw=none,font=\scriptsize] at (0,0.05) {layer 1 \quad layer 2 below};
+\node[draw=none,font=\scriptsize] at (0,2.65) {layer 0}; \node[draw=none,font=\scriptsize] at (0,0.05) {layer 1 \quad layer 2 below};
 \node[draw=none,font=\tiny,align=center] at (0,-1.7) {solid = BFS tree (parent); dashed = non-tree edges};
-\begin{scope}[on background layer]
-\fill[blue!6,rounded corners=3pt] (-0.7,1.6) rectangle (0.7,2.45);
-\fill[green!7,rounded corners=3pt] (-2.3,0.2) rectangle (2.3,1.05);
-\fill[orange!8,rounded corners=3pt] (-3.0,-1.35) rectangle (3.0,-0.45);
-\end{scope}
+\begin{scope}[on background layer] \fill[blue!6,rounded corners=3pt] (-0.7,1.6) rectangle (0.7,2.45); \fill[green!7,rounded corners=3pt] (-2.3,0.2) rectangle (2.3,1.05); \fill[orange!8,rounded corners=3pt] (-3.0,-1.35) rectangle (3.0,-0.45); \end{scope}
 \end{tikzpicture}
 \caption{BFS layering from $s$. Queue order visits layer~0, then layer~1 ($a,b$), then layer~2 ($c,d,e$). Each vertex is enqueued once; every edge examined once (twice if undirected): $O(n+m)$ time and $O(n)$ extra space.}
 \label{fig:bfs-tree}
@@ -87,27 +78,18 @@ Analysis: each vertex enters $Q$ once and each adjacency list is scanned once, g
 \textsc{DFS} replaces the queue by a LIFO \emph{stack} (or recursion): go deep before going wide. Iterative version pushes $s$ onto a stack; at each step pop $u$ and push its undiscovered neighbours.
 
 \begin{quote}\ttfamily\scriptsize
-\textsc{DFS-Visit}$(u)$: mark $u$ discovered;\\
-\textbf{for} each $(u,v)\in E$ \textbf{if} $v$ undiscovered\\
-\ \ \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
+\textsc{DFS-Visit}$(u)$: mark $u$ discovered; \textbf{for} each $(u,v)\in E$ \textbf{if} $v$ undiscovered \textbf{then} parent$[v]\gets u$; \textsc{DFS-Visit}$(v)$; mark $u$ finished.
 \end{quote}
 
 {\sloppy
-With discovery/finish times $d[u]$, $f[u]$, DFS classifies edges
-(undirected: tree/back; directed: tree/back/forward/cross) and yields
-the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or
-disjoint. This powers two classic applications: cycle detection (back
-edge $\Leftrightarrow$ cycle in directed graph) and topological sort
-(order vertices by decreasing $f[u]$ for a DAG). Kosaraju's two-pass DFS
-finds strongly connected components. Like BFS, DFS scans each vertex and
-edge once: $O(n+m)$ time, $O(n)$ stack/colour array.\par}
+With discovery/finish times $d[u]$, $f[u]$, DFS classifies edges (undirected: tree/back; directed: tree/back/forward/cross) and yields the \emph{parenthesis theorem}: intervals $[d[u],f[u]]$ are nested or disjoint. This powers cycle detection (back edge $\Leftrightarrow$ cycle in directed graphs), topological sort (decreasing $f[u]$ on a DAG), and Kosaraju's two-pass SCC algorithm. Like BFS: $O(n+m)$ time, $O(n)$ stack/colour array.\par}
 
 \textit{Queue vs.\ stack intuition:} BFS's queue enforces breadth (fairness across branches); DFS's stack enforces depth (commitment to one branch). Swapping the container is the only algorithmic difference, yet the resulting visit orders and edge classifications diverge sharply.
 
 % ============================================================
 \section{Shortest Paths}
 \label{sec:shortest}
-Edge weights $w:E\to\mathbb{R}$. Let $\delta(s,v)$ denote the true shortest-path weight ($-\infty$ if a negative cycle is reachable from $s$ on some $s\to v$ path, $\infty$ if $v$ is unreachable). All algorithms below use \textsc{Relax}$(u,v)$: if dist$[v]>\text{dist}[u]+w(u,v)$ then update dist$[v]$ and parent$[v]\gets u$.
+Edge weights $w:E\to\mathbb{R}$. Let $\delta(s,v)$ denote the true shortest-path weight ($-\infty$ if a negative cycle is reachable from $s$ on some $s\to v$ path, $\infty$ if $v$ is unreachable). All algorithms below use \textsc{Relax}$(u,v)$: if dist$[v]>\text{dist}[u]+w(u,v)$ then update dist$[v]$ and parent$[v]\gets u$. Flow networks reuse the same relax-and-improve idea via residual augmenting paths; see \S\ref{sec:maxflow}.
 
 \subsection{Dijkstra: Greedy with a Heap}
 \textit{Assumption:} $w(e)\ge 0$ for all $e$. Dijkstra grows a set $S$ of settled vertices whose final distances are known, repeatedly extracting the unsettled vertex with minimum tentative distance.
@@ -190,9 +172,7 @@ Slide $P$ over each alignment $s=0\ldots n-m$ and compare $P[1\ldots m]$ against
 Let $\pi[q]=\max\{k<q: P[1\ldots k]\text{ is suffix of }P[1\ldots q]\}$ for $1\le q\le m$ ($\pi[1]=0$); equivalently $\pi[q]$ is the longest proper border of the prefix $P[1\ldots q]$. Computed in $O(m)$ by amortised fallback:
 
 \begin{quote}\ttfamily\scriptsize
-$\pi[1]\gets0;\ k\gets0$; \textbf{for} $q\gets2$ \textbf{to} $m$ \textbf{do}\\
-\ \ \textbf{while} $k>0\land P[q]\neq P[k+1]$ \textbf{do} $k\gets\pi[k]$;\\
-\ \ \textbf{if} $P[q]=P[k+1]$ \textbf{then} $k\gets k+1$; $\pi[q]\gets k$
+$\pi[1]\gets0;\ k\gets0$; \textbf{for} $q\gets2$ \textbf{to} $m$: \textbf{while} $k>0\land P[q]\neq P[k+1]$ do $k\gets\pi[k]$; \textbf{if} $P[q]=P[k+1]$ then $k\gets k+1$; $\pi[q]\gets k$
 \end{quote}
 
 Matching scans $T$ once, maintaining $q$ = length of longest prefix of $P$ that is a suffix of $T[1\ldots i]$; on mismatch fall back $q\gets\pi[q]$. Total $O(n+m)$ time, $O(m)$ extra space; each character of $T$ is examined at most twice.
@@ -201,23 +181,11 @@ The automaton view: state $q$ means ``first $q$ characters of $P$ just matched.'
 
 \begin{figure}[h]\centering
 \begin{tikzpicture}[->,>=Stealth,shorten >=1pt,auto,node distance=1.9cm,semithick]
-\tikzstyle{state}=[circle,draw,thick,minimum size=7mm,font=\small]
-\tikzstyle{spine}=[->,>=Stealth,thick,blue!70!black]
-\tikzstyle{fail}=[->,>=Stealth,thick,dashed,red!60!black]
-\node[state,initial,initial text={},fill=blue!12] (0) {$0$};
-\node[state,fill=blue!8] (1) [right of=0] {$1$};
-\node[state,fill=blue!8] (2) [right of=1] {$2$};
-\node[state,fill=blue!8] (3) [right of=2] {$3$};
-\node[state,accepting,fill=green!15] (4) [right of=3] {$4$};
-\path[spine] (0) edge[bend left=10] node[font=\scriptsize,above] {a} (1)
-      (1) edge[bend left=10] node[font=\scriptsize,above] {b} (2)
-      (2) edge[bend left=10] node[font=\scriptsize,above] {a} (3)
-      (3) edge[bend left=10] node[font=\scriptsize,above] {b} (4);
+\tikzstyle{state}=[circle,draw,thick,minimum size=7mm,font=\small] \tikzstyle{spine}=[->,>=Stealth,thick,blue!70!black] \tikzstyle{fail}=[->,>=Stealth,thick,dashed,red!60!black]
+\node[state,initial,initial text={},fill=blue!12] (0) {$0$}; \node[state,fill=blue!8] (1) [right of=0] {$1$}; \node[state,fill=blue!8] (2) [right of=1] {$2$}; \node[state,fill=blue!8] (3) [right of=2] {$3$}; \node[state,accepting,fill=green!15] (4) [right of=3] {$4$};
+\path[spine] (0) edge[bend left=10] node[font=\scriptsize,above] {a} (1) (1) edge[bend left=10] node[font=\scriptsize,above] {b} (2) (2) edge[bend left=10] node[font=\scriptsize,above] {a} (3) (3) edge[bend left=10] node[font=\scriptsize,above] {b} (4);
 \path[spine] (1) edge[loop above] node[font=\scriptsize] {a} (1);
-\path[fail] (2) edge[bend left=30] node[font=\scriptsize,below] {a} (1)
-      (3) edge[bend left=30] node[font=\scriptsize,below] {b} (2)
-      (4) edge[bend left=38] node[font=\scriptsize,below] {b} (2)
-      (4) edge[bend left=20] node[font=\scriptsize,above] {a} (3);
+\path[fail] (2) edge[bend left=30] node[font=\scriptsize,below] {a} (1) (3) edge[bend left=30] node[font=\scriptsize,below] {b} (2) (4) edge[bend left=38] node[font=\scriptsize,below] {b} (2) (4) edge[bend left=20] node[font=\scriptsize,above] {a} (3);
 \end{tikzpicture}
 \caption{KMP automaton for $P=\mathtt{abab}$ ($m=4$). Solid spine spells $P$; failure links (merged into $\delta$) redirect on mismatch via $\pi$: $\pi=[0,0,1,2]$. Scanning $T$ never moves backwards, giving $O(n+m)$ time.}
 \label{fig:kmp-automaton}
@@ -235,14 +203,31 @@ so each shift is $O(1)$ after $O(m)$ preprocessing. If $h(s)\neq p$ there is no 
 Let $b=10$, $q=13$ (small for illustration), $T=\mathtt{31415}$, $m=2$. Then $h(0)=\mathtt{31}\bmod13=5$, $h(1)=(10\cdot(5-3\cdot10)+\mathtt{4})\bmod13=1$ which equals $\mathtt{14}\bmod13=1$; $p=\mathtt{15}\bmod13=2$, so neither window matches $P=\mathtt{15}$. With real $b=256$, $q\approx10^9+7$ and Horner evaluation, the same recurrence applies to strings over bytes.
 \end{example}
 
-Double hashing or a large $q\gg n$ makes collisions negligible in expectation.
-Rabin--Karp extends naturally to 2-D pattern search and multi-pattern search
-with one text scan. In practice it shines when many patterns are sought in one
-long text, e.g., plagiarism detection over a corpus.
+Double hashing (or $q\gg n$) makes collisions negligible; one text scan then serves 2-D and multi-pattern search such as plagiarism detection over a corpus.
+
+% ============================================================
+\section{Maximum Flow: Ford--Fulkerson and Min Cut}
+\label{sec:maxflow}
+\paragraph{Pipes and water.} Picture each directed edge as a pipe stamped with its capacity: how much water per second it can carry from a source $s$ to a sink $t$. A \emph{flow} assigns a rate to every pipe so that no pipe bursts (flow $\le$ capacity) and every junction except $s$ and $t$ passes on exactly what it receives (inflow $=$ outflow). The goal is to push as much water as possible from $s$ to $t$.
+\begin{definition}[Flow network and flow] A flow network is a directed graph with capacities $c(u,v)\ge 0$ ($0$ if no edge), source $s$ and sink $t$. A flow $f$ obeys $0\le f(u,v)\le c(u,v)$ and conservation $\sum_u f(u,v)=\sum_w f(v,w)$ for all $v\notin\{s,t\}$; its value is $|f|=\sum_v f(s,v)$.
+\end{definition}
+\paragraph{Residual graph: the room that is left.} Given $f$, the \emph{residual capacity} $c_f(u,v)=c(u,v)-f(u,v)+f(v,u)$ says how much more can still go $u\to v$: spare room forward, plus already-sent flow that could be cancelled backwards. Edges with $c_f>0$ form the residual graph $G_f$; any $s\to t$ path $P$ in $G_f$ (an \emph{augmenting path}) carries bottleneck $\Delta=\min_{(u,v)\in P}c_f(u,v)$ extra units.
+\begin{quote}\ttfamily\scriptsize
+\textsc{Ford--Fulkerson}: $f\gets0$; \textbf{while} an $s\to t$ path $P$ exists in $G_f$ \textbf{do} augment $f$ along $P$ by bottleneck $\Delta=\min c_f$.
+\end{quote}
+\begin{figure}[h]\centering\begin{tikzpicture}[scale=0.72,every node/.style={font=\scriptsize}]
+\node[circle,draw,thick,fill=blue!18,minimum size=7mm] (s) at (0,0) {$s$}; \node[circle,draw,thick,fill=green!16,minimum size=7mm] (a) at (2,0.9) {$a$}; \node[circle,draw,thick,fill=green!16,minimum size=7mm] (b) at (2,-0.9) {$b$}; \node[circle,draw,thick,fill=orange!20,minimum size=7mm] (t) at (4.4,0) {$t$};
+\draw[thick,->,blue!60!black] (s)--(a) node[midway,above,font=\tiny] {3/4}; \draw[thick,->,blue!60!black] (s)--(b) node[midway,below,font=\tiny] {2/2}; \draw[thick,->,green!55!black] (a)--(t) node[midway,above,font=\tiny] {2/2}; \draw[thick,->,green!55!black] (b)--(t) node[midway,below,font=\tiny] {3/4}; \draw[thick,->,red!60!black,dashed] (a)--(b) node[midway,right,font=\tiny] {1/1};
+\node[font=\tiny,gray,align=center] at (2.2,-1.8) {Labels flow/capacity. Dashed $a\to b$ saturated; residual back-edge $b\to a$ (capacity~1) lets later paths reroute. Cut $\{s,a\}{/}\{b,t\}$ has capacity $2+2+1=5=|f|$.};
+\end{tikzpicture}\caption{A flow of value~5 with residual back-edge; the dashed cut certifies optimality via max-flow min-cut.}\label{fig:maxflow}\end{figure}
+\begin{example}[Three augmentations] Capacities as in Fig.~\ref{fig:maxflow}. Augment $s\to a\to t$ by $2$ (bottleneck $a\to t$), then $s\to b\to t$ by $2$, then $s\to a\to b\to t$ by $1$ through $a\to b$. Now the residual reach of $s$ is $\{s,a\}$ only, so no augmenting path remains and $|f|=2+2+1=5$ is maximum.
+\end{example}
+\begin{theorem}[Max-flow min-cut] For every network, the maximum flow value equals the minimum capacity $\sum_{u\in S,v\notin S}c(u,v)$ over all $s$--$t$ cuts $(S,V\setminus S)$. Ford--Fulkerson terminates with a maximum flow for integer capacities in $O(m\cdot|f^*|)$ time; always augmenting along a shortest path (Edmonds--Karp BFS) costs $O(nm^2)$ and works for irrational capacities too.
+\end{theorem}
 
 % ============================================================
 \section{Chapter Notes}
-BFS (Moore, 1959) and DFS (Tarjan, 1972) in modern form underpin all graph algorithms. Dijkstra (1959) with binary heaps is the practical default; Bellman--Ford (1958) and Floyd--Warshall (1962) handle negative weights. KMP (Knuth--Morris--Pratt, 1977) and Rabin--Karp (1987) remain textbook representatives of automaton vs.\ hashing. CLRS Chs.~20--24, 32 covers all topics in depth.
+BFS (Moore, 1959) and DFS (Tarjan, 1972) in modern form underpin all graph algorithms. Dijkstra (1959) with binary heaps is the practical default; Bellman--Ford (1958) and Floyd--Warshall (1962) handle negative weights. KMP (Knuth--Morris--Pratt, 1977) and Rabin--Karp (1987) remain textbook representatives of automaton vs.\ hashing; maximum flows and minimum cuts are CLRS Ch.~26. CLRS Chs.~20--24, 32 covers all topics in depth.
 
 % ============================================================
 \section{Exercises}
@@ -255,5 +240,7 @@ BFS (Moore, 1959) and DFS (Tarjan, 1972) in modern form underpin all graph algor
     \item \textbf{KMP prefix function.} (a) Compute $\pi$ for $P=\mathtt{aabaaab}$ step by step. (b) Draw the KMP automaton states $0\ldots7$ and label failure ($\pi$) links. (c) Trace KMP on $T=\mathtt{aabaabaaab}$ and count character comparisons versus na\"ive scan. Prove $O(n+m)$ is tight by giving a family attaining $\Theta(n+m)$ comparisons.
 
     \item \textbf{Rolling hash design.} Let $b=256$, $q=101$. (a) Compute the Rabin--Karp hash of $P=\mathtt{abc}$ and the rolling update to the next window in $T=\mathtt{abcd}$. (b) Exhibit $P\neq Q$ over $\{a,b\}$ colliding modulo $101$, and explain why a second modulus $q_2$ reduces collision probability to $\approx 1/(q\,q_2)$. (c) Argue expected time is $O(n+m)$ when $q\ge m^2$ and verification is $O(m)$, assuming uniform hashing.
+
+    \item \textbf{Max flow and min cut.} (a) Starting from zero flow on Fig.~\ref{fig:maxflow}, list the residual graph $G_f$ and bottleneck $\Delta$ for each of the three augmentations in the worked example. (b) Verify cut $\{s,a\}{/}\{b,t\}$ has capacity~5 and prove no flow can exceed any $s$--$t$ cut capacity. (c) Give integer capacities where a poor augmenting-path choice needs $\ge 10$ augmentations while Edmonds--Karp (BFS paths) finishes in $2$; state both runtimes.
 \end{enumerate}
 % End of Chapter 7

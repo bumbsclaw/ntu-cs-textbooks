@@ -187,6 +187,29 @@ Memory & contiguous & tree nodes & hash buckets\\
 \end{center}
 These guarantees drive container choice. \texttt{vector} wins for iteration (cache locality); \texttt{map} wins when order matters; \texttt{unordered\_map} wins for raw lookup speed.
 
+\section{C File I/O: fopen, Modes, and fclose}
+\label{sec:c-file-io}
+C++ file streams sit atop C's \texttt{FILE*} API, which you still meet in legacy code and embedded toolchains. A file is opened with \texttt{fopen(path, mode)}, used via formatted (\texttt{fprintf}/\texttt{fscanf}), character (\texttt{fgetc}/\texttt{fputc}), or binary-block (\texttt{fread}/\texttt{fwrite}) calls, and must be closed with \texttt{fclose}.
+Common modes: \texttt{"r"} read text, \texttt{"w"} write (truncate), \texttt{"a"} append, plus \texttt{b} for binary (\texttt{"rb"}, \texttt{"wb"}) and \texttt{+} for update (\texttt{"r+"}). Text mode may translate newlines; binary mode transfers bytes verbatim, so pair \texttt{"wb"}/\texttt{"rb"} with \texttt{fread}/\texttt{fwrite}. \texttt{fopen} returns \texttt{NULL} on failure --- always check and consult \texttt{errno} via \texttt{perror}; every successful open needs exactly one \texttt{fclose}, which flushes buffers (skipping it risks data loss).
+
+\begin{lstlisting}[language=C]
+#include <stdio.h>
+int main(void) {
+    FILE *f = fopen("scores.txt", "w");       /* "w": create/truncate text */
+    if (!f) { perror("fopen write"); return 1; }
+    fprintf(f, "Asha %d\nBo %d\n", 95, 82);   /* formatted write */
+    if (fclose(f) != 0) { perror("fclose"); return 1; }
+    char name[32]; int s, n = 0, total = 0;   /* read back + average */
+    f = fopen("scores.txt", "r");
+    if (!f) { perror("fopen read"); return 1; }
+    while (fscanf(f, "%31s %d", name, &s) == 2) { total += s; n++; }
+    fclose(f);
+    if (n) printf("avg = %.1f\n", (double)total / n);
+    return 0;
+}
+\end{lstlisting}
+Binary twin: \texttt{fwrite(buf, sizeof *buf, k, f)} writes $k$ elements and \texttt{fread} reads them back, each returning the count actually transferred --- a short count signals EOF or error (distinguish with \texttt{feof}/\texttt{ferror}). In new code prefer C++ \texttt{fstream}, which closes itself (RAII, Ch.~8); use this section to read any \texttt{FILE*}-based API you inherit.
+
 \section{Chapter Notes}
 Josuttis \emph{The C++ Standard Library} is the STL handbook. Complexity details are in the standard and at \texttt{cppreference.com}. Do not store raw owning pointers in containers; use values or smart pointers (Ch.~8).
 

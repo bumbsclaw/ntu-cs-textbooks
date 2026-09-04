@@ -131,3 +131,17 @@ All v1.2 nits patched, coordinator-verified (`pdflatex ×2` rebuilt SC4013 + SC4
 - Core (`/tmp/comprehensiveness_core.md`): 3 GAPS-MAJOR — SC2001 no max-flow/Ford-Fulkerson unit; SC2008 no NAT/NAPT + skeletal IPv6; SC1008 no C file-I/O unit. 11 GAPS-MINOR (Union-Find never taught, amortized analysis, single worked NP-reduction, MGFs/ANOVA, JDBC/GRANT, structural induction/colouring/Bayes, SVD preview-only, readers-writers/IPC, COCOMO). Only SC3099 COMPLETE.
 - MPE (`/tmp/comprehensiveness_mpe.md`): SC4050 MPI + SC3050 cache CONFIRMED Major (since fixed above); SC4013 SSRF confirmed fixed (auditor observed post-fix file). Top NEW gaps: SC3000 Bayes nets + MDPs/RL + local search, SC3020 SVMs + regression, SC4001 generative models (VAE/GAN/diffusion), SC4002 syntactic parsing, SC4012 TOCTOU/races, SC4051 DHT/consistent-hashing, SC4021 QLM/Dirichlet.
 - **Rendering spot-check** (`/tmp/rendering_check.md`): 12 modules × 2 pages → PNG (`pdftoppm -r 80`) + 24 real `vision_analyze` inspections — **RENDER-PASS**: 24/24 text legible, math typeset (no raw `$`/tofu), 13/13 TikZ colored+labeled, 8/8 listings numbered+highlighted. 0 Blocking, 0 Major, 3 Minor cosmetic (SC2002 running-head/folio abut pp26–27; SC2203 p10 listing frame alignment; SC4024 p24 Fig 5.1 kerning `graphEdge`). Sampling caveat: 24pp ≈ 4.4% of the 12 modules.
+
+---
+
+## 6. Phase 17 — Core MAJOR gaps closed (2026-09-05, `deleg_4562db19`, 3 workers)
+
+All 3 Core MAJORs from the comprehensiveness audit patched, coordinator-verified (SC2001 rebuilt independently: exit 0, 0 `!`, 54p; SC2008/SC1008 logs 0 `!`, 52p/44p). Total **1677p** (+4).
+
+| Gap | Host | Change | Build |
+|-----|------|--------|-------|
+| SC2001 no max-flow | `ch07-graph-string.tex` (`sec:maxflow`) | pipes intuition → flow-net def → residual + Ford-Fulkerson → color TikZ (`fig:maxflow`, cut {s,a}/{b,t}=5) → MFMC theorem + EK note; 259→246L (densified formatting, no content loss) + LO item + E7.5 | 54p 0!/0>15 |
+| SC2008 no NAT/skeletal IPv6 | `ch05-network-ip.tex` (`sec:nat`, `sec:ipv6`) | RFC 1918 + NAPT table mechanics + color TikZ (`fig:nat`) + worked IPs/ports; IPv6 format/scopes/SLAAC/header/transition; 202→228L | 52p 0!/0>15 |
+| SC1008 no file-I/O | `ch07-stl.tex` (`sec:c-file-io`) | fopen modes, text/binary, perror/fclose, C listing + fread/binary note; 201→224L | 44p 0!/0>15 |
+
+Remaining known work (non-blocking): 11 Core minors + MPE gaps (SC3000 Bayes/RL/search, SC3020 SVM/regression, SC4001 generative, SC4002 parsing, SC4012 TOCTOU, SC4051 DHT, SC4021 QLM) + 3 cosmetic rendering minors.
