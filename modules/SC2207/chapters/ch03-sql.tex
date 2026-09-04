@@ -209,6 +209,22 @@ DROP VIEW CourseStats;
 Views provide logical independence and security (expose only needed columns). Materialized views (Ch.~6) store the result physically for speed. Updatability: a view is updatable if its definition is a single-table \texttt{SELECT} without aggregation, \texttt{DISTINCT}, \texttt{GROUP BY}, or joins; otherwise \texttt{INSTEAD OF} triggers are needed. \texttt{WITH CHECK OPTION} rejects inserts that would disappear from the view.
 
 % ============================================================
+\section{Programmatic Access (JDBC) and Authorization}
+\label{sec:jdbc-grant}
+
+Applications rarely type SQL by hand: \emph{JDBC} (Java Database Connectivity) lets a program open a connection, send SQL, read results, and close---always close (prefer try-with-resources) or connections leak. Access control is orthogonal: \texttt{GRANT} gives a privilege on an object to a user or role, \texttt{REVOKE} takes it back. Rule of least privilege: grant only what the app needs.
+
+\begin{lstlisting}[language=Java, caption={JDBC query plus GRANT via Java}, label={lst:jdbc}]
+Connection c = DriverManager.getConnection("jdbc:postgresql://db/ntu", "app", "secret");
+try (Statement s = c.createStatement()) {
+    s.executeUpdate("GRANT SELECT ON Student TO app_reader");   // authorize
+    ResultSet rs = s.executeQuery("SELECT name FROM Student WHERE major='CS'");
+    while (rs.next()) System.out.println(rs.getString("name"));
+} finally { c.close(); }                                        // always release
+\end{lstlisting}
+\texttt{GRANT SELECT ON Student TO app\_reader} lets that role read one table only; \texttt{REVOKE SELECT ON Student FROM app\_reader} undoes it. Views (Sec.~\ref{sec:views}) plus grants give column-level security: expose \texttt{CS\_Students} instead of \texttt{Student}.
+
+% ============================================================
 \section{Chapter Notes}
 
 SQL standardised as SQL-86, now SQL:2023; every DBMS adds extensions. We used PostgreSQL-flavoured syntax; Oracle, MySQL, and SQL Server differ in types and outer-join syntax but share the core. Bag semantics (and its corner cases with \texttt{NULL}) is the price of performance.

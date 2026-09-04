@@ -184,6 +184,55 @@ print("XOR recovery:", recovered_a == a)
 \end{lstlisting}
 
 % ============================================================
+\section{DHTs: Storage Without a Master}
+\label{sec:dht}
+Intuition first: HDFS and S3 both lean on a central metadata authority --
+the NameNode, the bucket index. A \emph{distributed hash table} (DHT)
+removes that authority: thousands of peers share one flat key space, and
+any peer can find the owner of any key without asking a master. The trick
+has two parts: a ring, and a shortcut.
+
+\paragraph{The hash ring.} Hash every node ID and every key into the same
+$m$-bit circle ($0$ to $2^m-1$). Walk clockwise from a key $k$; the first
+node you meet -- its \emph{successor} -- stores $k$. When node N4 joins
+between N3 and N1, only keys in arc $(N3,N4]$ move (to N4); every other key
+stays put. When a node departs, its arc falls back to its successor. So
+churn migrates $K/n$ keys on average, versus $K/2$ under naive
+$h(k)\bmod n$ remapping -- this minimal disruption is \emph{consistent
+hashing} (Karger et al., 1997).
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.82,every node/.style={font=\scriptsize}]
+  \draw[thick,blue!60!black] (0,0) circle (2.0);
+  \node[draw,circle,fill=blue!18,minimum size=0.75cm,align=center] (n1) at (90:2.0) {N1};
+  \node[draw,circle,fill=green!18,minimum size=0.75cm,align=center] (n2) at (210:2.0) {N2};
+  \node[draw,circle,fill=orange!18,minimum size=0.75cm,align=center] (n3) at (330:2.0) {N3};
+  \fill[red!70!black] (30:2.0) circle (2.2pt) node[above right,font=\tiny] {$k_a$};
+  \fill[violet!70!black] (270:2.0) circle (2.2pt) node[below,font=\tiny] {$k_b$};
+  \draw[->,thick,red!60!black] (26:1.7) arc (26:-22:1.7) node[midway,right,font=\tiny] {succ};
+  \draw[->,thick,violet!60!black] (266:1.7) arc (266:214:1.7) node[midway,left,font=\tiny] {succ};
+  \node[font=\tiny,fill=yellow!12,rounded corners=2pt,inner sep=2pt,align=center] at (0,-0.1) {key stored at first node clockwise};
+\end{tikzpicture}
+\caption{Consistent-hash ring. Each key maps clockwise to its successor: $k_a\to$~N3, $k_b\to$~N2. A joining node takes only its own arc; the rest is untouched.}
+\label{fig:hash-ring}
+\end{figure}
+
+\paragraph{Chord lookup sketch.} Naively, a lookup walks the ring
+successor-by-successor: $O(n)$ hops. Chord (Stoica et al., 2001) gives each
+node a \emph{finger table} of $m$ entries: finger $i$ points to
+$\mathrm{succ}(id+2^{i-1})$, so each hop at least halves the remaining
+clockwise distance. Worked lookup: $m=3$ ring ($0$--$7$), nodes at $0,2,5$;
+key $k=6$ asked from node $0$. Node $0$'s best finger short of $6$ is $5$;
+node $5$'s successor is $0$ (wrap), which owns arc $(5,0]\ni 6$. Answer:
+node $0$ in $2$ hops, and $O(\log n)$ in general. Kademlia (2002) keeps the
+same idea but measures closeness by XOR distance and queries the $k$
+closest peers in parallel for churn resilience.
+
+DHTs trade strong consistency for decentralisation: joins, departs and
+lookups are all local protocols, which is why BitTorrent (Mainline DHT),
+IPFS and Dynamo-style stores build on them.
+
+% ============================================================
 \section{Exercises}
 \label{sec:ch06-exercises}
 \begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.6em]

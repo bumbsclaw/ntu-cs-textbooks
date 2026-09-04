@@ -215,28 +215,12 @@ $(x+y)^n=\sum_{k=0}^{n}\binom{n}{k}x^{n-k}y^k$. Combinatorial: choose $k$ factor
 Monotone paths from $(0,0)$ to $(m,n)$ moving right/up: $\binom{m+n}{m}$ (choose which steps are right).
 \end{example}
 
-Inclusion--exclusion generalises the Venn lens correction to any number of overlapping sets.
-Pigeonhole is the Dirichlet principle: more items than boxes guarantees a collision, quantified by $\lceil n/m\rceil$.
-Complement counting often simplifies at least one or at least two problems dramatically.
-Binomial theorem expands powers by counting how many factors contribute each variable.
-Lattice path counting shows combinatorics is geometry: every path is a binary string of rights and ups.
-Product counts sequential choices, sum counts alternative choices, together they build most counts.
-Tree diagrams make product and sum visible: branching width multiplies, separate trees add.
-Permutations count orderings, combinations count selections, the $r!$ factor is the bridge between them.
-Pascal's recurrence builds binomial coefficients from smaller ones, mirroring combinatorial reasoning.
-Stars and bars turns integer compositions into placements of separators among stars.
-Inclusion--exclusion generalises the Venn lens correction to any number of overlapping sets.
-Pigeonhole is the Dirichlet principle: more items than boxes guarantees a collision, quantified by $\lceil n/m\rceil$.
-Complement counting often simplifies at least one or at least two problems dramatically.
-Binomial theorem expands powers by counting how many factors contribute each variable.
-Lattice path counting shows combinatorics is geometry: every path is a binary string of rights and ups.
-Product counts sequential choices, sum counts alternative choices, together they build most counts.
-Tree diagrams make product and sum visible: branching width multiplies, separate trees add.
-Permutations count orderings, combinations count selections, the $r!$ factor is the bridge between them.
-Pascal's recurrence builds binomial coefficients from smaller ones, mirroring combinatorial reasoning.
-Stars and bars turns integer compositions into placements of separators among stars.
-Inclusion--exclusion generalises the Venn lens correction to any number of overlapping sets.
-Pigeonhole is the Dirichlet principle: more items than boxes guarantees a collision, quantified by $\lceil n/m\rceil$.
+\subsection{Conditional Probability and Bayes' Theorem}
+\label{sec:bayes}
+Counting becomes probability on dividing by the sample size: $P(A)=|A|/|\Omega|$. \emph{Conditional} probability zooms into the $B$-world: $P(A\mid B)=|A\cap B|/|B|=P(A\cap B)/P(B)$. Flipping the condition is \emph{Bayes' theorem}: $P(H\mid E)=P(E\mid H)P(H)/P(E)$---update belief in hypothesis $H$ after seeing evidence $E$.
+\begin{example}[Base-rate check]
+$1\%$ of mail is spam ($P(S)=0.01$). A filter flags $95\%$ of spam but also $5\%$ of legit mail. Given a flag $F$: $P(S\mid F)=0.95\cdot0.01/(0.95\cdot0.01+0.05\cdot0.99)=0.0095/0.059\approx0.16$. Most flags are false alarms---the base rate dominates. Always expand $P(E)$ by total probability first.
+\end{example}
 
 \section{Worked Example: Two Ways to Count}
 Count the number of binary strings of length $n$ with exactly $k$ ones: $\binom{n}{k}$ (choose positions for ones). Now count the same set by complement: strings with $\ge k$ ones = total $2^n$ minus strings with $<k$ ones. For $n=5,k=3$, $\binom{5}{3}=10$, and $\sum_{i=0}^{2}\binom{5}{i}=1+5+10=16$, so $\ge3$ has $32-16=16$; indeed $\binom{5}{3}+\binom{5}{4}+\binom{5}{5}=10+5+1=16$.

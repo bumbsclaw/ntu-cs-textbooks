@@ -1,6 +1,6 @@
 # NTU BSc Computer Science — Complete Textbook Series (0→100)
 
-> **37 textbooks · 1677 pages · 135 AU verified · 0→100 ground-up · color TikZ + highlighted code · small-screen optimized · exhaustive MPE catalogue**
+> **37 textbooks · 1688 pages · 135 AU verified · 0→100 ground-up · color TikZ + highlighted code · small-screen optimized · exhaustive MPE catalogue**
 >
 > **Repo:** `bumbsclaw/ntu-cs-textbooks` — all PDF LaTeX, `pdflatex×2` verified 0 ! 0 >15.
 > Tags: `v1.0` (25/25, 1128p) · `v1.1-exhaustive` (37/37, 1662p). Comprehensive QA: `REVIEW-COMPREHENSIVE.md` (37/37 PASS 2026-09-04).
@@ -19,32 +19,32 @@
 | SC1006 | Computer Organisation & Architecture | 3 | 71 | 1893 | 43 | PASS |
 | SC1007 | Data Structures & Algorithms | 3 | 37 | 1650 | 24 | PASS |
 | SC1008 | C/C++ Programming | 3 | 44 | 1704 | 24 | PASS |
-| MH1812 | Discrete Mathematics | 3 | 45 | 2078 | 24 | PASS |
-| SC2000 | Probability & Statistics | 3 | 40 | 1673 | 20 | PASS |
-| SC2001 | Algorithm Design & Analysis | 3 | 54 | 2070 | 44 | PASS v3 |
+| MH1812 | Discrete Mathematics | 3 | 44 | 2078 | 24 | PASS |
+| SC2000 | Probability & Statistics | 3 | 41 | 1673 | 20 | PASS |
+| SC2001 | Algorithm Design & Analysis | 3 | 55 | 2070 | 44 | PASS v3 |
 | SC2002 | Object-Oriented Design & Programming | 3 | 44 | 1654 | 28 | PASS |
 | SC2005 | Operating Systems | 3 | 36 | 1629 | 24 | PASS |
 | SC2006 | Software Engineering | 3 | 48 | 1616 | 26 | PASS |
 | SC2203 | Automata, Computability & Complexity | 3 | 42 | 1620 | 25 | PASS |
 | SC2008 | Computer Network | 3 | 52 | 1665 | 26 | PASS |
-| SC2207 | Introduction to Databases | 3 | 45 | 1641 | 24 | PASS |
+| SC2207 | Introduction to Databases | 3 | 46 | 1641 | 24 | PASS |
 | SC3099 | Capstone Project | 4 | 46 | 1710 | 24 | PASS |
-| SC3000 | Artificial Intelligence | 3 | 46 | 1762 | 20 | PASS |
+| SC3000 | Artificial Intelligence | 3 | 48 | 1762 | 20 | PASS |
 | SC3010 | Computer Security | 3 | 51 | 1673 | 24 | PASS |
-| SC3020 | Data Analytics & Mining | 3 | 51 | 1746 | 23 | PASS |
+| SC3020 | Data Analytics & Mining | 3 | 53 | 1746 | 23 | PASS |
 | SC3050 | Advanced Computer Architecture | 3 | 51 | 1647 | 24 | PASS |
 | SC3270 | Reasoning About Programs | 3 | 44 | 1607 | 24 | PASS |
-| SC4001 | Neural Networks & Deep Learning | 3 | 52 | 1621 | 22 | PASS |
-| SC4002 | Natural Language Processing | 3 | 48 | 1964 | 24 | PASS |
-| SC4012 | Software Security | 3 | 46 | 1649 | 26 | PASS |
+| SC4001 | Neural Networks & Deep Learning | 3 | 53 | 1621 | 22 | PASS |
+| SC4002 | Natural Language Processing | 3 | 49 | 1964 | 24 | PASS |
+| SC4012 | Software Security | 3 | 47 | 1649 | 26 | PASS |
 | SC4013 | Application Security | 3 | 50 | 1624 | 24 | PASS |
-| SC4021 | Information Retrieval | 3 | 45 | 1668 | 24 | PASS |
+| SC4021 | Information Retrieval | 3 | 46 | 1668 | 24 | PASS |
 | SC4022 | Network Science | 3 | 42 | 1688 | 24 | PASS |
 | SC4023 | AI for Software Engineering | 3 | 49 | 1623 | 20 | PASS |
 | SC4024 | Data Visualisation | 3 | 41 | 1737 | 23 | PASS |
 | SC4040 | Advanced Topics in Algorithms | 3 | 45 | 1725 | 25 | PASS |
 | SC4050 | Parallel Computing | 3 | 42 | 1631 | 28 | PASS |
-| SC4051 | Distributed Systems | 3 | 45 | 1707 | 25 | PASS |
+| SC4051 | Distributed Systems | 3 | 46 | 1707 | 25 | PASS |
 | SC4053 | Blockchain Technology | 3 | 41 | 1636 | 24 | PASS |
 | SC4055 | Introduction to Quantum Computing | 3 | 42 | 1633 | 26 | PASS |
 | SC4063 | Network Security | 3 | 45 | 1707 | 25 | PASS |
@@ -52,7 +52,7 @@
 | SC4242 | Compiler Techniques | 3 | 40 | 1677 | 25 | PASS |
 | BDE | BDE & College/University Core Guide | 20 | 32 | 1063 | 14 | PASS |
 
-**Total: 37 modules · 1677 pages · ~25M PDFs · all 0 ! 0 Overfull>15 0 pgfkeys**
+**Total: 37 modules · 1688 pages · ~25M PDFs · all 0 ! 0 Overfull>15 0 pgfkeys**
 
 ## Build Invariants (all PASS)
 - **0→100:** From zero (no bachelor's assumed), intuition → picture → formal, ground-up

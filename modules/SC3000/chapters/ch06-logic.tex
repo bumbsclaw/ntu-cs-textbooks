@@ -189,6 +189,32 @@ print(unify("?x", ["f","?x"]))  # None (occur-check)
 
 \textit{FOL resolution strategy:} convert $KB\land\lnot\alpha$ to CNF (Skolemise $\exists$ to fresh functions), then repeatedly resolve complementary literals with MGU, standardising apart, until $\Box$ or saturation. It is refutation-complete for FOL; general entailment is only semi-decidable.
 
+\section{Reasoning under Uncertainty: Bayesian Networks}
+Logic is all-or-nothing, but sensors are noisy: a stench suggests, not proves, a wumpus.
+A \emph{Bayesian network} is a DAG whose nodes are random variables and edges are direct
+influences. Each node stores $P(X \mid \text{parents}(X))$; the joint factorises as
+\begin{equation}
+P(X_1,\dots,X_n) = \prod_{i=1}^{n} P(X_i \mid \text{parents}(X_i)).
+\end{equation}
+Intuition (\emph{d-separation}): a chain $A \to M \to B$ or fork $A \gets M \to B$ is blocked
+once $M$ is observed, but a collider $A \to M \gets B$ is blocked only while $M$ stays
+unobserved---observing a common effect couples its causes (``explaining away'': the alarm
+sounds, then news of an earthquake lowers the burglary belief).
+\begin{figure}[h]\centering
+\begin{tikzpicture}[font=\scriptsize,
+  bn/.style={draw, thick, rounded corners, align=center, minimum width=1.7cm, fill=blue!14, draw=blue!55!black}]
+\node[bn, fill=orange!20] (b) at (0,0) {Burglary}; \node[bn, fill=orange!20] (e) at (3.6,0) {Quake};
+\node[bn, fill=green!18] (a) at (1.8,-1.4) {Alarm};
+\node[bn, fill=violet!14] (j) at (0,-2.8) {JohnCalls}; \node[bn, fill=violet!14] (m) at (3.6,-2.8) {MaryCalls};
+\draw[->, thick, blue!60!black] (b) -- (a); \draw[->, thick, blue!60!black] (e) -- (a);
+\draw[->, thick, green!55!black] (a) -- (j); \draw[->, thick, green!55!black] (a) -- (m);
+\end{tikzpicture}
+\caption{Alarm network: burglary and earthquake cause the alarm; calls depend only on it. Five small tables replace a 32-entry joint.}
+\label{fig:alarm-net}
+\end{figure}
+Worked reading: with calls $j,m$ observed, $P(B \mid j, m)$ is proportional to $P(B)$ times
+sums over quake and alarm states of $P(e)P(a \mid B,e)P(j \mid a)P(m \mid a)$---factorise
+via the DAG, then eliminate one variable at a time (variable elimination), never the joint.
 % ============================================================
 \section{Key Takeaways}
 Propositional inference reduces to CNF + resolution ($\Box$ means entailment); Horn KBs also allow linear forward/backward chaining. FOL adds expressive power via quantifiers, at the cost of undecidability --- unification + lifted resolution is the algorithmic bridge, complete for refutation but only semi-decidable in general. Design $KB$ for the task: propositional for small worlds, FOL when relations quantify over many objects.

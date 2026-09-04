@@ -190,6 +190,28 @@ w, b = perceptron_train(X_and, y_xor, epochs=10)
 print("XOR solved?", np.all(((X_and.dot(w)+b)>=0).astype(int)==y_xor))
 \end{lstlisting}
 
+\section{Sequential Decisions: MDPs and Reinforcement Learning}
+Some tasks give no labels, only rewards: a game agent wins or loses long after acting.
+A \emph{Markov decision process} has states $s$, actions $a$, transitions $P(s' \mid s,a)$,
+rewards $R(s,a)$, and discount $\gamma \in [0,1)$. A policy $\pi(a \mid s)$ picks actions;
+its value $V^{\pi}(s)$ is the expected discounted return from $s$. Bellman intuition: the
+value of $s$ is the immediate reward plus the discounted value of wherever we land,
+\begin{equation}
+V^{\star}(s) = \max_a \sum_{s'} P(s' \mid s, a)\,[R(s,a) + \gamma V^{\star}(s')].
+\end{equation}
+\emph{Q-learning} learns $Q(s,a)$ without knowing $P$: after observing $(s,a,r,s')$,
+\begin{equation}
+Q(s,a) \gets Q(s,a) + \alpha\,[r + \gamma \max_{a'} Q(s',a') - Q(s,a)].
+\end{equation}
+Worked step: $Q(s,\text{up})=1.0$, reward $r=0$, $\gamma=0.9$, $\alpha=0.5$, best next
+$\max_{a'}Q(s',a')=2.0$: target $0+0.9 \times 2.0=1.8$, so $Q \gets 1.0+0.5(1.8-1.0)=1.4$.
+\begin{lstlisting}[language=Python, caption={Tabular Q-learning update}, label={lst:qlearn}]
+def q_update(Q, s, a, r, s_next, alpha=0.5, gamma=0.9):
+    """One Q-learning step. Q[(s,a)] -> float; s_next actions from legal(s_next)."""
+    best_next = max((Q.get((s_next, ap), 0.0) for ap in legal(s_next)), default=0.0)
+    Q[(s, a)] = Q.get((s, a), 0.0) + alpha * (r + gamma * best_next - Q.get((s, a), 0.0))
+# grid step above: q_update(Q, s, 'up', 0.0, s_next) moves Q[(s,'up')] 1.0 -> 1.4
+\end{lstlisting}
 % ============================================================
 \section{Key Takeaways}
 Supervised learning picks $\hat h\in\mathcal{H}$ to minimise training error but is judged on test error; overfitting grows with $\mathcal{H}$ complexity. Decision trees greedily maximise information gain and are interpretable but need pruning. The perceptron learns a linear separator by mistake-driven updates and converges iff data are separable; stacking units with non-linearities yields deep networks trained by gradient descent.

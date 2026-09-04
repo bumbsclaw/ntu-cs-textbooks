@@ -207,6 +207,26 @@ That discipline turns a classroom pruning exercise into a maintainable retention
 Students should rerun the listing with different seeds to feel how stable the chosen alpha really is.
 
 % ============================================================
+\section{Support Vector Machines and the Kernel Trick}
+\label{sec:svm}
+\paragraph{Margin intuition.} Among all boundaries separating two classes, the SVM picks the one with the widest safety corridor: points closest to the boundary (the \emph{support vectors}) alone determine it, so moving any other point changes nothing. Formally it minimises $\frac{1}{2}\lVert\mathbf{w}\rVert^2$ subject to $y_i(\mathbf{w}^\top\mathbf{x}_i+b)\geq 1$, giving margin width $2/\lVert\mathbf{w}\rVert$. A soft margin adds slack $\xi_i\geq 0$ with penalty $C\sum_i\xi_i$, letting a few outliers cross at a price: large $C$ punishes violations harshly (narrow, fussy margin), small $C$ tolerates them (wide, forgiving margin).
+\paragraph{Kernel trick.} Rings or XOR patterns are not linearly separable, so map $\mathbf{x}\mapsto\phi(\mathbf{x})$ into a higher-dimensional space where they are --- but never compute $\phi$ explicitly, since training only needs inner products $K(\mathbf{x},\mathbf{z})=\phi(\mathbf{x})^\top\phi(\mathbf{z})$ (RBF $K=\exp(-\gamma\lVert\mathbf{x}-\mathbf{z}\rVert^2)$, polynomial $(1+\mathbf{x}^\top\mathbf{z})^p$). The kernel is thus a similarity dial: RBF declares far-apart points dissimilar, and $\gamma$ sets how fast similarity decays.
+\paragraph{Worked 2D example.} Positives $(2,2),(2,3)$, negatives $(0,0),(1,0)$: the boundary $x_2=1$ with $\mathbf{w}=(0,1)$, $b=-1$ satisfies $y_i(\mathbf{w}^\top\mathbf{x}_i+b)\geq 1$ with equality on $(2,2)$, $(0,0)$, $(1,0)$ --- three support vectors --- and margin width $2/\lVert\mathbf{w}\rVert=2$. No other point matters: deleting $(2,3)$ leaves the boundary unchanged, which is exactly why max-margin generalises.
+% ============================================================
+\section{From Labels to Numbers: Regression and Regularisation}
+\label{sec:regression}
+\paragraph{Intuition.} Regression predicts a number (price, temperature) instead of a label but reuses the same linear score $f(\mathbf{x})=\mathbf{w}^\top\mathbf{x}+b$: classification thresholds it, regression reports it. Least squares minimises $\sum_i(y_i-f(\mathbf{x}_i))^2$ with closed form $\hat{\mathbf{w}}=(X^\top X)^{-1}X^\top\mathbf{y}$.
+\paragraph{Regularisation intuition.} With many features, least squares memorises noise via huge cancelling weights. Ridge adds $\lambda\lVert\mathbf{w}\rVert_2^2$ (shrinks every weight smoothly); LASSO adds $\lambda\lVert\mathbf{w}\rVert_1$ (drives some weights exactly to zero, hence selects features). Larger $\lambda$ means a simpler, stabler fit; tune it by cross-validation (Ch.~7), exactly like tree depth or $k$.
+\paragraph{Worked fit.} Points $(0,1),(1,3),(2,7)$: least squares gives $y=3x+2/3$ (slope $3$, intercept $0.67$) with residuals $1/3,-2/3,1/3$. Centred ridge with $\lambda=1$ pulls the slope to $6/(2+1)=2$, trading a little training error for stability --- the same bias-variance trade-off behind pruning and large $k$.
+\paragraph{Practical pick.} Few thousand dense points: standardise, then try RBF-SVM against logistic regression. Sparse 10k-feature text: prefer a linear SVM (fast, strong baseline). More features than rows: reach for LASSO first, since it discards irrelevant features for you.
+\paragraph{Common pitfall.} Tuning $C$, $\gamma$, or $\lambda$ on the test set fakes the score; tune on validation folds and report test once --- Ch.~7's discipline applies to every knob in this chapter.
+\begin{lstlisting}[language=Python, caption={SVM with RBF kernel beside regularised regression.}, label={lst:svm-reg}]
+from sklearn.svm import SVC
+from sklearn.linear_model import Ridge, Lasso
+SVC(C=1.0, kernel="rbf", gamma="scale").fit(X, y)  # max margin + kernel trick
+Ridge(alpha=1.0).fit(Xr, yr)  # L2 shrinkage; Lasso(alpha=0.1) sparsifies
+\end{lstlisting}
+% ============================================================
 \section{Chapter Notes}
 Decision trees: Quinlan ID3/C4.5, Breiman CART. Naive Bayes despite independence often rivals more complex models on text. $k$NN is a lazy learner --- analysis via Cover-Hart (1967): asymptotically error $\le 2\times$ Bayes optimal. For imbalance and ROC beyond accuracy, see Ch.~7.
 

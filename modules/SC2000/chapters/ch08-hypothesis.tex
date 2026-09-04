@@ -17,6 +17,7 @@ After this chapter you will be able to:
     \item control Type~I/II errors, power, and significance level $\alpha$;
     \item apply $z$-, $t$-, and $\chi^2$ tests for means, proportions, and goodness-of-fit;
     \item derive and interpret simple linear regression (least squares, $R^2$);
+    \item run one-way ANOVA to compare three or more means via the $F$-test;
     \item diagnose $p$-hacking, multiple testing, and practical vs.\ statistical significance.
 \end{enumerate}
 
@@ -146,6 +147,13 @@ Fitted values $\hat Y_i=\hat\beta_0+\hat\beta_1x_i$, residuals $e_i=Y_i-\hat Y_i
 \end{figure}
 
 Inference: under Normal errors, $\hat\beta_1\sim\mathcal{N}(\beta_1,\sigma^2/\sum(x_i-\bar x)^2)$, giving CI and $t$-test for $H_0:\beta_1=0$ (``is there a linear relationship?'').
+
+% ============================================================
+\section{One-Way ANOVA: Comparing Several Means}
+\label{sec:anova}
+\emph{Intuition:} with $g\ge3$ groups, pairwise $t$-tests multiply false positives. ANOVA asks one question instead: is the spread \emph{between} group means large compared with the noise \emph{within} groups? Total variation splits additively: $\mathrm{SST}=\mathrm{SSB}+\mathrm{SSW}$. The $F$ statistic $F=\frac{\mathrm{SSB}/(g-1)}{\mathrm{SSW}/(n-g)}$ sits near $1$ when all means agree and grows when some group stands out; under $H_0$ (equal means, Normal noise) $F\sim F_{g-1,n-g}$.
+\begin{example}[Worked] Three schedulers, $4$ latency runs each: group means $41,44,50$, grand mean $45$. $\mathrm{SSB}=4[(41-45)^2+(44-45)^2+(50-45)^2]=4(16+1+25)=168$; within-group $\mathrm{SSW}=60$. $F=\frac{168/2}{60/9}=\frac{84}{6.67}=12.6>F_{2,9,0.95}=4.26$: reject $H_0$ --- some scheduler differs. Follow up with pairwise tests (Bonferroni) to find which one.
+\end{example}
 
 % ============================================================
 \section{Caveats: $p$-Hacking and Practical Significance}

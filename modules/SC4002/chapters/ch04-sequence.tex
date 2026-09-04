@@ -205,6 +205,25 @@ print(viterbi(emit, trans, init))  # e.g. [1, 1] = V V
 \end{lstlisting}
 
 % ============================================================
+\section{Syntactic Parsing: Who Did What to Whom}
+\label{sec:parsing}
+\paragraph{Intuition.} Tagging labels each word, but meaning lives in structure: in ``\emph{Alice visited Paris}'' who visited whom? Parsing recovers the tree. Two views dominate. \textbf{Constituency} groups words into nested phrases ($S\to NP~VP$, $VP\to V~NP$): \emph{Alice} is an $NP$, \emph{visited Paris} a $VP$. \textbf{Dependency} instead draws directed arcs head$\to$dependent: \emph{visited} is the root, with \emph{Alice} as subject and \emph{Paris} as object. Constituency shows grouping, dependency shows relations; most downstream tasks (relation extraction, semantic roles) read off the dependency arcs.
+\paragraph{How to parse: shift-reduce sketch.} A transition-based parser scans left to right with a stack and a buffer, repeating three actions: \textsc{Shift} (push the next word), \textsc{Left-Arc} / \textsc{Right-Arc} (attach the top two stack items with a labeled arc and pop one), until one root remains. A classifier predicts each action from $(\mathrm{stack},\mathrm{buffer})$ features (or BiLSTM encodings); greedy decoding runs in linear time, beam search regains accuracy. The chart-based alternative, CKY, is dynamic programming over spans ($O(n^3)$) -- Viterbi's cousin from \S\ref{sec:hmm}, but over tree cells instead of tag columns.
+\paragraph{Worked tiny parse.} ``\emph{Alice visited Paris}'': \textsc{Shift} \emph{Alice}, \textsc{Shift} \emph{visited}, \textsc{Left-Arc} (visited$\xleftarrow{\mathrm{subj}}$Alice), \textsc{Shift} \emph{Paris}, \textsc{Right-Arc} (visited$\xrightarrow{\mathrm{obj}}$Paris). Fig.~\ref{fig:parse-tree} shows the constituency twin of the same sentence.
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[font=\scriptsize, >=Stealth, scale=0.85, level distance=10mm, sibling distance=22mm, every node/.style={draw, rounded corners=2pt, align=center, inner sep=3pt}]
+\node[fill=violet!14, draw=violet!60!black] {S}
+child {node[fill=blue!14, draw=blue!60!black] {NP\\Alice}}
+child {node[fill=orange!14, draw=orange!60!black] {VP}
+child {node[fill=green!15, draw=green!55!black] {V\\visited}}
+child {node[fill=blue!14, draw=blue!60!black] {NP\\Paris}}};
+\end{tikzpicture}
+\caption{Constituency parse of ``Alice visited Paris'': $S\to NP~VP$ with $VP\to V~NP$. Colours separate clause (violet), phrases (blue/orange), and head verb (green); the matching dependency tree is rooted at \emph{visited} with subject/object arcs.}
+\label{fig:parse-tree}
+\end{figure}
+
+% ============================================================
 \section{Chapter Notes}
 HMMs were introduced by Baum and Petrie (1966); Viterbi (1967) gave the decoding algorithm. Lafferty, McCallum and Pereira (2001) defined CRFs to fix label bias in MEMMs. Huang, Xu and Yu (2015) popularized BiLSTM-CRF for sequence tagging, now often replaced by Transformer-CRF. For BIO details see CoNLL-2003 NER shared task.
 

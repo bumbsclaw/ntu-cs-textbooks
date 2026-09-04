@@ -164,9 +164,13 @@ A column-stochastic $P$ (nonnegative, columns sum to $1$) has $\lambda=1$ as its
 $P=\begin{bmatrix}0.9&0.2\\0.1&0.8\end{bmatrix}$: eigenvalues $1,0.7$, $E_1=\operatorname{span}\{[2,1]^T\}$, so $\pi=[2/3,1/3]^T$ after normalising to sum $1$. Starting from any distribution, $P^k\mathbf{x}_0\to\pi$ at rate $0.7^k$.
 \end{example}
 
-\section{Singular Value Decomposition (Preview)}
-\label{sec:svd-preview}
-Every $A\in\mathbb{R}^{m\times n}$ has $A=U\Sigma V^T$ with $U,V$ orthogonal and $\Sigma$ diagonal of singular values $\sigma_i=\sqrt{\lambda_i(A^TA)}\ge0$. Columns of $V$ are eigenvectors of $A^TA$, of $U$ eigenvectors of $AA^T$. SVD generalises diagonalization to non-square matrices and powers PCA, compression, and pseudoinverses. If $A=Q\Lambda Q^T$ symmetric, $\sigma_i=|\lambda_i|$.
+\section{Singular Value Decomposition}
+\label{sec:svd}
+Every $A\in\mathbb{R}^{m\times n}$ factors as $A=U\Sigma V^T$ with $U,V$ orthogonal and $\Sigma$ diagonal holding \emph{singular values} $\sigma_1\ge\sigma_2\ge\cdots\ge0$, where $\sigma_i=\sqrt{\lambda_i(A^TA)}$. Intuition: every linear map is rotate--stretch--rotate---$V^T$ aligns the input axes, $\Sigma$ stretches, $U$ orients the outputs. Unlike eigen-decomposition, SVD exists for every matrix, even rectangular ones.
+\begin{example}[Worked $2\times2$]
+$A=\begin{bmatrix}3&0\\0&-1\end{bmatrix}$ is diagonal in disguise: $A^TA=\operatorname{diag}(9,1)$, so $\sigma_1=3,\sigma_2=1$ with $V=I$ and $U=\operatorname{diag}(1,-1)$ absorbing the sign. The unit circle maps to an ellipse with semi-axes $3,1$---singular values are exactly the stretch factors.
+\end{example}
+The count of nonzero $\sigma_i$ equals $\operatorname{rank}A$. Dropping small $\sigma_i$ gives the best low-rank approximation (Eckart--Young): this is PCA---keep the top principal stretches, discard the noise. If $A=Q\Lambda Q^T$ is symmetric, $\sigma_i=|\lambda_i|$.
 
 
 

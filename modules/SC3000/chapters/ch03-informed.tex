@@ -193,6 +193,29 @@ def manhattan_8puzzle(state, goal_pos):
 A heuristic comes from a \emph{relaxed problem}: drop constraints and solve cheaply. Straight-line distance relaxes roads to Euclidean plane; Manhattan relaxes diagonal moves; misplaced-tiles relaxes that tiles interfere. If $h_1,h_2$ are admissible, so is $h=\max\{h_1,h_2\}$ and $h$ dominates both (expands no more nodes, up to ties). Pattern databases precompute exact costs for subproblems (e.g., 7 tiles of the 15-puzzle) and remain admissible by partitioning moves.
 The \emph{effective branching factor} $b^{*}$ solves $N+1=1+b^{*}+(b^{*})^{2}+\dots+(b^{*})^{d}$ for $N$ expanded nodes and depth $d$; better $h$ drives $b^{*}$ toward $1$.
 
+\section{Local Search and Metaheuristics}
+Sometimes the goal is a good state, not a path: placing 8 queens with none attacking,
+scheduling exams into few slots, or tuning weights. Storing a whole frontier is wasteful;
+keep one state and improve it. \emph{Hill climbing} moves to the best-valued neighbour
+and stops when none is better. It is fast but sticks at local optima, plateaus, and ridges.
+Random restarts (many climbs, keep the best) or allowing sideways moves mitigates this.
+\emph{Simulated annealing} escapes local optima by accepting a worse move with probability
+$e^{\Delta E/T}$, where $\Delta E < 0$ measures the loss and $T$ is a temperature cooled
+over time. High $T$ explores; as $T \to 0$ the method becomes hill climbing. A slow cooling
+schedule converges to a global optimum with probability approaching one.
+\emph{Genetic algorithms} keep a population of states. Fitter states reproduce: crossover
+splices two parents and mutation perturbs offspring, so useful building blocks combine.
+Table~\ref{tab:local-search} contrasts the three.
+\begin{table}[h]\centering\small
+\begin{tabular}{lcc}
+\toprule Method & State kept & Escapes local optima \\\midrule
+Hill climbing & one & restarts only \\
+Simulated annealing & one & worse moves w.p.\ $e^{\Delta E/T}$ \\
+Genetic algorithm & population & crossover + mutation \\\bottomrule
+\end{tabular}
+\caption{Local search at a glance: one state or many, and how each escapes local optima.}
+\label{tab:local-search}
+\end{table}
 \section{Key Takeaways}
 Greedy ($f=h$) is fast but not optimal; A$^{*}$ ($f=g+h$) is optimal with admissible $h$ and never reopens with consistent $h$; IDA$^{*}$ trades time for $O(d)$ memory via $f$-thresholds. Heuristic quality dominates performance: a dominated heuristic can expand exponentially more nodes. Design $h$ by relaxing the problem (e.g., ignore obstacles for straight-line distance) and prefer the dominating admissible heuristic (e.g., $\max\{h_1,h_2\}$). When memory is tight, IDA$^{*}$ with a strong heuristic beats A$^{*}$; when $h$ is weak, A$^{*}$'s best-first order saves re-expansions.
 

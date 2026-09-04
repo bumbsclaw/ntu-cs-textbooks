@@ -16,6 +16,7 @@ After this chapter you will be able to:
     \item apply the limit method to classify functions;
     \item order the hierarchy $\log n \prec n \prec n\log n \prec n^{2}\prec 2^{n}$ and justify it;
     \item distinguish best-, worst-, and average-case analysis;
+    \item analyse amortised cost over an operation sequence (aggregate, accounting, potential);
     \item write a recurrence for a recursive algorithm's running time (bridge to Ch.~3).
 \end{enumerate}
 
@@ -201,6 +202,13 @@ For input size $n$, let $T(I)$ be RAM steps on instance $I$ with $|I|=n$:
 When we say ``$\textsc{LinearSearch}$ is $O(n)$'' we mean $T_{\text{worst}}(n)=O(n)$; its best case is $\Theta(1)$ and its average case (uniform, key present) is $\Theta(n)$. \textsc{InsertionSort} is $\Theta(n)$ best case (already sorted, inner loop never runs) but $\Theta(n^{2})$ worst case.
 
 Average-case analysis needs the distribution $D_{n}$ stated explicitly. Randomised algorithms (Ch.~8) instead randomise the \emph{algorithm} and bound $\mathbb{E}[T(I)]$ for every $I$.
+
+% ============================================================
+\section{Amortised Analysis: Averaging Over a Sequence}
+\label{sec:amortised}
+\emph{Intuition:} worst case asks ``how bad can \emph{one} operation be?'' Amortised analysis asks ``how bad can $n$ operations be \emph{in total}, divided by $n$?'' --- an average over the \emph{sequence}, with no randomness and no input distribution (unlike average-case, Sec.~\ref{sec:cases}). Expensive steps are rare by structure: most operations are cheap and prepay the costly ones. Three views of the same idea: \emph{aggregate} (bound the total directly), \emph{accounting} (overcharge cheap ops; banked credit pays for dear ones), \emph{potential} (store savings in $\Phi(\text{state})$; charge $\text{amortised}=\text{actual}+\Delta\Phi$).
+\begin{example}[Dynamic-table doubling] Start capacity $1$, double when full. Copies across $n$ appends total $1+2+4+\cdots+2^{\lfloor\log_2(n-1)\rfloor}<2n$: total $O(n)$, so each append is $O(1)$ \emph{amortised} though one append costs $\Theta(n)$. Accounting view: charge $3$ per append ($1$ spent, $2$ banked) --- the bank always covers the next doubling. Potential view: $\Phi=2\cdot\text{size}-\text{capacity}\ge0$ releases exactly the doubling cost. Contrast with average-case: no distribution is assumed; the bound holds for \emph{every} sequence.
+\end{example}
 
 % ============================================================
 \section{Bridge to Recurrences}

@@ -50,7 +50,7 @@ Common aesthetics to optimise (often conflicting): minimise edge crossings and b
 \end{scope}
 % matrix
 \begin{scope}[xshift=5.2cm]
-\node[font=\footnotesize\bfseries] at (1.6,3.4) {Matrix view (same graph)};
+\node[font=\footnotesize\bfseries] at (1.6,3.4) {Matrix view};
 \foreach \i in {0,...,5} \foreach \j in {0,...,5} {
   \pgfmathsetmacro{\isEdge}{(\i==0&&\j==1)||(\i==1&&\j==0)||(\i==0&&\j==5)||(\i==5&&\j==0)||(\i==1&&\j==2)||(\i==2&&\j==1)||(\i==2&&\j==3)||(\i==3&&\j==2)||(\i==2&&\j==4)||(\i==4&&\j==2)||(\i==3&&\j==5)||(\i==5&&\j==3)||(\i==1&&\j==3)||(\i==3&&\j==1) ? 1 : 0}
   \ifnum\isEdge=1 \fill[orange!55] (0.15+0.45*\i,0.45+0.45*\j) rectangle +(0.40,0.40);
@@ -64,7 +64,7 @@ Common aesthetics to optimise (often conflicting): minimise edge crossings and b
 \end{scope}
 % hierarchy
 \begin{scope}[xshift=9.4cm]
-\node[font=\footnotesize\bfseries] at (1.6,3.4) {Edge bundling idea};
+\node[font=\footnotesize\bfseries] at (1.6,3.4) {Edge bundling};
 \draw[gray!12,fill=gray!8] (0,0.4) rectangle (3.2,3.0);
 \foreach \a in {0,30,...,330} {\fill[blue!18,draw=blue!40] (1.6+0.95*cos \a, 1.7+0.95*sin \a) circle (0.09);}
 \foreach \a/\b in {0/120,30/180,60/210,90/240} {

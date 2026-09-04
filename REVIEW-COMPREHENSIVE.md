@@ -145,3 +145,26 @@ All 3 Core MAJORs from the comprehensiveness audit patched, coordinator-verified
 | SC1008 no file-I/O | `ch07-stl.tex` (`sec:c-file-io`) | fopen modes, text/binary, perror/fclose, C listing + fread/binary note; 201→224L | 44p 0!/0>15 |
 
 Remaining known work (non-blocking): 11 Core minors + MPE gaps (SC3000 Bayes/RL/search, SC3020 SVM/regression, SC4001 generative, SC4002 parsing, SC4012 TOCTOU, SC4051 DHT, SC4021 QLM) + 3 cosmetic rendering minors.
+
+---
+
+## 7. Phase 18 — Next wave: MPE gaps + Core minors + rendering cosmetics (2026-09-05, `deleg_c6062a88`, 7 workers)
+
+All applied, coordinator-verified (SC4012 + SC4051 + SC3000 rebuilt independently: exit 0, 0 `!`; remaining 15 modules log-verified 0 `!`/0 pgfkeys/0 `>15`). Total **1688p** (+11).
+
+**MPE gaps:**
+| Gap | Host | Change | Build |
+|-----|------|--------|-------|
+| SC3000 Bayes/RL/search | ch03/ch06/ch08 | local-search table, alarm Bayes DAG TikZ, MDP Bellman + Q-learning listing; 204→227/211→237/211→233 | 48p |
+| SC3020 SVM/regression | ch03-classification | margin+kernel+RBF worked 2D, Ridge/LASSO worked fit + listing; 222→242 | 53p |
+| SC4001 generative | ch06-rnn (`sec:generative`) | VAE ELBO + GAN + diffusion, 12L; →224 | 53p |
+| SC4002 parsing | ch04-sequence (`sec:parsing`) | constituency/dependency + shift-reduce + color parse-tree TikZ (4th fig, authorized); →240 | 49p |
+| SC4012 TOCTOU | ch08-secure-dev (`sec:toctou`) | symlink race + O_NOFOLLOW/openat + C listing; 203→251 | 47p |
+| SC4051 DHT | ch06-storage (`sec:dht`) | hash-ring TikZ + Chord m=3 lookup; 201→250 | 46p |
+| SC4021 QLM/Dirichlet | ch03-tfidf (`sec:qlm`) | formula + verified numbers + listing; 210→224 | 46p |
+
+**Core minors A:** Union-Find taught SC1007 ch07 (219→239 + LO) + SC2001 ch05 pointer fix (net 0); amortized SC2001 ch02 (233→241); VC-reduction worked SC2203 ch08 (212→235 + gadget TikZ); MGF SC2000 ch05 (200→208) + ANOVA ch08 (206→214). Builds: 37/55/42/41p, all clean.
+**Core minors B:** JDBC+GRANT SC2207 ch03 (226→242 + Java listing, 46p); MH1812 structural-induction (260→248) + Bayes (260→244) + colouring (258→253) funded by deleting triplicated padding (44p); SVD full section SC1004 ch08 (201→205); readers-writers SC2005 ch04 (206→212); COCOMO SC2006 ch01 (200→206, numbers verified). All clean.
+**Rendering cosmetics (visually verified before/after PNGs):** SC2002 ch05 short-title optional arg (header/folio separated, 44p stable); SC2203 ch02 intro sentence before listing (frame reads as box, 200→201, 42p); SC4024 ch05 shortened sub-titles (kerning fixed, 41p stable).
+
+Nothing known-remaining except future enrichment beyond audit scope.

@@ -164,6 +164,20 @@ for i,d in enumerate(docs_tok):
 \end{lstlisting}
 
 % ============================================================
+\section{Query Likelihood with Dirichlet Smoothing}
+\label{sec:qlm}
+\paragraph{Intuition.} Instead of weighting terms, ask a generative question: if the user rolled words from document $d$'s private dice, how likely is the observed query? Rank by $P(q\mid d)=\prod_{t\in q}P(t\mid d)$: the doc whose language model most plausibly generated the query wins, which handles length naturally (longer docs spread probability thinner).
+\paragraph{Zero-probability trap.} Maximum likelihood $P_{ML}(t\mid d)=f_{t,d}/|d|$ gives $0$ to any unseen term, zeroing the whole product: one missing query word disqualifies the doc. Fix it by mixing in the collection model $P(t\mid\mathcal{C})$ via \emph{Dirichlet smoothing}: $P(t\mid d)=(f_{t,d}+\mu P(t\mid\mathcal{C}))/(|d|+\mu)$, where $\mu\approx 1000$--$2000$ acts as pseudo-counts borrowed from the collection; short docs (small $|d|$) are smoothed most, exactly where estimates are shakiest.
+\paragraph{Worked smoothing.} Query \texttt{cats dogs}; doc $d$ has $f_{\text{cats},d}=2$, $f_{\text{dogs},d}=0$, $|d|=100$; collection $P(\text{cats}\mid\mathcal{C})=0.001$, $P(\text{dogs}\mid\mathcal{C})=0.002$, $\mu=1000$. Then $P(\text{cats}\mid d)=(2+1)/1100\approx 0.00273$ and $P(\text{dogs}\mid d)=(0+2)/1100\approx 0.00182$, so $P(q\mid d)\approx 4.96\times 10^{-6}$ --- nonzero despite the missing term, whereas unsmoothed ML gives $0$ and $d$ could never rank.
+\paragraph{Rule of thumb.} Dirichlet ($\mu\approx 1500$) is the default LM baseline in Anserini/Lucene and supplies the $P(w\mid d)$ inside Ch.~6's RM3; Jelinek-Mercer interpolation $(1-\lambda)P_{ML}+\lambda P(\cdot\mid\mathcal{C})$ is its fixed-weight cousin, preferred when $|d|$ varies little. Always score in log-space, $\sum_{t\in q}\log P(t\mid d)$, to avoid underflow.
+\begin{lstlisting}[language=Python, caption={Query likelihood with Dirichlet smoothing.}, label={lst:qlm}]
+import math
+mu = 1000; coll = {"cats":0.001, "dogs":0.002}  # P(t|C)
+doc = {"cats":2, "dogs":0}; dl = 100
+s = sum(math.log((doc[t] + mu*coll[t])/(dl + mu)) for t in ["cats","dogs"])
+print(f"log P(q|d) = {s:.3f}")  # -12.214, nonzero despite missing 'dogs'
+\end{lstlisting}
+% ============================================================
 
 % ============================================================
 \section{Choosing Heuristics: When to Use Which TF}\label{sec:heuristics}

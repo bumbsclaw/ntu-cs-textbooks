@@ -177,6 +177,12 @@ What gets measured gets improved. Useful process metrics include velocity (story
 Process tailoring example: a research spike to evaluate a new ML library needs no formal SRS, just a time-boxed experiment and a decision log. Applying full waterfall there would waste weeks.
 \end{remark}
 
+% ============================================================
+\subsection{Effort Estimation with COCOMO}
+\label{sec:cocomo}
+
+Gut-feel estimates fail because effort grows \emph{superlinearly} with size (communication paths explode). Basic COCOMO (organic mode: small, familiar team) makes this quantitative: for $S$ thousand lines, effort $E=2.4\,S^{1.05}$ person-months and schedule $T=2.5\,E^{0.38}$ months. Example: $S=32$ gives $E\approx91$ person-months over $T\approx14$ months (about $7$ people)---doubling the code more than doubles the cost. Calibrate the constants against your own history; the model's value is the shape (the exponents), not the digits.
+
 \section{Exercises}
 
 \begin{exercise}

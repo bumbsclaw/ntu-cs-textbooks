@@ -226,19 +226,14 @@ $\sum_{v}\mathrm{indeg}(v)=\sum_{v}\mathrm{outdeg}(v)=|E|$ for digraphs; the und
 $C_3$ (triangle) is not bipartite; any graph with an odd cycle fails $2$-colouring. $K_{3,3}$ is bipartite yet non-planar (utility puzzle).
 \end{example}
 
-K\H{o}nigsberg's four odd vertices made the walk impossible, birthing graph theory in 1736.
-Hierholzer's algorithm efficiently stitches cycles into an Euler circuit in linear time.
-Hamilton cycles remain elusive: Dirac's $n/2$ condition is sufficient but far from necessary.
-Trees are minimally connected and maximally acyclic, with exactly $n-1$ edges and leaves to peel inductively.
-BFS trees and DFS trees link MH1812 graphs to traversal algorithms in later modules.
-Handshaking lemma is a global invariant from local degrees, a double-counting gem.
-Complete graphs $K_n$ maximise edges, paths $P_n$ minimise connectivity, cycles $C_n$ sit in between.
-Isomorphism is graph relabelling: invariants can disprove it, but only an explicit bijection proves it.
-Degree sequence, cycle counts, and bipartiteness are quick isomorphism filters before brute force.
-Euler's parity condition is a rare easy characterisation: all even degrees versus NP-hard Hamilton.
-K\H{o}nigsberg's four odd vertices made the walk impossible, birthing graph theory in 1736.
+\subsection{Graph Colouring}
+\label{sec:colouring}
+A \emph{$k$-colouring} paints vertices with $k$ colours so no edge joins same-coloured endpoints; the \emph{chromatic number} $\chi(G)$ is the smallest such $k$. Intuition: colours are time slots or registers---neighbours conflict. Bipartite means exactly $\chi\le2$ (test by BFS $2$-colouring); any odd cycle forces $\chi\ge3$.
+\begin{example}[Greedy bound]
+Order vertices arbitrarily; paint each with the smallest colour its neighbours spare. This \emph{greedy} colouring uses at most $\Delta+1$ colours ($\Delta$ = max degree), so $\chi(G)\le\Delta+1$. On $C_5$ ($\Delta=2$) greedy meets $\chi=3$; on a star $K_{1,n}$ a bad order wastes colours a good order avoids---ordering matters.
+\end{example}
 
-\section{Worked Example: Euler vs.\ Hamilton on the Same Graph}
+\section{Worked Example: Euler vs.\\ Hamilton on the Same Graph}
 Consider $C_5$ (5-cycle). All degrees $2$ even, so Euler circuit exists: walk around. Hamilton cycle also exists (the cycle itself). Now add a chord $v_0v_2$: degrees become $3,3,2,2,2$ --- two odds remain, so an Euler trail exists but not a circuit. Hamiltonian? $v_0v_1v_2v_3v_4v_0$ still works (use outer cycle). Finally $K_{2,3}$: degrees $3,3,2,2,2$ again, bipartite, Euler trail exists, Hamiltonian? $K_{2,3}$ has $5$ vertices, any Hamilton cycle needs even length to alternate parts, so none exists (part sizes differ by $1$). Invariants separate the concepts.
 
 % ============================================================

@@ -51,6 +51,7 @@ $M$ above on $w=010$: $\hat\delta(q_0,0)=q_1$, $\hat\delta(q_0,01)=q_1$, $\hat\d
 \end{example}
 
 \begin{example}[Code view: DFA simulator]
+The transition table becomes three lines: track the current state, step it, test acceptance.
 \begin{lstlisting}[language=Python]
 def accepts(dfa, w):
     q = dfa.q0

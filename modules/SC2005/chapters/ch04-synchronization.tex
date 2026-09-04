@@ -182,6 +182,12 @@ Hence the predicate must be rechecked in a loop --- an \texttt{if} would
 proceed with a false precondition.
 \end{remark}
 
+% ============================================================
+\subsection{The Readers--Writers Problem}
+\label{sec:readers-writers}
+
+Many threads may \emph{read} shared data at once, but a \emph{writer} needs exclusive access. Intuition: readers share a library; a writer needs the whole room. The first-readers solution guards a \texttt{readcount} with a \texttt{mutex}: the first reader locks \texttt{wrt} (blocking writers), the last reader unlocks it, and writers simply lock \texttt{wrt}. Readers never block each other, so concurrent reads stay fast. The flaw: a steady stream of readers can starve a waiting writer forever---the reader--writer exercise below asks you to flip the priority (at the cost of possible reader starvation). Real systems (Linux \texttt{rwsem}, databases) add fairness queues instead.
+
 \section{Exercises}
 \label{sec:ch04-ex}
 \begin{exercise}

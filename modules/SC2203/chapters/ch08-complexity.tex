@@ -16,7 +16,7 @@ After this chapter you will be able to:
     \item define $TIME(t(n))$, $P$, $NP$ via verifiers and via NTMs, and explain the two $NP$ views;
     \item prove $P\subseteq NP$ and know why $P\neq NP$ is open;
     \item state Cook--Levin: SAT is $NP$-complete, with proof idea (tableau);
-    \item give a polynomial-time reduction $SAT\le_p 3SAT\le_p CLIQUE$ and verify it;
+    \item give a polynomial-time reduction $SAT\le_p 3SAT\le_p CLIQUE\le_p VERTEX\text{-}COVER$ and verify it;
     \item list coping strategies for $NP$-complete problems (approximation, FPT, heuristics).
 \end{enumerate}
 
@@ -166,6 +166,29 @@ Given $3$CNF $\phi=C_1\land\cdots\land C_m$ with $C_i=(\ell_{i1}\lor\ell_{i2}\lo
 \end{tikzpicture}
 \end{center}
 If $\phi=(x\lor y\lor\overline{z})\land(\overline{x}\lor z\lor w)\land\cdots$, a $3$-clique touching each triangle corresponds to a satisfying choice.
+
+% ============================================================
+\section{Second Worked Reduction: CLIQUE to VERTEX-COVER}
+\label{sec:vc-reduction}
+\emph{Intuition:} a vertex cover touches every edge, so whatever it leaves uncovered contains \emph{no} edge --- an independent set. Complementing the graph turns ``no edge'' into ``all edges'': a cover in $G$ is exactly the leftover of a clique in $\bar G$.
+\begin{theorem}[VERTEX-COVER is $NP$-complete]
+$C\subseteq V$ is a $k$-vertex cover of $G=(V,E)$ iff $V\setminus C$ is an $(n-k)$-clique in the complement $\bar G$. Hence $CLIQUE\le_p VERTEX\text{-}COVER$.
+\end{theorem}
+\begin{proof}
+$C$ covers every edge of $G$ iff no edge of $G$ lies inside $V\setminus C$ iff every pair inside $V\setminus C$ is an edge of $\bar G$ iff $V\setminus C$ is a clique there. The map $(G,k)\mapsto(\bar G,n-k)$ flips $O(n^2)$ adjacency bits, so it is polynomial; VERTEX-COVER is in $NP$ (the cover itself is the certificate). Since CLIQUE is $NP$-complete, so is VERTEX-COVER. \qed
+\end{proof}
+\begin{example}[Worked] $G=P_4$ (path $1$--$2$--$3$--$4$), $k=2$: cover $C=\{2,3\}$. Leftover $\{1,4\}$; $\bar G$ has edges $13,14,24$, so $\{1,4\}$ is a $2$-clique in $\bar G$. No $1$-cover exists (three edges need $\ge2$ vertices), matching no $3$-clique in $\bar G$.
+\end{example}
+\begin{center}
+\begin{tikzpicture}[scale=0.75,every node/.style={font=\scriptsize}]
+\foreach \i/\x/\c in {1/0/blue!12,2/1.2/orange!22,3/2.4/orange!22,4/3.6/blue!12} {\node[draw,circle,fill=\c,minimum size=0.55cm] (g\i) at (\x,0.9) {\i};}
+\draw[thick] (g1)--(g2) (g2)--(g3) (g3)--(g4);
+\node[font=\tiny] at (1.8,0.1) {$G=P_4$, cover $\{2,3\}$ orange};
+\foreach \i/\x/\c in {1/5.2/red!16,2/6.4/green!14,3/7.6/green!14,4/8.8/red!16} {\node[draw,circle,fill=\c,minimum size=0.55cm] (h\i) at (\x,0.9) {\i};}
+\draw[thick,red!70!black] (h1)--(h3) (h1)--(h4) (h2)--(h4);
+\node[font=\tiny] at (7.0,0.1) {$\bar G$, clique $\{1,4\}$ red};
+\end{tikzpicture}
+\end{center}
 
 % ============================================================
 \section{Coping with $NP$-Completeness}

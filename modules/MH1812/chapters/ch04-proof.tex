@@ -218,25 +218,13 @@ A faulty base case can sink an induction, as the horse colour paradox memorably 
 Loop invariants are just inductions over the number of iterations, connecting MH1812 to algorithm correctness.
 Writing the induction hypothesis explicitly prevents the common mistake of assuming what you need to prove.
 Every proof begins by unpacking definitions: what does it mean to be even, prime, or divisible?
-Direct proof is the workhorse: assume the left, derive the right, step by step.
-Contrapositive is useful when the conclusion is a negation, flipping the problem into a positive one.
-Contradiction is the tool of impossibility: assume the opposite and find an absurdity.
-Induction is the infinite domino chain, turning one base step and one inductive link into all cases.
-Strong induction is not stronger logically, just more convenient when the next case needs earlier ones.
-Well-ordering, weak induction, and strong induction are three faces of the same principle on $\mathbb{N}$.
-A faulty base case can sink an induction, as the horse colour paradox memorably shows.
-Loop invariants are just inductions over the number of iterations, connecting MH1812 to algorithm correctness.
-Writing the induction hypothesis explicitly prevents the common mistake of assuming what you need to prove.
-Every proof begins by unpacking definitions: what does it mean to be even, prime, or divisible?
-Direct proof is the workhorse: assume the left, derive the right, step by step.
-Contrapositive is useful when the conclusion is a negation, flipping the problem into a positive one.
-Contradiction is the tool of impossibility: assume the opposite and find an absurdity.
-Induction is the infinite domino chain, turning one base step and one inductive link into all cases.
-Strong induction is not stronger logically, just more convenient when the next case needs earlier ones.
-Well-ordering, weak induction, and strong induction are three faces of the same principle on $\mathbb{N}$.
-A faulty base case can sink an induction, as the horse colour paradox memorably shows.
-Loop invariants are just inductions over the number of iterations, connecting MH1812 to algorithm correctness.
-Writing the induction hypothesis explicitly prevents the common mistake of assuming what you need to prove.
+
+\subsection{Structural Induction}
+\label{sec:structural}
+Weak induction climbs numbers; \emph{structural induction} climbs shapes: prove $P$ for every atom (base cases), then show each constructor preserves $P$ (step: $P$ on the parts implies $P$ on the whole built from them). Intuition: recursion builds objects the way induction proves over them---one principle, two directions.
+\begin{example}[Full binary trees]
+A full binary tree is a leaf, or a node with two full-binary subtrees $L,R$. Claim: $\ell(T)=i(T)+1$ (leaves equal internal nodes plus one). Base: a leaf has $\ell=1,i=0$. Step: $\ell(T)=\ell(L)+\ell(R)=(i(L)+1)+(i(R)+1)=i(T)+1$ since $i(T)=i(L)+i(R)+1$. The step mirrors the constructor exactly.
+\end{example}
 
 \section{Worked Example: A Complete Induction Proof Dissected}
 Prove $1+3+5+\cdots+(2n-1)=n^2$. Let $P(n)$ be the equality. Base $P(1)$: $1=1^2$. IH $P(k)$: sum to $k$ equals $k^2$. Then sum to $k+1$ is $k^2+(2(k+1)-1)=k^2+2k+1=(k+1)^2$, i.e.\ $P(k+1)$. Every step is explicit: state $P$, check base, assume IH, derive next.

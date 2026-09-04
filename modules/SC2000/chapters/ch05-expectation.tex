@@ -16,6 +16,7 @@ After this chapter you will be able to:
     \item compute $\mathbb{E}[X]$ and $\mathrm{Var}(X)$ from PMF/PDF or via indicators;
     \item apply linearity of expectation (with dependence) and variance addition (with independence);
     \item use LOTUS, covariance, and correlation correctly;
+    \item compute moment-generating functions and read off moments from them;
     \item apply Markov, Chebyshev, and Chernoff/Hoeffding tail bounds;
     \item analyse expected runtime of randomised algorithms (e.g., quicksort, hashing).
 \end{enumerate}
@@ -97,6 +98,13 @@ Independence $\Rightarrow$ $\mathrm{Cov}=0$ (uncorrelated), but converse fails. 
 \end{theorem}
 
 \begin{example}[Coupon collector expectation] Collect $n$ coupons, each trial uniform over $n$ types. Let $T_k$ be time to get $k$th new coupon after $k-1$ distinct seen; $T_k\sim\mathrm{Geom}(p_k)$ with $p_k=(n-k+1)/n$, $\mathbb{E}[T_k]=n/(n-k+1)$. Total $T=\sum_{k=1}^nT_k$, so $\mathbb{E}[T]=n\sum_{k=1}^n1/k=nH_n\sim n\ln n$. No joint distribution needed---linearity handles dependent stages via conditional expectations.
+\end{example}
+
+% ============================================================
+\section{Moment-Generating Functions: A Distribution's Fingerprint}
+\label{sec:mgf}
+\emph{Intuition:} the MGF $M_X(t)=\mathbb{E}[e^{tX}]$ packs \emph{every} moment into one function: differentiating at $0$ unpacks them, $M_X^{(k)}(0)=\mathbb{E}[X^k]$. Two distributions sharing an MGF near $0$ are the \emph{same} distribution --- the MGF is a fingerprint (uniqueness theorem). Sums become easy: independent $X,Y$ give $M_{X+Y}=M_XM_Y$ (expectations multiply), so convolution turns into algebra.
+\begin{example}[MGFs] $\mathrm{Bernoulli}(p)$: $M(t)=1-p+pe^t$, and $M'(0)=p=\mathbb{E}[X]$. $\mathcal{N}(\mu,\sigma^2)$: $M(t)=\exp(\mu t+\sigma^2t^2/2)$ --- reading the exponent recovers mean and variance. $n$ i.i.d.\ copies multiply MGFs, giving the $\mathrm{Bin}(n,p)$ MGF $(1-p+pe^t)^n$ in one line. The Chernoff bound below is Markov's inequality applied to $e^{tX}$ (whose mean \emph{is} the MGF), then optimised over $t$.
 \end{example}
 
 % ============================================================

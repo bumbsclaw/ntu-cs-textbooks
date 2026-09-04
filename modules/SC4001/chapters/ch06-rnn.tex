@@ -171,6 +171,18 @@ between positions is $O(T)$. Attention shortens it to $O(1)$ and parallelizes
 to $O(1)$ steps with $O(T^2)$ work -- the Transformer keeps the gating insight
 (additive paths, normalization) but removes recurrence entirely.
 
+\section{Generative Models: Autoencoders, VAEs, GANs, Diffusion}
+\label{sec:generative}
+Our CharRNN already \emph{generates}: given history it predicts the next character, and sampling turns those predictions into new text. Modern generative models generalize this idea -- learn the data distribution $p(\mathbf{x})$ itself, then sample brand-new $\mathbf{x}$ from it. Three landmarks cover the design space.
+\paragraph{Autoencoder to VAE.} An \textbf{autoencoder} compresses $\mathbf{x}$ through a bottleneck $\mathbf{z}=f_{\mathrm{enc}}(\mathbf{x})$ and reconstructs $\hat{\mathbf{x}}=f_{\mathrm{dec}}(\mathbf{z})$, trained to minimize $\|\mathbf{x}-\hat{\mathbf{x}}\|^2$. A \textbf{variational autoencoder} (Kingma--Welling, 2013) makes $\mathbf{z}$ a distribution $q(\mathbf{z}\mid\mathbf{x})$ with prior $p(\mathbf{z})=\mathcal{N}(0,I)$, so we can sample $\mathbf{z}\sim p(\mathbf{z})$ and decode novel $\mathbf{x}$. Training maximizes the ELBO one-liner:
+\begin{equation}
+\log p(\mathbf{x})\geq \mathbb{E}_{q}[\log p(\mathbf{x}\mid\mathbf{z})]-\mathrm{KL}(q(\mathbf{z}\mid\mathbf{x})\,\|\,p(\mathbf{z})).
+\label{eq:elbo}
+\end{equation}
+The first term pulls reconstructions toward realism; the KL term keeps the latent space dense and samplable -- without it, gaps in $\mathbf{z}$-space decode to garbage.
+\paragraph{GANs.} A \textbf{GAN} (Goodfellow et al., 2014) pits a generator $G(\mathbf{z})$ against a discriminator $D(\mathbf{x})$ in a minimax game: $\min_G\max_D\,\mathbb{E}_{\mathbf{x}}[\log D(\mathbf{x})]+\mathbb{E}_{\mathbf{z}}[\log(1-D(G(\mathbf{z})))]$. $D$ learns to spot fakes, $G$ learns to fool $D$; at equilibrium $G$ draws from $p_{\mathrm{data}}$. Samples are sharp, but training can collapse to a few modes and offers no likelihood.
+\paragraph{Diffusion.} A \textbf{diffusion model} (Ho et al., 2020) destroys structure by adding Gaussian noise over $T$ steps, then learns the reverse: a denoiser $\epsilon_\theta(\mathbf{x}_t,t)$ predicting the noise present at each step. Sampling starts from pure noise $\mathbf{x}_T\sim\mathcal{N}(0,I)$ and iteratively denoises down to $\mathbf{x}_0$. Slow (many steps) but stable, with the best image quality to date. Our CharRNN sampler is its autoregressive cousin -- both turn a seed (or noise) into data one refinement at a time.
+
 \section{Common Pitfalls}
 Feeding the whole sequence without truncation causes $O(T)$ memory blowup and
 slow BPTT -- use truncated BPTT (backprop every $k$ steps, carry state). Not

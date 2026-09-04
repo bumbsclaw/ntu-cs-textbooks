@@ -187,6 +187,54 @@ A bug bar defines the severity threshold that blocks release (e.g., ``no Critica
 \end{remark}
 
 % ============================================================
+\section{TOCTOU Races: The Gap Between Check and Use}
+\label{sec:toctou}
+Intuition first: picture a bouncer who checks your ticket at the door,
+turns to stamp it, then waves through whoever is standing there when he
+looks back. The check was valid but the admitted person is different. A
+\emph{time-of-check--time-of-use} (TOCTOU) race is exactly this gap: the
+program checks a property of a file (``is it safe to write?''), the world
+changes, and the program then acts on the changed object.
+
+\begin{example}[Symlink swap in \texttt{/tmp}]
+A setuid-root helper lets users append to their own log in
+\texttt{/tmp/user.log}. It calls \texttt{access(path, W\_OK)} to check
+ownership, then \texttt{open(path, O\_WRONLY|O\_APPEND)} to write. Between
+the two calls the attacker replaces \texttt{/tmp/user.log} with a symlink
+to \texttt{/etc/passwd}. The check passed on the real log; the write lands
+in \texttt{/etc/passwd} as root (Bishop--Dilger, 1996). Two syscalls on one
+pathname leave a window the attacker owns.
+\end{example}
+
+The root cause is naming, not timing: a pathname is re-resolved on every
+use, so nothing binds the check to the use. The fix is \emph{file-descriptor
+discipline} -- check the open file, never the name: open with
+\texttt{O\_NOFOLLOW} so symlinks fail instead of being followed, scope lookups
+with \texttt{openat(dirfd, ...)} so \texttt{..} cannot escape a pinned
+directory, and verify with \texttt{fstat} on the fd. Create safely with
+\texttt{O\_CREAT|O\_EXCL} (fail if it exists) or \texttt{mkstemp}, and drop
+privileges before touching user-supplied paths. Review rule of thumb: any
+\texttt{access()} followed by \texttt{open()} on the same path is a finding.
+
+\begin{lstlisting}[language=C]
+// VULNERABLE: check and use resolve path twice
+if (access(path, W_OK) == 0) {              // check: attacker's file
+    // attacker swaps path -> symlink to /etc/passwd HERE
+    int fd = open(path, O_WRONLY|O_APPEND); // use: victim's file
+    write(fd, buf, len); close(fd);
+}
+// FIXED: open once, then check the descriptor itself
+int fd = open(path, O_WRONLY|O_APPEND|O_NOFOLLOW);
+if (fd < 0) { /* symlink or missing: fail closed */ }
+struct stat st; fstat(fd, &st);
+if (st.st_uid != expected_uid) { close(fd); /* refuse */ }
+write(fd, buf, len); close(fd);
+\end{lstlisting}
+
+Once you hold the fd, the attacker can swap names all day without affecting
+your handle: one syscall, one referent, no gap.
+
+% ============================================================
 \section{Exercises}
 \label{sec:ch08-exercises}
 \begin{enumerate}[label=E8.\arabic*, leftmargin=*, itemsep=0.6em]
