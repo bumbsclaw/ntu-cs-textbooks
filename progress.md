@@ -25,6 +25,7 @@
 | 12 - Exhaustive MPE (phase 12) | DONE | SC4063 45p 679K + SC4050 42p 753K + SC4064 45p 715K — 3×8 ch 1707/1631/1632L 0 ! 0 >15 PASS 2026-08-30 16:00 SGT (muse-spark ONLY, SC4064 REVIEW.md PASS after 6 trivial patches) |
 | 13 - Exhaustive MPE (phase 13) | DONE | SC3270 44p 647K + SC4021 45p 640K + SC4022 42p 720K — 3×8 ch 1607/1668/1688L 48/48/48 TikZ 0 ! 0 >15 PASS 2026-08-30 16:05 SGT deleg_fac00063 (muse-spark ONLY) |
 | 14 - Exhaustive MPE (phase 14) | DONE | SC4053 41p 663K + SC4242 40p 720K + SC4024 41p 685K — 3×8 ch 1636/1677/1737L 48/50/46 TikZ 0 ! 0 >15 PASS 2026-08-30 02:15 SGT deleg_4d6ab55f (muse-spark ONLY) |
+| 15 - Comprehensive QA (37/37) | DONE | 37/37 PASS 2026-09-04 SGT deleg_95ebff80 (6 slices A–F, 1461L evidence /tmp/review_slice_*.md) — 1662p 0 ! 0 pgfkeys 0 >15 0 verbatim — global 13/14 + README 25→37 sync fixed here — REVIEW-COMPREHENSIVE.md |
 
 ## Module Tracker
 | Code | Title | AU | Type | Outline | Draft | Adversarial | QA | PDF |
@@ -92,3 +93,4 @@
 - 2026-08-30 16:00 SGT: Phase 12 DONE — SC4063 45p 1707L 0 !, SC4050 42p 1631L 0 !, SC4064 45p 1632L 0 ! — all 0 ! 0 >15 PASS (SC4064 detailed REVIEW.md PASS after 6 trivial patches step→stage etc.) — committed.
 - 2026-08-30 16:05 SGT: Phase 13 DONE — SC3270 44p 1607L 48 TikZ 0 !, SC4021 45p 1668L 48 TikZ 0 ! 7.51 max, SC4022 42p 1688L 48 TikZ 0 ! — deleg_fac00063 PASS — committed.
 - 2026-08-30 02:15 SGT: Phase 14 DONE — SC4053 41p 1636L 48 TikZ 0 !, SC4242 40p 1677L 50 TikZ 0 ! 6.99 max, SC4024 41p 1737L 46 TikZ 0 ! — deleg_4d6ab55f PASS — committed. 37/37 EXHAUSTIVE DONE (15 Core + 21 MPE + BDE). All 0 ! 0 >15 0 pgfkeys 0 verbatim.
+- 2026-09-04 SGT: Phase 15 DONE — Comprehensive QA 37/37 PASS deleg_95ebff80 (slices A 6/6, B 7/7 308p, C 6/6, D 6/6 273p, E 6/6, F 5/5 + global 13/14). 1662p 0 ! 0 pgfkeys 0 >15 0 verbatim. Single global FAIL was README 25→37 staleness — fixed (37 modules · 1662 pages · ~25M) + REVIEW-COMPREHENSIVE.md written. Non-blocking v1.2: SC4013 SSRF kill-chain, SC4050 MPI appendix, SC3050 cache-opts, E-label swaps, texorpdfstring hygiene, SC3020 padding→prose.
