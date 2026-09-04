@@ -120,7 +120,7 @@ jobs:
 
 Enforce branch protection: \texttt{main} requires green CI and one approval. Add a badge to \texttt{README.md}; its colour is a team health signal. Deployment (CD) can auto-deploy \texttt{main} to a staging environment, but keep production deploys manual and tagged (\texttt{v0.3.0}) during capstone.
 
-Secrets (API keys, DB passwords) never enter Git. Use environment variables or a vault; commit a \texttt{.env.example} with dummy values. History rewrites (\texttt{filter-branch}) are painful---exclusion is cheaper than cleanup.
+{\sloppy Secrets (API keys, DB passwords) never enter Git. Use environment variables or a vault; commit a \texttt{.env.example} with dummy values. History rewrites (\texttt{filter-branch}) are painful---exclusion is cheaper than cleanup.\par}
 
 % ============================================================
 \section{Coding Standards, Documentation, and Sustainable Pace}
@@ -181,7 +181,7 @@ Real projects break on ``works on my machine'' because each laptop has different
     \item \textbf{Wrong commit message:} \texttt{git commit --amend} (before push) or revert.
     \item \textbf{Committed secret:} revoke credential immediately, then \texttt{git revert}; history rewrite is rarely worth the disruption during a semester---rotation is the real fix.
     \item \textbf{Detached HEAD / lost commit:} \texttt{git reflog} shows every HEAD move; \texttt{git cherry-pick} the hash back.
-    \item \textbf{Merge vs.\ rebase on shared branches:} merge preserves history and is safe for shared \texttt{main}; rebase rewrites and is only for private feature branches before PR. Agree per team and enforce via \texttt{CONTRIBUTING.md}.
+    \item {\sloppy \textbf{Merge vs.\ rebase on shared branches:} merge preserves history and is safe for shared \texttt{main}; rebase rewrites and is only for private feature branches before PR. Agree per team and enforce via \texttt{CONTRIBUTING.md}.\par}
 \end{itemize}
 
 \begin{example}[Docker as the equaliser]

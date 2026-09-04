@@ -188,8 +188,8 @@ Fuzz the schema: send wrong types, extra fields, and boundary lengths. Fuzz auth
 
 % ============================================================
 \section{Exercises}
-\label{sec:ch05-exercises}
-\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.6em]
+\label{sec:ch06-exercises}
+\begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.6em]
     \item \textbf{BOLA audit.} \texttt{GET /api/v1/orders/\{id\}} returns any order by numeric ID with only a valid JWT check. Show a curl sequence that exploits it, then write the per-object check (pseudocode) that fixes it. How does using UUIDs vs.\ sequential IDs change exploitability but not the need for the check?
     \item \textbf{Mass assignment.} A \texttt{PUT /api/me} handler does \texttt{Object.assign(user, req.body)}. An attacker sends \texttt{\{"role":"admin"\}}. Explain the flaw and rewrite with an explicit allow-list. How would a JSON Schema validator at the gateway help?
     \item \textbf{GraphQL cost.} A query nests \texttt{friends} 10 levels deep on a social graph with branching $b=20$. Estimate resolver calls without depth limiting. Propose a complexity budget (cost per field) and a max-depth rule; where would you enforce them?

@@ -1,6 +1,18 @@
 \chapter{Optimization: How Networks Learn}\label{ch:optimization}
 \begin{center}\small\textit{Knowing the gradient is not enough -- we must walk downhill wisely on a landscape full of valleys and cliffs.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no optimization background assumed.} We start from walking downhill in fog, compare GD, SGD, and mini-batches, and build to momentum, Adam, and schedules. Every formula is preceded by a picture; gradients are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item contrast GD, SGD, and mini-batch updates and their cost trade-offs;
+    \item write momentum and Adam updates and explain adaptive steps;
+    \item choose learning-rate schedules, warmup, and batch normalization correctly;
+    \item tune SGD versus Adam on an example and diagnose common failures.
+\end{enumerate}
+
 \section{Intuition: Walking Downhill in Fog}
 Imagine a hilly terrain (the loss surface) in thick fog. You can only feel the slope under your feet (the gradient). Stepping opposite to the slope seems wise -- that is \textbf{gradient descent}. But the terrain is high-dimensional, non-convex, and you cannot see far. Steps too small crawl; steps too large overshoot ravines. Mini-batching, momentum, and adaptive steps are tricks for navigating this fog efficiently.
 

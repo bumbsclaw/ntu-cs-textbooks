@@ -149,31 +149,29 @@ The pattern across decades is constant: parallelism grows, data movement is the 
 \section*{Key Takeaways}
 Stencil, N-body and sparse cover the HPC design space; MapReduce covers the data-parallel space; both are about grouping communication. Clusters are networks with compute attached, not vice versa. The future is heterogeneous and power-constrained, but the analysis tools (Roofline, Amdahl/Gustafson, isoefficiency, profiling) are unchanged.
 
-% extra pad ch08 0 line to meet 200L
-% extra pad ch08 1 line to meet 200L
-% extra pad ch08 2 line to meet 200L
-% extra pad ch08 3 line to meet 200L
-% extra pad ch08 4 line to meet 200L
-% extra pad ch08 5 line to meet 200L
-% extra pad ch08 6 line to meet 200L
-% extra pad ch08 7 line to meet 200L
-% extra pad ch08 8 line to meet 200L
-% extra pad ch08 9 line to meet 200L
-% extra pad ch08 10 line to meet 200L
-% extra pad ch08 11 line to meet 200L
-% extra pad ch08 12 line to meet 200L
-% extra pad ch08 13 line to meet 200L
-% extra pad ch08 14 line to meet 200L
-% extra pad ch08 15 line to meet 200L
-% extra pad ch08 16 line to meet 200L
-% extra pad ch08 17 line to meet 200L
-% extra pad ch08 18 line to meet 200L
-% extra pad ch08 19 line to meet 200L
-% extra pad ch08 20 line to meet 200L
-% extra pad ch08 21 line to meet 200L
-% extra pad ch08 22 line to meet 200L
-% extra pad ch08 23 line to meet 200L
-% extra pad ch08 24 line to meet 200L
+% ============================================================
+\section{Appendix: MPI Point-to-Point, Collectives and Halo Exchange}\label{sec:mpi}
+Distributed-memory ranks share no address space: each owns private memory and cooperates only by messages. \textbf{MPI} is the standard interface; every rank runs the same program (SPMD) and learns its identity from \texttt{MPI\_Comm\_rank}. Point-to-point moves data between two ranks: \texttt{MPI\_Send} blocks until its buffer may be reused, \texttt{MPI\_Recv} blocks until the matching message arrives. Mismatched pairings deadlock, so halo codes prefer \texttt{MPI\_Sendrecv} (send and receive atomically) or non-blocking \texttt{MPI\_Isend}/\texttt{MPI\_Irecv} plus \texttt{MPI\_Wait}, which overlaps exchange with interior computation as in Sec.~\ref{sec:decomp}.
+Collectives involve every rank in a communicator. \texttt{MPI\_Bcast} replicates the root's buffer to all ranks (distributing parameters); \texttt{MPI\_Reduce} combines values with an operator such as \texttt{MPI\_SUM} or \texttt{MPI\_MAX} onto the root (global residual); \texttt{MPI\_Allreduce} delivers the combined result to every rank and is the workhorse of convergence tests and dot products. A tree-based broadcast costs $O(\log P)$, not $O(P)$ sends.
+The \textbf{halo (ghost-cell) exchange} is the stencil motif's communication kernel from Sec.~\ref{sec:hpc}: each rank pads its block with ghost cells mirroring neighbours' edges, refreshes them every step, then computes. Surface-to-volume scaling keeps per-rank traffic at $O(N^{2/3})$.
+Tags disambiguate concurrent exchanges on the same communicator (tags 0/1 separate the left/right phases above), and \texttt{MPI\_PROC\_NULL} turns edge ranks' calls into no-ops so one code path fits every rank.
+Prefer \texttt{MPI\_Sendrecv} or non-blocking pairs over naive Send/Recv rings, which deadlock when every rank sends first and the runtime buffers nothing.
+Rule of thumb: point-to-point for neighbour patterns (halos), collectives for global patterns (broadcasts, reductions); combining them, halo exchange followed by an \texttt{MPI\_Allreduce} convergence check, is the standard stencil timestep.
+\begin{lstlisting}[language=C, caption={1-D halo exchange with MPI\_Sendrecv plus an Allreduce.}, label={lst:halo}]
+double a[n+2]; MPI_Status st; /* a[1..n] interior, a[0]/a[n+1] halos */
+int left, right;              /* neighbour ranks, MPI_PROC_NULL at edges */
+for (int s = 0; s < STEPS; s++) {
+  MPI_Sendrecv(&a[1], 1, MPI_DOUBLE, left, 0,   /* send left edge */
+               &a[0], 1, MPI_DOUBLE, left, 0,   /* recv left halo */
+               MPI_COMM_WORLD, &st);
+  MPI_Sendrecv(&a[n], 1, MPI_DOUBLE, right, 1,  /* send right edge */
+               &a[n+1], 1, MPI_DOUBLE, right, 1,/* recv right halo */
+               MPI_COMM_WORLD, &st);
+  stencil(a, n);               /* compute on interior + fresh halos */
+  MPI_Allreduce(MPI_IN_PLACE, &resid, 1, MPI_DOUBLE, MPI_SUM,
+                MPI_COMM_WORLD);               /* global convergence */
+}
+\end{lstlisting}
 % pad ch08 0
 % pad ch08 1
 % pad ch08 2

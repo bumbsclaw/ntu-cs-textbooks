@@ -146,7 +146,7 @@ def convex_hull(points):
 Monotone chain (Andrew) variant sorts by $x$ then builds lower and upper hulls separately --- same $O(n\log n)$, simpler comparator, often faster.
 
 % ============================================================
-\section{Line Sweep: Intersections in $O((n+k)\log n)$}
+\section{\texorpdfstring{Line Sweep: Intersections in $O((n+k)\log n)$}{Line Sweep: Intersections in O((n+k) log n)}}
 \label{sec:sweep}
 
 Given $n$ segments, report $k$ intersections. Sweep vertical line $x=s$ left-to-right; events are endpoints and intersections. Active set (segments crossing sweep line) ordered by $y$ at $s$, stored in balanced BST. Only neighbours in active order can intersect next (ordering changes only at events). Each event is $O(\log n)$; total $O((n+k)\log n)$.

@@ -187,12 +187,14 @@ At 6\,GHz (Wi-Fi 6E) the Wi-Fi Alliance mandates WPA3; WPA2 is not allowed. Gree
 
 }
 
-\section{Exercises}
-\begin{exercise}WEP uses a 24-bit IV. A busy 802.11g AP sends 700 frames/sec. How long until IV collisions are expected (birthday bound $\approx \sqrt{2^{24}}$)? Why does this break confidentiality even though RC4 itself may be keyed correctly?\end{exercise}
-\begin{exercise}Trace the WPA2 4-way handshake labelling ANonce, SNonce, PMK, PTK and GTK. At which message does the AP install the PTK? Explain how replaying message~3 in KRACK resets the packet number and why that leads to keystream reuse in CCMP.\end{exercise}
-\begin{exercise}An 8-character lowercase password is used with WPA2-Personal (PBKDF2 4096 iterations). Estimate the search space and discuss whether a captured 4-way handshake can be cracked offline on a GPU testing $10^6$ passphrases/sec. How does WPA3 SAE change the answer? Include forward secrecy.\end{exercise}
-\begin{exercise}Design an evil-twin lab (with permission): (a) write a \texttt{hostapd.conf} that clones an existing WPA2 SSID, (b) explain why a client that auto-joins open SSIDs is easier to bait than one that requires WPA3-Enterprise certificate validation, (c) list three detector signals a WIDS would use to flag your twin.\end{exercise}
-\begin{exercise}A hotel offers \texttt{HotelWiFi} as open + captive portal. Compare (i) open, (ii) OWE, and (iii) WPA3-Personal with a per-room password for confidentiality, evil-twin resilience and usability. Recommend a deployment with PMF and explain the residual risk of a twin that also offers OWE.\end{exercise}
+\section{Exercises}\label{sec:ch06-exercises}
+\begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.6em]
+    \item \textbf{WEP IV collisions.} WEP uses a 24-bit IV. A busy 802.11g AP sends 700 frames/sec. How long until IV collisions are expected (birthday bound $\approx \sqrt{2^{24}}$)? Why does this break confidentiality even though RC4 itself may be keyed correctly?
+    \item \textbf{4-way handshake and KRACK.} Trace the WPA2 4-way handshake labelling ANonce, SNonce, PMK, PTK and GTK. At which message does the AP install the PTK? Explain how replaying message~3 in KRACK resets the packet number and why that leads to keystream reuse in CCMP.
+    \item \textbf{PSK cracking vs.\ SAE.} An 8-character lowercase password is used with WPA2-Personal (PBKDF2 4096 iterations). Estimate the search space and discuss whether a captured 4-way handshake can be cracked offline on a GPU testing $10^6$ passphrases/sec. How does WPA3 SAE change the answer? Include forward secrecy.
+    \item \textbf{Evil-twin lab.} Design an evil-twin lab (with permission): (a) write a \texttt{hostapd.conf} that clones an existing WPA2 SSID, (b) explain why a client that auto-joins open SSIDs is easier to bait than one that requires WPA3-Enterprise certificate validation, (c) list three detector signals a WIDS would use to flag your twin.
+    \item \textbf{Open vs.\ OWE vs.\ WPA3-Personal.} A hotel offers \texttt{HotelWiFi} as open + captive portal. Compare (i) open, (ii) OWE, and (iii) WPA3-Personal with a per-room password for confidentiality, evil-twin resilience and usability. Recommend a deployment with PMF and explain the residual risk of a twin that also offers OWE.
+\end{enumerate}
 
 
 \textit{Lab note:} In a permissioned testbed, compare \texttt{aircrack-ng} time on WPA2-PSK (\texttt{rockyou.txt}, 14M) vs.\ WPA3-SAE where the same capture yields no offline verifier; the tool will report ``no valid handshake'' and each guess must be online, throttled to $\approx10$/s by the AP.

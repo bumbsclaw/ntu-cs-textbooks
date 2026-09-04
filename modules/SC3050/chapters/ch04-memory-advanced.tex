@@ -182,6 +182,22 @@ Coherence is per-location and enforced by MSI/MESI; consistency is cross-locatio
 
 Speculative coherence adds nuance: a core may speculatively read a line in S, but if another core invalidates it before the speculative load commits, the LSQ must detect the invalidation and replay. Store buffers also interact: a store sits in the buffer until its line is in M/E; only then does it become globally visible. Draining the buffer is the consistency action; invalidating sharers is the coherence action.
 
+% ============================================================
+\section{Cache Optimisations Consolidated: Six Classic Tricks}\label{sec:cache-opts}
+Earlier chapters borrow one cache trick each in passing: out-of-order execution hiding a miss (Chapter~2), the fetch chain of I-cache, BTB and prefetch (Chapter~3), and coherence traffic for shared lines (Chapter~7). This section collects the six standard uniprocessor optimisations in one place.
+\begin{center}
+\begin{tabular}{lp{8.2cm}}
+\toprule Trick & What it buys \\ \midrule
+Victim cache & small fully associative buffer catches conflict-evicted lines \\
+Stride/stream prefetcher & detects sequential or strided access, fetches ahead \\
+Non-blocking (lockup-free) & MSHRs track misses so hits proceed underneath \\
+Critical-word-first + early restart & requested word first, resume before line fills \\
+TLB organisation & caches translations so hits avoid page walks \\
+Sv39 interaction & 3-level RISC-V tables set the walk cost on a TLB miss \\ \bottomrule
+\end{tabular}
+\end{center}
+\textbf{Victim cache} (Jouppi): a 4--16-entry fully associative buffer between L1 and the refill path holds just-evicted lines, turning conflict misses into fast victim hits without raising L1 associativity. \textbf{Hardware prefetchers} recognise streams and strides, such as the unit-stride sweeps of a stencil, and fetch lines before the core asks; accuracy matters because wrong-path prefetches waste bandwidth and pollute the cache. \textbf{Non-blocking (lockup-free) caches} attach Miss Status Holding Registers (MSHRs) to each outstanding miss so later hits to other lines proceed underneath, which is exactly what lets the Chapter~2 out-of-order window keep draining during a miss. \textbf{Critical-word-first} delivers the requested word over the bus before the rest of the line, and \textbf{early restart} resumes the stalled load as soon as that word arrives rather than waiting for the full 64\,B fill. The \textbf{TLB} caches virtual-to-physical translations so hits never walk the page table; on a miss under RISC-V \textbf{Sv39} (39-bit virtual address, three-level radix table) the walker may issue up to three dependent memory reads, each itself cacheable. Hence TLB reach (entries $\times$ page size, grown by superpages) must cover the working set, or page-walk traffic lands on the same interconnect analysed in Chapter~5.
+
 \section{Key Takeaways}
 MSI is the minimal coherent protocol; MESI's Exclusive state eliminates unnecessary invalidates for private data. Snooping versus directory is a scalability trade-off. Coherence is necessary but not sufficient: the consistency model (SC/TSO/RVWMO) specifies which cross-address reorderings the hardware may perform. Programmers rely on synchronisation (locks, fences, acquire/release) to restore intuitive ordering where it matters, paying fence cost only on those paths.
 

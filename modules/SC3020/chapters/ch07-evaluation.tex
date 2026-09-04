@@ -185,33 +185,33 @@ print("nested CV", outer.mean(), outer.std())
 \paragraph{Threshold tuning.} Moving threshold from $0.5$ to $0.22$ (optimal under the cost ratio via the validation PR curve) lifts recall $45\%\to68\%$ at a precision cost $25\%\to18\%$, yet net savings improve because catching fraud dominates.
 
 \paragraph{Reporting.} Stakeholders need $\pm$SE intervals: ``AUC $0.91\pm0.02$ (5-fold CV), PR-AUC $0.43\pm0.04$'' and a cost curve showing savings vs.\ threshold, not a single F1. This aligns evaluation (Ch.~7) with Business Understanding (Ch.~1).
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
+\paragraph{Why accuracy lied.} With 0.8 percent fraud, a classifier that never flags anything scores 99.2 percent accuracy and catches nothing.
+The cost matrix exposes the lie: one missed fraud costs fifty times one false alarm, so recall dominates the business objective.
+Model B sacrifices headline accuracy to multiply recall more than fivefold, and expected cost falls by a factor of four.
+Any evaluation that ignores costs in this setting optimises the wrong function, however carefully cross-validated.
+\paragraph{Thresholds as policy.} Moving the decision threshold from 0.5 to 0.22 converts the probability ranking into an action tuned to the cost ratio.
+The validation precision-recall curve shows exactly what that move buys: recall rises from 45 to 68 percent while precision eases to 18 percent.
+Review teams then staff to the resulting alert volume rather than to an arbitrary 0.5 cutoff inherited from balanced problems.
+Recalibration after threshold moves keeps reported probabilities honest for downstream triage queues.
+\paragraph{Uncertainty belongs in the report.} Point estimates of AUC hide fold-to-fold variation that stakeholders need for resourcing.
+Reporting AUC 0.91 with a standard error of 0.02 across five folds communicates how repeatable the ranking really is.
+The wider interval on PR-AUC reflects the scarcity of positives and warns against overclaiming on the minority class.
+Nested cross-validation belongs wherever thresholds or costs were tuned, so the outer loop measures the whole procedure.
+Leakage checks complete the story: scaling and sampling inside folds, never on the pooled data before splitting.
+\paragraph{Calibration and cost curves.} Reliability diagrams reveal whether a quoted 70 percent fraud risk materialises 70 percent of the time.
+Platt scaling or isotonic regression repairs miscalibration before thresholds derived from costs are applied.
+Cost curves then display expected loss against operating point, letting finance choose the threshold they will fund.
+That plot replaces arguments about F1 with a shared view of money against risk appetite.
+\paragraph{From case study to checklist.} Every future evaluation can reuse the same sequence: define costs, tune thresholds on validation, report with intervals.
+Preserve the random seeds, fold assignments, and cost assumptions so an auditor can replay the numbers exactly.
+Monitor live precision and recall weekly, because fraudsters adapt and yesterday's optimal threshold decays.
+When live cost drifts beyond the validation interval, retrain and re-tune rather than nudging the threshold by hand.
+Document the chosen operating point next to the confusion matrix so accuracy is never quoted without its cost context.
+That discipline connects the statistical machinery of this chapter back to the business understanding of Chapter~1.
+Students should replicate the threshold sweep on any imbalanced dataset to feel the precision-recall trade directly.
+Try cost ratios of ten and a hundred to see how violently the optimal point moves under identical ROC curves.
+The lesson generalises: metrics are choices about consequences, not neutral summaries of correctness.
+A model is finished when its evaluation justifies a funded decision, not when a single number looks large.
 
 % ============================================================
 \section{Chapter Notes}

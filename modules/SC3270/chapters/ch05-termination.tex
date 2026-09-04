@@ -142,7 +142,7 @@ int y=1; while(y != 0){ y = y+1; } // overflows? unbounded increase
 \end{lstlisting}
 
 % ============================================================
-\section{Well-Founded Orders Beyond $\mathbb{N}$}
+\section{\texorpdfstring{Well-Founded Orders Beyond $\mathbb{N}$}{Well-Founded Orders Beyond N}}
 \label{sec:wf-beyond}
 $\mathbb{N}$ suffices for many loops, but some need richer orders. Consider traversing a binary tree with a worklist: variant is multiset of remaining node heights, ordered by multiset extension of $<$—still well-founded. Another is Ackermann's function: variant is the pair $(m,n)$ with lexicographic order on $\mathbb{N}\times\mathbb{N}$, which decreases in each recursive call even though a single number does not.
 

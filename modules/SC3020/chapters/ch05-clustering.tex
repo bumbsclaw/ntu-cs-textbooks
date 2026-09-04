@@ -28,7 +28,7 @@ After this chapter you will be able to:
 \paragraph{Formal ingredients.} Need (1) a representation (feature vectors), (2) a \emph{dissimilarity} $d(\mathbf{x},\mathbf{x}')$ (Euclidean $\|\mathbf{x}-\mathbf{x}'\|_2$, Manhattan, cosine, or Gower for mixed types), and (3) a criterion (e.g., minimise within-cluster variance). Normalisation is mandatory: without it the feature with largest range dominates $d$. The number of clusters $k$ is usually unknown and must be chosen.
 
 % ============================================================
-\section{Partitional: $k$-Means}
+\section{\texorpdfstring{Partitional: $k$-Means}{Partitional: k-Means}}
 \label{sec:kmeans}
 \paragraph{Intuition.} Place $k$ movable centres; alternately assign each point to its nearest centre and move each centre to its cluster's mean. Points pull centres; centres claim points --- until stable.
 
@@ -153,7 +153,7 @@ No labels, yet we need quality scores. \emph{Internal}: SSE (compactness), silho
 
 % ============================================================
 % ============================================================
-\section{Choosing $k$, Scaling, and Alternatives}
+\section{\texorpdfstring{Choosing $k$, Scaling, and Alternatives}{Choosing k, Scaling, and Alternatives}}
 \label{sec:choose-k}
 \paragraph{Elbow and gap.} Run $k=1..K_{\max}$, plot SSE or $\log\text{SSE}$; the elbow where marginal gain drops is a heuristic. The \emph{gap statistic} compares $\log\text{SSE}(k)$ to its expectation under a uniform reference --- more principled but costlier. Silhouette $\bar{s}(k)$ peaks at well-separated $k$.
 
@@ -193,31 +193,31 @@ for k in [2,3,4,5]:
 \paragraph{Action.} The three segments map to actions: loyalty perks for core, re-engagement emails for dormant, onboarding offers for new. Clustering's value is not the $k$ but the decision it enables.
 
 \paragraph{Caveat.} RFM segmentation drifts as behaviour changes; recluster quarterly and track segment migration to detect concept drift.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
+\paragraph{From clusters to decisions.} Three RFM segments earn their keep only when each maps to a distinct marketing action with a budget.
+Core loyalists receive perks that reward frequency, dormant customers receive win-back offers, and new buyers receive onboarding guidance.
+If two clusters would receive the same treatment, merge them regardless of what the silhouette score prefers.
+The number of clusters is therefore a business decision informed by geometry, never dictated by it.
+\paragraph{Why scaling decided the answer.} Log-transforming monetary value stops a handful of whales from stretching the distance metric.
+Standardising after the transform puts recency days and frequency counts on comparable footing before any centroid moves.
+Without both steps the segmentation collapses to a single high-spend cluster plus everyone else, which no manager finds actionable.
+Students should rerun the pipeline unscaled once, purely to witness how dramatically the assignments shift.
+\paragraph{Choosing k in practice.} The elbow on SSE suggested a kink at three, and the silhouette peak at 0.42 confirmed it against four.
+Neither heuristic is a proof, so the Ward dendrogram cut at the same partition provides welcome corroboration.
+DBSCAN adds a dissenting view by labelling eighteen points as noise rather than forcing them into a segment.
+Those noise points deserve inspection: one-off bulk buyers behave differently from any recurring persona.
+A sensible workflow reports all three lenses and adopts the partition they agree on, flagging disagreements explicitly.
+\paragraph{Stability and maintenance.} Customer behaviour drifts with seasons and campaigns, so the segmentation has an expiry date.
+Reclustering quarterly and tracking migration between segments reveals whether the dormant pool is growing or recovering.
+Fix the preprocessing recipe and the random seed so quarter-to-quarter changes reflect customers rather than code.
+At larger scale the same logic runs on sampled data first, with full-data assignment done by nearest centroid afterwards.
+High-dimensional behavioural features may need dimensionality reduction before distance means anything at all.
+\paragraph{Caveats before presenting.} Clusters describe correlation, not causation: frequent buyers are not frequent because of their segment label.
+Pair every segment chart with its size, its defining medians, and the uncertainty from bootstrap resampling.
+A segment of twelve customers with a great name is an anecdote, not a strategy, and should be merged or suppressed.
+Document the distance, the scaling, and the chosen k alongside the slide deck so the analysis can be audited.
+That documentation is what separates analytics from numerology in the eyes of stakeholders.
+Reproduce the worked example end to end, then perturb epsilon and k to build intuition for sensitivity.
+The habit of validating, scaling, and questioning transfers directly to the evaluation methods of Chapter~7.
 
 % ============================================================
 \section{Chapter Notes}

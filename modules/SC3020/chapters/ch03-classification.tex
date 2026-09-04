@@ -189,22 +189,22 @@ for ccp in path.ccp_alphas[::4]:
     clf = DecisionTreeClassifier(ccp_alpha=ccp, random_state=0)
     print(f"ccp={ccp:.4f}  CV={cross_val_score(clf,X,y,cv=3).mean():.3f}")
 \end{lstlisting}
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
+\paragraph{Reading the pruning path.} The sequence of alpha values tells a story of complexity traded for stability across folds.
+At alpha zero the tree memorises rare contract combinations that will not recur next quarter.
+At alpha 0.005 the tree keeps the splits on tenure and contract that replicate across folds.
+Beyond that the tree becomes a stump that underfits, missing the interaction between support calls and monthly charges.
+\paragraph{Practical model choice.} The two-point gap between the tree and Naive Bayes matters less than who must act on the prediction.
+Retention teams prefer the tree because each path reads as a rule they can attach an offer to.
+Naive Bayes earns its place when calibrated churn probabilities feed a budget allocator rather than a call list.
+The kNN result warns that standardisation and serving latency must be weighed alongside raw accuracy.
+\paragraph{Lessons for larger data.} On millions of rows the pruning path is computed on a stratified sample first, then confirmed at scale.
+Categorical cardinality explodes tree depth, so high-cardinality fields are grouped before splitting.
+Missing contract values are routed with surrogate splits rather than dropped, preserving the deployment population.
+\paragraph{Takeaway for deployment.} Freeze the chosen alpha, retrain on all labelled data, and log the tree rules alongside the code version.
+Monitor leaf-level churn rates monthly, since a leaf that decays signals concept drift before global accuracy moves.
+Re-tune only when the monitored gap exceeds the cross-validation standard error observed during selection.
+That discipline turns a classroom pruning exercise into a maintainable retention model.
+Students should rerun the listing with different seeds to feel how stable the chosen alpha really is.
 
 % ============================================================
 \section{Chapter Notes}

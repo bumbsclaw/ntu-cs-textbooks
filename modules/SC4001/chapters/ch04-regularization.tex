@@ -1,6 +1,18 @@
 \chapter{Regularization: Preventing Overfitting}\label{ch:regularization}
 \begin{center}\small\textit{A network with millions of weights can memorize your dataset -- and fail on the next photo. Regularization teaches it to generalize.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no regularization background assumed.} We start from memorization versus learning and build to weight decay, dropout, augmentation, and early stopping. Every formula is preceded by a picture; overfitting is defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain overfitting and the bias--variance tradeoff;
+    \item write the $L_2$-regularized loss and compare $L_1$/$L_2$ and elastic net;
+    \item explain how dropout, augmentation, and early stopping curb memorization;
+    \item diagnose under- and over-regularization from train/val curves.
+\end{enumerate}
+
 \section{Intuition: Memorization vs Learning}
 A 10M-parameter network can fit 50k CIFAR images perfectly, even with random labels -- it merely memorizes. What we want is \textbf{generalization}: low error on unseen data. The gap between train and test error is \textbf{overfitting}. Regularization injects constraints or noise so the network cannot memorize quirks.
 

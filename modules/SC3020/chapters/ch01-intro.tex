@@ -165,29 +165,29 @@ We will revisit a churn problem throughout the book. Business goal: reduce churn
 \paragraph{Ethics check.} Clickstream + purchase history is personal data under GDPR/PDPA. Consent for analytics must be obtained, and abandonment interventions must not discriminate by protected attributes inferred from browsing.
 
 \paragraph{Takeaway.} A one-page charter covering goal, data inventory, metric, and ethics prevents the common failure of building a model nobody can deploy. Revisit the charter after each CRISP-DM loop.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
+\paragraph{From charter to deployment.} The cart-abandonment charter is only the entry ticket to the CRISP-DM loop, not its conclusion.
+Deployment means wiring the abandonment score into the checkout page so an intervention triggers within seconds of hesitation.
+That wiring forces a conversation between modellers, engineers, and product owners that no offline notebook can substitute.
+Evaluation then shifts from conversion rate on a pilot to sustained lift measured by randomised exposure over several weeks.
+If lift fades, the team loops back to Business Understanding rather than tuning hyperparameters in isolation.
+\paragraph{Why preparation dominates.} Clickstream JSON arrives nested, timestamped in mixed zones, and joined against transactions by fragile session keys.
+Cleaning these joins, deduplicating events, and labelling abandonment consistently typically consumes the bulk of project effort.
+The lesson for big-data work is that volume amplifies messiness instead of washing it out.
+A million sessions with systematic timezone skew mislead more confidently than a hundred clean ones.
+Sampling down to a manageable slice for exploration is therefore legitimate, provided the sampling preserves weekly seasonality.
+\paragraph{Monitoring and maintenance.} Once live, abandonment behaviour drifts with seasons, promotions, and site redesigns.
+The team should track input distributions, score distributions, and intervention uptake on a dashboard reviewed weekly.
+A sudden drop in user-agent coverage, for instance, signals an instrumentation change that invalidates the training data.
+When drift is confirmed, the CRISP-DM cycle restarts at Data Understanding with fresh labels rather than a blind refit.
+\paragraph{Scaling up to big data.} At web scale the sessionisation step moves from pandas scripts to distributed processing with partitioning by day.
+The modelling logic stays identical, but data quality checks must run as automated assertions inside the pipeline.
+This separation of concerns keeps the science stable while the engineering scales horizontally with traffic.
+\paragraph{Practical takeaway.} Treat the one-page charter as a living document updated after every loop through evaluation.
+Record what was tried, what moved the metric, and which ethical review each intervention passed.
+That record becomes the institutional memory that lets the next analyst start from understanding rather than from zero.
+Students replicating this mini-case can mimic the loop on any public clickstream sample with a spreadsheet.
+Define the goal, inventory the fields, fix one quality issue, and report a single decision-oriented metric.
+The habit of scoping before modelling transfers to every later chapter of this book.
 
 % ============================================================
 \section{Chapter Notes}

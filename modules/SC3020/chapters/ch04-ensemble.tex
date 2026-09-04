@@ -203,22 +203,22 @@ gb.fit(X_train, y_train)
 print("chosen trees:", gb.n_estimators_)
 print("val AUC:", gb.score(X_val, y_val))
 \end{lstlisting}
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
-% padding line to reach required line count for SC3020 textbook invariants.
+\paragraph{Why shrinkage works.} A small learning rate forces each new tree to correct only a fraction of the residual error.
+No single tree can then memorise an outlier cluster, because later trees get a vote on the same points.
+The price is patience: hundreds of shallow trees replace dozens of aggressive ones, and training time grows.
+Early stopping repays that patience by halting exactly when validation AUC plateaus rather than at a guessed round.
+\paragraph{Reading the stopping point.} If validation AUC climbs then flattens for twenty rounds, the chosen ensemble sits at the bias-variance sweet spot.
+Stopping much earlier leaves systematic error on the table, visible as underfit on both train and validation curves.
+Continuing much longer memorises label noise, and validation AUC erodes while training loss keeps falling.
+The patience parameter itself is a regulariser: small patience risks premature stopping on a noisy plateau.
+\paragraph{Subsampling as a second brake.} Row subsampling decorrelates consecutive trees in the same way bagging decorrelates a forest.
+Each tree sees a different slice of customers, so idiosyncratic rows cannot dominate every split.
+Column subsampling adds the random-forest benefit when a few strong predictors would otherwise starve the rest.
+Together shrinkage, early stopping, and subsampling form the standard trio behind most tabular competition winners.
+\paragraph{Practical guidance.} Start with depth three, learning rate 0.05, subsample 0.8, and patience twenty as a robust default.
+Tune depth before the learning rate, since depth controls the interaction order the ensemble can express.
+Log the stopped iteration as a hyperparameter, because the same data with a new seed may stop a dozen rounds away.
+Refit decisions should follow the validation curve, not the training loss, whenever the two disagree.
 
 % ============================================================
 \section{Chapter Notes}

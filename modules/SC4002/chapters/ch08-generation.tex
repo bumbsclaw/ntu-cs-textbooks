@@ -34,7 +34,7 @@ Beam search generalises greedy: keep top-$B$ hypotheses, scoring $\sum_{t}\log P
 \paragraph{Example.} Prompt: ``The cat sat on the''. Model: $P(\text{mat}\mid\cdot)=0.4$, $P(\text{roof}\mid\cdot)=0.35$, $P(\text{chair}\mid\cdot)=0.25$. Greedy picks ``mat'' every time, so 100 continuations are identical. A human wants variety: sometimes roof, sometimes chair, sometimes mat.
 
 % ============================================================
-\section{Sampling: Temperature, Top-$k$, Top-$p$}
+\section{\texorpdfstring{Sampling: Temperature, Top-$k$, Top-$p$}{Sampling: Temperature, Top-k, Top-p}}
 \label{sec:sampling}
 \paragraph{Intuition.} Sampling treats the distribution as a menu: temperature sharpens or flattens it, top-$k$ keeps only $k$ dishes, top-$p$ keeps enough dishes to cover $p$ of the appetite. All aim to balance \emph{quality} (stay on high-probability words) and \emph{diversity} (allow surprises).
 

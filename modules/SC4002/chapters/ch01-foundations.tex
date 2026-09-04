@@ -1,5 +1,17 @@
-\chapter{Foundations: Tokens, Zipf, and $n$-Grams}\label{ch:foundations}
+\chapter{\texorpdfstring{Foundations: Tokens, Zipf, and $n$-Grams}{Foundations: Tokens, Zipf, and n-Grams}}\label{ch:foundations}
 \begin{center}\small\textit{Before a machine can understand language it must slice it into pieces, count those pieces, and learn how surprising the next piece is.}\end{center}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no NLP background assumed.} We start from raw bytes and ask how to slice text into tokens, why word frequencies follow Zipf's law, and how $n$-grams predict the next word. Every formula is motivated by a picture first.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item distinguish tokens, types, and vocabulary and run word versus subword (BPE) tokenization;
+    \item state Zipf's law and explain its consequences for vocabulary and OOV;
+    \item write the $n$-gram MLE and explain why sparsity demands smoothing;
+    \item implement tokenization and BPE counting in Python.
+\end{enumerate}
 
 \section{Intuition: Why Slice Text at All?}
 Computers see only bytes; humans see words, morphemes, and meaning. Every NLP system bridges this gap with a \textbf{pipeline} that turns a raw character string into a sequence of discrete units the model can index. Imagine the sentence
@@ -122,7 +134,7 @@ Intuition: language reuses a tiny core (\texttt{the}, \texttt{of}, \texttt{and})
 
 Why care? The tail tells us smoothing and subwords are not optional -- any model that assigns zero probability to unseen $n$-grams will fail on real text.
 
-\section{$n$-Grams: Predicting the Next Token}
+\section{\texorpdfstring{$n$-Grams: Predicting the Next Token}{n-Grams: Predicting the Next Token}}
 If we know the previous words, can we guess the next? An $n$-gram model says yes, using only the last $n-1$ tokens.
 
 \begin{definition}[$n$-Gram and Markov Assumption]

@@ -1,6 +1,18 @@
 \chapter{Multi-Layer Perceptrons \& Backpropagation}\label{ch:mlp}
 \begin{center}\small\textit{One line cannot solve XOR; stacking lines can approximate anything -- if we can train them.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no deep learning background assumed.} We start from XOR, stack perceptrons into an MLP, and derive backpropagation from the chain rule. Every formula is preceded by a picture; activations and initialization are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain why hidden layers solve XOR and state universal approximation informally;
+    \item write the MLP forward pass with activations;
+    \item derive the backpropagation update for one layer via the chain rule;
+    \item explain initialization and vanishing gradients and train a tiny network by hand.
+\end{enumerate}
+
 \section{Intuition: Why Go Deeper?}
 A single perceptron draws one line. XOR needs two lines combined: ``$(x_1\lor x_2)$ but not $(x_1\land x_2)$''. That is a hidden layer. Stack perceptrons: first layer draws several lines, second layer combines them into convex regions, third layer into arbitrary shapes. This is the \textbf{Multi-Layer Perceptron (MLP)} -- the simplest deep network.
 

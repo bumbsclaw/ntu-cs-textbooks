@@ -1,6 +1,18 @@
 \chapter{Convolutional Neural Networks}\label{ch:cnn}
 \begin{center}\small\textit{Images are not flat vectors -- they have locality, translation, and scale. Convolutions exploit all three.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no vision background assumed.} We start from why MLPs fail on images and build to convolution, pooling, and residual blocks. Every formula is preceded by a picture; kernels and feature maps are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item explain locality, sharing, and translation equivariance of convolutions;
+    \item write 2D convolution and count parameters and receptive fields;
+    \item describe VGG-to-ResNet blocks and why residuals train deeper;
+    \item build a small CNN from scratch and avoid common training pitfalls.
+\end{enumerate}
+
 \section{Intuition: Why Not an MLP for Images?}
 A $224\times224\times3$ image flattened is $150$k inputs. An MLP hidden layer with 1000 units needs $150$M weights -- huge and blind to structure. Nearby pixels correlate (edges, textures); an object shifted by 10 pixels is still the same object. An MLP must relearn detectors at every position. \textbf{Convolution} shares weights across space: one small filter slides everywhere, detecting the same pattern regardless of location. This gives \textbf{translation equivariance} and drastic parameter savings.
 

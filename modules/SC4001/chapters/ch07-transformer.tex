@@ -1,6 +1,18 @@
 \chapter{Transformers \& Attention}\label{ch:transformer}
 \begin{center}\small\textit{If attention is all you need, why recur at all? A model that looks everywhere at once.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no attention background assumed.} We start from the cost of recurrence and build to self-attention, multi-head blocks, and the BERT/GPT paradigms. Every formula is preceded by a picture; queries, keys, and values are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item write scaled dot-product self-attention and multi-head attention;
+    \item describe a Transformer block (attention, residual, normalization, FFN);
+    \item contrast BERT (encoder) and GPT (decoder) training objectives;
+    \item explain positional encodings and $O(n^2)$ scaling with efficient fixes.
+\end{enumerate}
+
 \section{Intuition: From Recurrence to Attention}
 RNNs are sequential -- step $t$ waits for $t-1$. This blocks parallelization and still struggles with very long range. Transformers (Vaswani et al., 2017) ask: what if each position directly attends to \emph{all} positions? No recurrence, no convolution -- just weighted averaging where weights are learned from data. The result is $O(1)$ path length between any two positions, perfect parallelism, and scaling to billions of parameters.
 

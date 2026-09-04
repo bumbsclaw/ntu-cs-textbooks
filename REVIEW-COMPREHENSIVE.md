@@ -108,3 +108,26 @@ grep -c "^! " main.log; grep -c "pgfkeys Error" main.log
 awk '/Overfull \\hbox/ {match($0, /\(([0-9.]+)pt/,m); if(m[1]+0>15) c++} END{print c+0}' main.log
 grep -rn "begin{verbatim}" chapters/ | wc -l; pdfinfo main.pdf | grep Pages
 ```
+
+---
+
+## 5. Phase 16 — v1.2 nit fixes + comprehensiveness + rendering (2026-09-05, `deleg_116ce498`, 7 workers)
+
+All v1.2 nits patched, coordinator-verified (`pdflatex ×2` rebuilt SC4013 + SC4001 independently: exit 0, 0 `!`; all 10 touched modules 0 `!`/0 pgfkeys/0 `>15`/0 Token). Total **1673p** (+11: SC4013 49→50, SC4001 46→52, SC4002 47→48, SC3020 48→51).
+
+| Fix | Files | Before → After | Build |
+|-----|-------|----------------|-------|
+| SC4013 ch07 SSRF kill-chain TikZ + allow-list listing + misconfig checklist | `ch07-ssrf-http.tex` | 201→249L, TikZ 3→4, lst 2→3 | 50p 0!/0>15 |
+| SC4013 E5/E6 swap + `$\times$` texorpdfstring | `ch01/ch05/ch06` | Token 3→0 | — |
+| SC4050 MPI appendix-section + C halo listing | `ch08-applications.tex` | 206→204L (padding replaced) | 42p 0!/0>15 |
+| SC3050 cache-opts 6-way consolidation | `ch04-memory-advanced.tex` | 201→217L | 51p 0!/0>15 |
+| SC4063 ch06 exercise→E6 enumerate | `ch06-wireless.tex` | 203→205L | 45p clean |
+| texorpdfstring hygiene SC3020/SC4002/SC4040/SC3270 | 10 files | Token 4/8/14/2→0 | all 0!/0>15 |
+| SC3020 107 padding-comments → real prose | ch01/03/04/05/07 | pad files →0 | 51p |
+| SC3099 5× sloppy wraps | ch03/05/06/07 | lines unchanged | 46p |
+| SC4001 From-zero + LO 8/8, SC4002 ch01 | 9 files | ≤218L all in window | 52p/48p |
+
+**Comprehensiveness audits** (read-only, section-header vs canonical syllabi):
+- Core (`/tmp/comprehensiveness_core.md`): 3 GAPS-MAJOR — SC2001 no max-flow/Ford-Fulkerson unit; SC2008 no NAT/NAPT + skeletal IPv6; SC1008 no C file-I/O unit. 11 GAPS-MINOR (Union-Find never taught, amortized analysis, single worked NP-reduction, MGFs/ANOVA, JDBC/GRANT, structural induction/colouring/Bayes, SVD preview-only, readers-writers/IPC, COCOMO). Only SC3099 COMPLETE.
+- MPE (`/tmp/comprehensiveness_mpe.md`): SC4050 MPI + SC3050 cache CONFIRMED Major (since fixed above); SC4013 SSRF confirmed fixed (auditor observed post-fix file). Top NEW gaps: SC3000 Bayes nets + MDPs/RL + local search, SC3020 SVMs + regression, SC4001 generative models (VAE/GAN/diffusion), SC4002 syntactic parsing, SC4012 TOCTOU/races, SC4051 DHT/consistent-hashing, SC4021 QLM/Dirichlet.
+- **Rendering spot-check** (`/tmp/rendering_check.md`): 12 modules × 2 pages → PNG (`pdftoppm -r 80`) + 24 real `vision_analyze` inspections — **RENDER-PASS**: 24/24 text legible, math typeset (no raw `$`/tofu), 13/13 TikZ colored+labeled, 8/8 listings numbered+highlighted. 0 Blocking, 0 Major, 3 Minor cosmetic (SC2002 running-head/folio abut pp26–27; SC2203 p10 listing frame alignment; SC4024 p24 Fig 5.1 kerning `graphEdge`). Sampling caveat: 24pp ≈ 4.4% of the 12 modules.

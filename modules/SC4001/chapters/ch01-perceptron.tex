@@ -1,6 +1,18 @@
 \chapter{The Perceptron: Where Learning Begins}\label{ch:perceptron}
 \begin{center}\small\textit{Can a machine learn to decide? One neuron, one line, and the limits that started a revolution.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no ML background assumed.} We start from ``what is a neuron?'' and build to the perceptron rule, its geometry, and why one line cannot solve XOR. Every formula is preceded by a picture; vectors and dot products are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item describe the McCulloch--Pitts neuron and write the perceptron update rule;
+    \item draw the decision boundary and explain the margin for separable data;
+    \item state the Novikoff convergence bound and the meaning of linear separability;
+    \item show why a single perceptron fails on XOR and work through AND by hand.
+\end{enumerate}
+
 \section{Intuition: Neurons that Fire}
 Your brain has 86 billion neurons. Each collects signals from neighbours through dendrites; if the total excitation crosses a threshold, it fires an impulse down its axon. Warren McCulloch and Walter Pitts (1943) asked: can we model this with mathematics? Their abstraction was stark -- a neuron is a \textbf{threshold logic unit}: sum weighted inputs, compare to a threshold, output 0 or 1. No chemistry, no spikes, just arithmetic.
 

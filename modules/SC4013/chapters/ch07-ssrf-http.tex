@@ -173,6 +173,54 @@ Every High/Critical finding needs a retest after the fix on a fresh staging buil
 \end{remark}
 
 % ============================================================
+\section{SSRF: When \texttt{url=} Fetches for the Attacker}
+\label{sec:ssrf}
+Intuition: server-side request forgery (SSRF, OWASP A10) happens when the app fetches a URL the attacker controls --- \texttt{GET /fetch?url=...}, webhook targets, PDF renderers, image proxies. The server sits inside the trust boundary, so \texttt{url=http://169.254.169.254/latest/meta-data/} reaches the cloud metadata service and returns IAM credentials the outsider could never fetch directly. The fix has three layers: (1)~parse with \texttt{urllib.parse} and enforce an allow-list of hosts/schemes, deny by default; (2)~resolve the host and deny metadata plus private ranges --- \texttt{169.254.0.0/16}, \texttt{10.0.0.0/8}, \texttt{172.16.0.0/12}, \texttt{192.168.0.0/16}, \texttt{127.0.0.0/8}, and the name \texttt{metadata.google.internal} --- re-checking at connect time against DNS-rebinding; (3)~egress firewall: the fetcher subnet may only reach allow-listed hosts on 443, so even a bypassed check cannot reach metadata.
+
+\begin{lstlisting}[language=Python]
+from urllib.parse import urlparse
+import ipaddress, socket
+ALLOW = {"api.example.com", "cdn.example.com"}
+DENY = [ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("127.0.0.0/8")]
+BLOCK_NAMES = {"metadata.google.internal"}
+def safe_fetch(url):
+    u = urlparse(url)
+    assert u.scheme == "https" and u.hostname not in BLOCK_NAMES
+    assert u.hostname in ALLOW  # allow-list first, deny by default
+    ip = ipaddress.ip_address(socket.getaddrinfo(u.hostname, 443)[0][4][0])
+    assert not any(ip in net for net in DENY)  # re-check resolved IP
+    return url  # hand validated URL to requests.get(url, timeout=5)
+\end{lstlisting}
+
+\begin{figure}[h]\centering
+\begin{tikzpicture}[scale=0.82,every node/.style={font=\scriptsize}]
+  \node[draw,fill=blue!14,rounded corners=3pt,minimum width=1.6cm,minimum height=0.7cm,align=center] (atk) at (-4.7,1.2) {Attacker};
+  \node[draw,fill=orange!20,rounded corners=3pt,minimum width=1.9cm,minimum height=0.7cm,align=center] (app) at (-2.1,1.2) {\texttt{/fetch?url=}};
+  \node[draw,fill=red!15,rounded corners=3pt,minimum width=2.1cm,minimum height=0.7cm,align=center] (md) at (0.8,1.2) {Metadata\\\tiny\texttt{169.254.169.254}};
+  \node[draw,fill=violet!14,rounded corners=3pt,minimum width=1.7cm,minimum height=0.7cm,align=center] (iam) at (3.7,1.2) {IAM role\\creds};
+  \draw[->,thick,blue!60!black] (atk) -- (app) node[midway,above,font=\tiny] {\texttt{url=169.254..}};
+  \draw[->,thick,orange!70!black] (app) -- (md) node[midway,above,font=\tiny] {server fetch};
+  \draw[->,thick,red!60!black] (md) -- (iam) node[midway,above,font=\tiny] {temp keys};
+  \node[draw,fill=green!15,rounded corners=3pt,minimum width=6.6cm,minimum height=0.6cm,align=center,font=\tiny] at (-0.5,0.1) {Fix: allow-list host + deny metadata/private IP + egress firewall};
+\end{tikzpicture}
+\caption{SSRF kill chain. The attacker never contacts metadata directly; the server fetches on their behalf and returns IAM credentials.}
+\label{fig:ssrf-chain}
+\end{figure}
+
+% ============================================================
+\section{Misconfiguration Checklist: Headers, Debug Flags, Buckets, Containers}
+\label{sec:misconfig}
+Intuition: OWASP A05 --- the code is correct but its configuration is not. Run this four-point checklist on every release (ZAP passive scan plus IaC review catch most of it): (1)~security headers on every response --- \texttt{Strict-Transport-Security}, \texttt{Content-Security-Policy}, \texttt{X-Frame-Options: DENY}, plus \texttt{Secure/HttpOnly/SameSite} cookies; (2)~never ship debug --- \texttt{DEBUG=true}, stack traces, \texttt{/actuator}, directory listing stay off in prod; (3)~storage private by default --- no S3 \texttt{public-read}, Block Public Access on, signed URLs for sharing; (4)~containers least-privilege --- never \texttt{docker run --privileged}, drop capabilities, read-only filesystem, CIS-benchmarked base image.
+\begin{itemize}[itemsep=0.45em]
+    \item \textbf{Headers:} \texttt{curl -sI https://staging.example.com} shows HSTS + CSP + \texttt{X-Frame-Options}; cookies carry \texttt{Secure; HttpOnly; SameSite=Lax}. Missing header $\to$ fail the release gate.
+    \item \textbf{Debug:} \texttt{DEBUG=false} in prod config; \texttt{/actuator/env}, stack traces and directory listings return 404. One exposed debug endpoint $\to$ rotate secrets and re-deploy.
+    \item \textbf{Buckets:} S3 Block Public Access enabled, no \texttt{public-read} grant, access logged. Any world-readable bucket with backups $\to$ treat as breach, rotate keys.
+    \item \textbf{Containers:} no \texttt{--privileged}, \texttt{--cap-drop=ALL} plus minimal adds, read-only root FS, image scanned (Trivy/Grype) with zero Critical. Privileged pod $\to$ host compromise assumed.
+\end{itemize}
+
+% ============================================================
 \section{Exercises}
 \label{sec:ch07-exercises}
 \begin{enumerate}[label=E7.\arabic*, leftmargin=*, itemsep=0.6em]

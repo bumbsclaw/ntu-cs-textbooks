@@ -1,6 +1,18 @@
 \chapter{Recurrent Networks \& Sequence Modeling}\label{ch:rnn}
 \begin{center}\small\textit{Language, speech, and time series unfold step by step -- networks must remember.}\end{center}
 
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+\textbf{From zero: no sequence background assumed.} We start from why fixed windows fail on language and build from Elman RNNs to LSTM/GRU gating. Every formula is preceded by a picture; hidden states are defined on first use.}}
+\vspace{0.3em}
+\section*{Learning Outcomes}
+After this chapter you will be able to:
+\begin{enumerate}[label=(L\arabic*)]
+    \item write the Elman RNN recurrence and its unrolling through time;
+    \item explain vanishing and exploding gradients in vanilla RNNs;
+    \item write LSTM/GRU gate equations and explain what each gate does;
+    \item compare bidirectional/stacked RNNs and the bridge to attention.
+\end{enumerate}
+
 \section{Intuition: Memory Through Loops}
 An MLP sees a fixed window; language does not fit. ``The cat that chased the dogs \emph{was}...'' -- agreement depends on ``cat'' six words back. We need a network with \textbf{memory}: a hidden state that carries information forward. A \textbf{Recurrent Neural Network (RNN)} does exactly this -- it reuses the same weights at each time step, updating a state $\mathbf{h}_t$ from input $\mathbf{x}_t$ and previous state $\mathbf{h}_{t-1}$.
 

@@ -187,8 +187,8 @@ Algorithms age. Store \texttt{alg} and \texttt{version} with every encrypted val
 
 % ============================================================
 \section{Exercises}
-\label{sec:ch06-exercises}
-\begin{enumerate}[label=E6.\arabic*, leftmargin=*, itemsep=0.6em]
+\label{sec:ch05-exercises}
+\begin{enumerate}[label=E5.\arabic*, leftmargin=*, itemsep=0.6em]
     \item \textbf{Password audit.} A DB uses \texttt{SHA256(salt||pw)} with 8-byte salts and no work factor. Estimate GPU guesses/sec vs.\ Argon2id ($64$\,MB, $t=3$). Propose a migration that re-hashes on next login without forcing a reset.
     \item \textbf{JWT confusion.} Explain the RS256$\to$HS256 confusion: what the attacker sends, why \texttt{HMAC(public\_key, data)} verifies if the server picks HS256 from the header, and the one-line fix (allow-list).
     \item \textbf{None and kid.} Write two malicious JWTs: one with \texttt{alg:none} and one where \texttt{kid=../../etc/passwd}. State the server-side check that blocks each and the error returned.
