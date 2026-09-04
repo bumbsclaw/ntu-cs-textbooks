@@ -26,7 +26,7 @@
 
 ## Scope & Method
 
-1. Re-discovered workspace: `/home/ubuntu` is plain `$HOME`; canonical repo is `/home/ubuntu/projects/ntu-cs-textbooks` (remote `origin` = `bumbasclaw/ntu-cs-textbooks`, branch `main`). `/home/ubuntu/modules/SC1006` is a symlink to `projects/ntu-cs-textbooks/modules/SC1006`. All compilation was done via `modules/SC1006` symlink so artefacts land in both views.
+1. Re-discovered workspace: `/home/ubuntu` is plain `$HOME`; canonical repo is `/home/ubuntu/code/textbooks/ntu-cs-textbooks` (remote `origin` = `bumbasclaw/ntu-cs-textbooks`, branch `main`). `/home/ubuntu/projects/modules/SC1006` is a symlink to `projects/ntu-cs-textbooks/modules/SC1006`. All compilation was done via `modules/SC1006` symlink so artefacts land in both views.
 2. Read `main.tex` (book class, AGENTS.md small-screen geometry, `listings` lstset with blue!60!black keywords / green!50!black comments / orange!70!black strings, TikZ libs present).
 3. Read all 8 chapters line-by-line; counted TikZ (`\begin{tikzpicture}`), fills, color tokens, `lstlisting`, `verbatim`, labels/refs, sections.
 4. Grepped `main.log` for `Overfull`, `! `, `pgfkeys`, `Undefined control`, `Reference.*undefined`; re-ran `pdflatex` after one trivial patch to confirm.
@@ -104,7 +104,7 @@
 ### Done (this review, 2026-08-23 03:22)
 
 - [x] **Overfull nit:** `ch01-isa.tex` TikZ scale `0.88 → 0.84` for R/I/S/B format diagram (largest diagram, width 7.8cm → 7.45cm). Before: Overfull 1.18pt; after: still 1.18pt because the overflow is the *following paragraph text*, not the TikZ. Confirmed under 15pt gate. Logged as won't-fix without sentence rewording; visual penalty is invisible.
-- [x] Recompiled `main.pdf` (30 pages, 539008 B) and synced `/home/ubuntu/modules/SC1006` ↔ `/home/ubuntu/projects/ntu-cs-textbooks/modules/SC1006`.
+- [x] Recompiled `main.pdf` (30 pages, 539008 B) and synced `/home/ubuntu/projects/modules/SC1006` ↔ `/home/ubuntu/code/textbooks/ntu-cs-textbooks/modules/SC1006`.
 - [x] Verified 0 verbatim, 0 pgf errors, 24 color TikZ, listings correct.
 
 ### Required (follow-up PR)

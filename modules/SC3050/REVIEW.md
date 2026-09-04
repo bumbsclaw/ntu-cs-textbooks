@@ -1,6 +1,6 @@
 # SC3050 Advanced Computer Architecture — Adversarial Review
 
-**Module:** SC3050 (3 AU, MPE) · **Prereq:** SC1006 · **Reviewer:** Adversarial Reviewer (muse-spark-1.2-contributor) · **Date:** 2026-08-28 SGT · **Workspace:** `/home/ubuntu` (repo `bumbsclaw/ntu-cs-textbooks`, staging `/home/ubuntu/modules/SC3050/` synced to `projects/ntu-cs-textbooks/modules/SC3050/`) · **Model:** muse-spark ONLY · **Sources:** OUTLINE.md (8620 B, 2026-08-28), 8 .tex (~1617 L), H&P CAQA 6e, SC1006 ch01–08, H&P Ch1–3/Appendix C–E
+**Module:** SC3050 (3 AU, MPE) · **Prereq:** SC1006 · **Reviewer:** Adversarial Reviewer (muse-spark-1.2-contributor) · **Date:** 2026-08-28 SGT · **Workspace:** `/home/ubuntu` (repo `bumbsclaw/ntu-cs-textbooks`, staging `/home/ubuntu/projects/modules/SC3050/` synced to `projects/ntu-cs-textbooks/modules/SC3050/`) · **Model:** muse-spark ONLY · **Sources:** OUTLINE.md (8620 B, 2026-08-28), 8 .tex (~1617 L), H&P CAQA 6e, SC1006 ch01–08, H&P Ch1–3/Appendix C–E
 
 **Build:** `pdflatex -interaction=nonstopmode main.tex ×2` · **Geometry:** `book 11pt a4paper`, `geometry 1.3/1.2cm includeheadfoot`, `setstretch 1.20`, `parskip 0.70em`, `lstset` colored, `tikz` 0.82–0.90 scale, `hyperref` colored
 
@@ -61,7 +61,7 @@ OUTLINE (projects/.../OUTLINE.md) expects:
 - Ch7 Interconnects/Buses/I/O (bus hierarchy, arbitration, DMA, crossbar/mesh/torus)
 - Ch8 Parallel & Future (SMP/NUMA, SMT, SIMD/GPU warps, SoC/chiplets, DVFS, Roofline)
 
-Actual 8 files (`/home/ubuntu/modules/SC3050/chapters/`):
+Actual 8 files (`/home/ubuntu/projects/modules/SC3050/chapters/`):
 | File | Inside `\chapter{}` | Matches Outline? | Lines | Notes |
 |------|---------------------|------------------|-------|-------|
 | ch01-review.tex | Review: Single-Cycle, Pipelining and Hazards | **MISMATCH** — content is Outline Ch2, not Ch1 | 201 | Covers SC1006 recap + pipeline hazards correctly, but missing RISC/CISC/VLIW spectrum, Iron Law triangle, Gustafson detail. Iron Law appears only in ch08. |
@@ -228,7 +228,7 @@ Actual 8 files (`/home/ubuntu/modules/SC3050/chapters/`):
 - **ch02-superscalar.tex:** `tabular {cll}` → `{clp{6.2cm}}` (was 113pt overfull). Exercise long line `; \texttt{ADD x1,x8,x9}. Identify` → `; \texttt{ADD x1,x8,x9}.\\ Identify` (was 24pt overfull). Both trivial line-wrap.
 - **ch08-performance.tex:** `scale=0.90` → `0.82` for Roofline TikZ (reduces hbox risk; vbox still 118 but not gated).
 - **Earlier writer fixes verified:** ch05 illegal `foreach \x in {-1.8...}` `n\x`/`m\x\y` → explicit `n1..n4`/`a11..a33`/`b11..b33`; ch06 `pe\x\y` floats → `pe00..pe32` integers; ch06 systolic node added `align=center`.
-- **Files synced:** `/home/ubuntu/modules/SC3050/` → `/home/ubuntu/projects/ntu-cs-textbooks/modules/SC3050/` (main.tex + 8 chapters + main.pdf 51p 700KB).
+- **Files synced:** `/home/ubuntu/projects/modules/SC3050/` → `/home/ubuntu/code/textbooks/ntu-cs-textbooks/modules/SC3050/` (main.tex + 8 chapters + main.pdf 51p 700KB).
 
 Non-trivial not patched (requires content authoring >30 lines): adding dedicated Ch5 cache-opt section (AMAT multi-level, victim/prefetch/non-blocking/crit-word-first, Sv39 TLB walk), and renaming ch01 title to match outline or adding ISA spectrum box.
 

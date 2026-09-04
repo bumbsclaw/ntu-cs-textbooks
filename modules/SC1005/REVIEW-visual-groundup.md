@@ -100,7 +100,7 @@ Rebuilt after patches: `pdflatex main.pdf` **37 pages, 608860 bytes, 0 Overfull,
 ## Reproduce
 
 ```bash
-cd /home/ubuntu/modules/SC1005
+cd /home/ubuntu/projects/modules/SC1005
 grep -rn "verbatim" chapters/ main.tex        # → 0
 grep -rn "begin{lstlisting}" chapters/ main.tex # → 0 (only \setcounter in .aux)
 grep -c "Overfull" main.log                    # → 0 after patch

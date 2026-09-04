@@ -3,7 +3,7 @@
 **Date:** 2026-08-28 19:15 SGT  
 **Scope:** `OUTLINE.md` + all 8 `.tex` chapters + `main.tex` (build `pdflatex ×2`)  
 **Model constraint:** muse-spark ONLY (no fallback)  
-**Workspace:** `/home/ubuntu/projects/ntu-cs-textbooks/modules/SC4013`
+**Workspace:** `/home/ubuntu/code/textbooks/ntu-cs-textbooks/modules/SC4013`
 
 ---
 
@@ -183,7 +183,7 @@ grep "pgfkeys" main.log             # no error
 
 **Repro:**
 ```bash
-cd /home/ubuntu/projects/ntu-cs-textbooks/modules/SC4013
+cd /home/ubuntu/code/textbooks/ntu-cs-textbooks/modules/SC4013
 pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex
 # expect: Output written on main.pdf (49 pages, ~730KB). 0 ! 0 Overfull >15.
 ```
